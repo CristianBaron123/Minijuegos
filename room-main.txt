@@ -1,0 +1,919 @@
+var roomConfig = {
+    roomName: "🎮 Sala de Minijuegos 🎮",
+    maxPlayers: 20,
+    public: true,
+    token: "##TOKEN##",
+    noPlayer: true
+};
+
+var room = HBInit(roomConfig);
+
+console.log("✅ Bot iniciado");
+console.log("🔗 Link: " + room.link);
+
+// ============================================
+// SISTEMA DE OWNER (DUEÑO)
+// ============================================
+var OWNER_AUTH = "##OWNER_AUTH##";
+
+// Estado del bot
+var botState = {
+    gameActive: false,
+    startTimeout: null,
+    tempAdmins: [],  // Admins temporales
+    bannedPlayers: [],  // Jugadores baneados temporalmente
+    spectatorNext: [],  // Jugadores que deben estar en espectador el siguiente minijuego
+    chatBlocked: false,  // Bloqueo de chat temporal para anuncios
+    banTimers: {},  // Timers de unban individuales por jugador
+    discordCooldowns: {}, // Timestamps de último uso del comando !discord por jugador
+    lastMinigame: null  // Último minijuego jugado para evitar repeticiones
+};
+
+// Invite de Discord (usado por comando !discord)
+var DISCORD_INVITE = "https://discord.gg/ACpTeXu7Pj";
+
+// Cargar mapas Lucky
+var mapLuck = ##MAP_LUCK##;
+var mapLuckDios = ##MAP_LUCK_DIOS##;
+var mapLuckHell = ##MAP_LUCK_HELL##;
+// Cargar mapa Dodgeball
+var mapDodgeball = ##MAP_DODGEBALL##;
+var mapSuperman = ##MAP_SUPERMAN##;
+var mapUltraball = ##MAP_ULTRABALL##;
+var mapSurvivalSquare = ##MAP_SURVIVAL_SQUARE##;
+var mapNumberChairs = ##MAP_NUMBERCHAIRS##;
+
+// Parsear mapas
+mapLuck = JSON.parse(mapLuck);
+mapLuckDios = JSON.parse(mapLuckDios);
+mapLuckHell = JSON.parse(mapLuckHell);
+// Parsear Dodgeball
+mapDodgeball = JSON.parse(mapDodgeball);
+// Parsear Superman
+mapSuperman = JSON.parse(mapSuperman);
+// Parsear Ultraball
+mapUltraball = JSON.parse(mapUltraball);
+// Parsear Survival Square
+mapSurvivalSquare = JSON.parse(mapSurvivalSquare);
+// Parsear NumberChairs
+mapNumberChairs = JSON.parse(mapNumberChairs);
+
+// Configurar mapas en LUCKY, LUCKY_HELL y LUCKY_DIOS
+LUCKY.setMaps(mapLuck, mapLuckDios, mapLuckHell);
+LUCKY_HELL.setMap(mapLuckHell);
+LUCKY_DIOS.setMaps(mapLuckDios, mapLuck);
+// Inyectar mapa en DODGEBALL
+if (typeof DODGEBALL !== 'undefined' && DODGEBALL.setMapData) {
+    DODGEBALL.setMapData(mapDodgeball);
+}
+// Inyectar mapa en SUPERMAN
+if (typeof SUPERMAN !== 'undefined' && SUPERMAN.setMapData) {
+    SUPERMAN.setMapData(mapSuperman);
+}
+// Inyectar mapa en ULTRABALL
+if (typeof ULTRABALL !== 'undefined' && ULTRABALL.setMapData) {
+     ULTRABALL.setMapData(mapUltraball);
+}
+// Inyectar mapa en SURVIVAL_SQ
+if (typeof SURVIVAL_SQ !== 'undefined' && SURVIVAL_SQ.setMapData) {
+    SURVIVAL_SQ.setMapData(mapSurvivalSquare);
+}
+// Inyectar mapa en NUMBERCHAIRS
+if (typeof NUMBERCHAIRS !== 'undefined' && NUMBERCHAIRS.setMapData) {
+    NUMBERCHAIRS.setMapData(mapNumberChairs);
+}
+
+// ============================================
+// SISTEMA DE ANUNCIOS AUTOMÁTICOS
+// ============================================
+function startAutoAnnouncements() {
+    setInterval(function() {
+        // No enviar anuncios si hay un juego activo (minijuego en curso)
+        if (botState.gameActive) {
+            return; // No enviar anuncios durante juegos activos
+        }
+        
+        botState.chatBlocked = true;
+        
+        room.sendAnnouncement(
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "💬 ÚNETE A NUESTRO DISCORD\n" +
+            "🔗 https://discord.gg/ACpTeXu7Pj\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━",
+            null,
+            0x5865F2,
+            "bold",
+            2
+        );
+        
+        setTimeout(function() {
+            botState.chatBlocked = false;
+        }, 2000);
+    }, 120000); // Cada 2 minutos
+}
+
+// Iniciar anuncios automáticos
+startAutoAnnouncements();
+
+// ============================================
+// FUNCIONES PRINCIPALES
+// ============================================
+
+function startLALALA() {
+    botState.gameActive = true;
+    
+    LALALA.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startSURVIVAL() {
+    botState.gameActive = true;
+    
+    SURVIVAL.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startMETEORS() {
+    botState.gameActive = true;
+    
+    METEORS.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startJUMPING() {
+    botState.gameActive = true;
+    
+    JUMPING.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startWEBSURVIVAL() {
+    botState.gameActive = true;
+    
+    WEBSURVIVAL.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startGALACTIC() {
+    botState.gameActive = true;
+    
+    GALACTIC.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startGYM() {
+    botState.gameActive = true;
+    
+    GYM.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startMULTIBALLS() {
+    botState.gameActive = true;
+    
+    MULTIBALLS.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startDODGEBALL() {
+    botState.gameActive = true;
+    
+    DODGEBALL.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startSUPERMAN() {
+    botState.gameActive = true;
+    SUPERMAN.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startULTRABALL() {
+    botState.gameActive = true;
+    ULTRABALL.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startSURVIVAL_SQ() {
+    botState.gameActive = true;
+    SURVIVAL_SQ.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function startNUMBERCHAIRS() {
+    botState.gameActive = true;
+    NUMBERCHAIRS.start(room, function(winner) {
+        if (winner) {
+            loadLuckyMap(winner);
+        } else {
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    });
+}
+
+function loadLuckyMap(winner) {
+    room.setPlayerTeam(winner.id, 1);
+    
+    var allPlayers = room.getPlayerList().filter(p => p.id !== 0);
+    allPlayers.forEach(p => {
+        if (p.id !== winner.id) {
+            room.setPlayerTeam(p.id, 0);
+        }
+    });
+    
+    room.sendAnnouncement(
+        "\n🎰 PREPARANDO LUCKY...\n🎲 Cargando la ruleta de la suerte...",
+        null,
+        0xFFD700,
+        "bold",
+        2
+    );
+    
+    setTimeout(function() {
+        room.stopGame();
+        
+        try {
+            room.setCustomStadium(mapLuck);
+            room.startGame();
+            
+            room.sendAnnouncement(
+                "🍀 LUCKY MAP - MAPA DE LA SUERTE 🍀\n" +
+                "👑 Ganador: " + winner.name + "\n" +
+                "🎯 Cae en un color y descubre tu destino!",
+                null,
+                0xFFD700,
+                "bold",
+                2
+            );
+            
+            console.log("✅ Mapa Lucky cargado correctamente");
+            
+            // Iniciar detección de colores con callbacks
+            LUCKY.start(room, winner, function() {
+                // Cuando termine Lucky, volver a iniciar otro minijuego
+                room.sendAnnouncement(
+                    "\n⏸️ Mapa Lucky finalizado\n\n⏱️ Próximo minijuego en 3 segundos...",
+                    null,
+                    0xFFFF00,
+                    "bold"
+                );
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 3000);
+            }, {
+                onTempAdmin: function(playerId) {
+                    // Agregar a lista de admins temporales
+                    if (botState.tempAdmins.indexOf(playerId) === -1) {
+                        botState.tempAdmins.push(playerId);
+                        console.log("👑 Admin temporal agregado: " + playerId);
+                    }
+                },
+                onSpectatorNext: function(playerId) {
+                    // Agregar a lista de espectadores para el siguiente minijuego
+                    if (botState.spectatorNext.indexOf(playerId) === -1) {
+                        botState.spectatorNext.push(playerId);
+                        console.log("👻 Espectador próximo minijuego: " + playerId);
+                    }
+                },
+                onBanTemp: function(playerId, duration) {
+                    // Banear temporalmente
+                    var player = room.getPlayer(playerId);
+                    var playerName = player ? player.name : "#" + playerId;
+                    
+                    // Limpiar timer anterior si existe
+                    if (botState.banTimers[playerId]) {
+                        clearTimeout(botState.banTimers[playerId]);
+                    }
+                    
+                    // Agregar a lista de baneados
+                    if (botState.bannedPlayers.indexOf(playerId) === -1) {
+                        botState.bannedPlayers.push(playerId);
+                    }
+                    
+                    room.kickPlayer(playerId, "Ban temporal por " + duration + "s", true);
+                    console.log("⚔️ Ban temporal a " + playerName + " por " + duration + "s");
+                    
+                    botState.banTimers[playerId] = setTimeout(function() {
+                        // Remover de lista de baneados
+                        var index = botState.bannedPlayers.indexOf(playerId);
+                        if (index !== -1) {
+                            botState.bannedPlayers.splice(index, 1);
+                        }
+                        
+                        room.clearBans();
+                        room.sendAnnouncement(
+                            "✅ Ban temporal removido - " + playerName + " puede volver a entrar",
+                            null,
+                            0x00FF00,
+                            "bold"
+                        );
+                        delete botState.banTimers[playerId];
+                        console.log("✅ Ban temporal removido para " + playerName);
+                    }, duration * 1000);
+                }
+            });
+        } catch (e) {
+            console.log("❌ Error al cargar mapa Lucky: " + e.message);
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
+    }, 2000);
+}
+
+function checkAndStart() {
+    // Si hay un Lucky activo (normal, DIOS o HELL), no iniciar el siguiente minijuego
+    if (LUCKY.isActive() || LUCKY_DIOS.isActive() || LUCKY_HELL.isActive()) {
+        botState.startTimeout = setTimeout(checkAndStart, 5000);
+        return;
+    }
+    
+    if (botState.gameActive) return;
+    if (botState.startTimeout) {
+        clearTimeout(botState.startTimeout);
+        botState.startTimeout = null;
+    }
+    
+    var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
+    
+    if (playerCount < 2) {
+        room.sendAnnouncement(
+            "⏳ Esperando más jugadores... (mínimo 2)",
+            null,
+            0xFFFF00
+        );
+        botState.startTimeout = setTimeout(checkAndStart, 10000);
+    } else {
+        // SISTEMA DE MINIJUEGOS ALEATORIOS (evitar repetir el último)
+        var minigames = [
+            { name: 'DODGEBALL', module: DODGEBALL, displayName: 'DODGEBALL - ESQUIVA LA BOLA NEGRA', starter: startDODGEBALL },
+            { name: 'SUPERMAN', module: SUPERMAN, displayName: 'SUPERMAN CHAIR - Párate en la cabeza de Superman', starter: startSUPERMAN },
+            { name: 'ULTRABALL', module: ULTRABALL, displayName: 'ULTRABALL - Partido de goles', starter: startULTRABALL },
+            { name: 'SURVIVAL_SQ', module: SURVIVAL_SQ, displayName: 'SURVIVAL SQUARE - Último en el cuadro', starter: startSURVIVAL_SQ },
+            { name: 'NUMBERCHAIRS', module: NUMBERCHAIRS, displayName: 'NUMBERCHAIRS - Silla número 1', starter: startNUMBERCHAIRS }
+        ];
+
+        // Filtrar el último minijuego jugado
+        var availableGames = minigames.filter(function(game) {
+            return game.name !== botState.lastMinigame;
+        });
+
+        // Si hay menos de 3 jugadores, no permitir que se seleccione DODGEBALL
+        if (playerCount < 3) {
+            availableGames = availableGames.filter(function(game) {
+                return game.name !== 'DODGEBALL';
+            });
+        }
+
+        // Si todos fueron jugados o el filtro dejó vacío, reconstruir lista aplicando la misma restricción de DODGEBALL
+        if (availableGames.length === 0) {
+            availableGames = minigames.filter(function(game) {
+                if (game.name === 'DODGEBALL' && playerCount < 3) return false;
+                return true;
+            });
+        }
+        
+        // Seleccionar minijuego aleatorio
+        var randomIndex = Math.floor(Math.random() * availableGames.length);
+        var selectedGame = availableGames[randomIndex];
+        
+        botState.lastMinigame = selectedGame.name;
+        botState.currentMinigame = selectedGame.name;
+        
+        room.sendAnnouncement(
+            "🎲 Minijuego: " + selectedGame.displayName + "\n👥 Jugadores: " + playerCount + "\n⏱️ Iniciando en 3 segundos...",
+            null,
+            0x00BFFF,
+            "bold",
+            2
+        );
+        botState.startTimeout = setTimeout(selectedGame.starter, 3000);
+    }
+}
+
+// ============================================
+// EVENTOS
+// ============================================
+
+room.onPlayerJoin = function(player) {
+    console.log("👤 " + player.name + " entró");
+    
+    // ============================================
+    // SISTEMA DE OWNER - DAR ADMIN AUTOMÁTICO
+    // ============================================
+    if (player.auth === OWNER_AUTH) {
+        room.setPlayerAdmin(player.id, true);
+        room.sendAnnouncement(
+            "👑 Bienvenido OWNER! Admin activado automáticamente",
+            player.id,
+            0xFFD700,
+            "bold"
+        );
+        console.log("👑 Owner detectado: " + player.name);
+    }
+    
+    room.sendAnnouncement(
+        "👋 Bienvenido " + player.name + "!\n" +
+        "🎮 Sala de Minijuegos\n" +
+        "Escribe !ayuda para ver comandos",
+        player.id,
+        0x00FF00
+    );
+    
+    // Si está en la lista de spectatorNext, moverlo a espectador
+    if (botState.spectatorNext.indexOf(player.id) !== -1) {
+        room.setPlayerTeam(player.id, 0);
+        room.sendAnnouncement(
+            "👻 Debes esperar el próximo minijuego",
+            player.id,
+            0xFF6600,
+            "bold"
+        );
+    }
+    
+    if (botState.gameActive) {
+        room.sendAnnouncement(
+            "⏳ Hay un juego en curso. Espera a que termine para jugar.",
+            player.id,
+            0xFFFF00
+        );
+        return;
+    }
+    
+    if (!botState.startTimeout) {
+        var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
+        if (playerCount >= 2) {
+            room.sendAnnouncement(
+                "✅ Hay suficientes jugadores!\n⏱️ El juego comenzará en unos segundos...",
+                null,
+                0x00FF00,
+                "bold"
+            );
+            botState.startTimeout = setTimeout(checkAndStart, 2000);
+        }
+    }
+};
+
+room.onPlayerLeave = function(player) {
+    console.log("👋 " + player.name + " salió");
+    
+    // Notificar a los módulos activos sobre la salida del jugador
+    if (LALALA.isActive()) {
+        LALALA.onPlayerLeave(room, player);
+    }
+    if (SURVIVAL.isActive()) {
+        SURVIVAL.onPlayerLeave(room, player);
+    }
+    if (METEORS.isActive()) {
+        METEORS.onPlayerLeave(room, player);
+    }
+    if (JUMPING.isActive()) {
+        JUMPING.onPlayerLeave(room, player);
+    }
+    if (WEBSURVIVAL.isActive()) {
+        WEBSURVIVAL.onPlayerLeave(room, player);
+    }
+    if (GALACTIC.isActive()) {
+        GALACTIC.onPlayerLeave(room, player);
+    }
+    if (GYM.isActive()) {
+        GYM.onPlayerLeave(room, player);
+    }
+    if (MULTIBALLS.isActive()) {
+        MULTIBALLS.onPlayerLeave(room, player);
+    }
+    if (DODGEBALL.isActive()) {
+        DODGEBALL.onPlayerLeave(room, player);
+    }
+    if (ULTRABALL && ULTRABALL.isActive && ULTRABALL.isActive()) {
+        ULTRABALL.onPlayerLeave(room, player);
+    }
+    if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) {
+        NUMBERCHAIRS.onPlayerLeave(room, player);
+    }
+    
+    var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
+    if (playerCount < 2 && botState.gameActive) {
+        room.sendAnnouncement(
+            "⏸️ Solo queda 1 jugador. Deteniendo juego...",
+            null,
+            0xFF6600,
+            "bold"
+        );
+        
+        if (LALALA.isActive()) {
+            LALALA.stop(room);
+        }
+        // Detener Lucky si está activo
+        if (LUCKY.isActive()) {
+            LUCKY.stop(room);
+        }
+        if (LUCKY_HELL && LUCKY_HELL.isActive && LUCKY_HELL.isActive()) {
+            LUCKY_HELL.stop(room);
+        }
+        if (LUCKY_DIOS && LUCKY_DIOS.isActive && LUCKY_DIOS.isActive()) {
+            LUCKY_DIOS.stop(room);
+        }
+        if (SURVIVAL.isActive()) {
+            SURVIVAL.stop(room);
+        }
+        if (METEORS.isActive()) {
+            METEORS.stop(room);
+        }
+        if (JUMPING.isActive()) {
+            JUMPING.stop(room);
+        }
+        if (WEBSURVIVAL.isActive()) {
+            WEBSURVIVAL.stop(room);
+        }
+        if (GALACTIC.isActive()) {
+            GALACTIC.stop(room);
+        }
+        if (GYM.isActive()) {
+            GYM.stop(room);
+        }
+        if (MULTIBALLS.isActive()) {
+            MULTIBALLS.stop(room);
+        }
+        if (DODGEBALL.isActive()) {
+            DODGEBALL.stop(room);
+        }
+        if (SURVIVAL_SQ && SURVIVAL_SQ.isActive && SURVIVAL_SQ.isActive()) {
+            SURVIVAL_SQ.stop(room);
+        }
+        if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) {
+            NUMBERCHAIRS.stop(room);
+        }
+        if (ULTRABALL && ULTRABALL.isActive && ULTRABALL.isActive()) {
+            ULTRABALL.stop(room);
+        }
+        
+        botState.gameActive = false;
+        if (botState.startTimeout) {
+            clearTimeout(botState.startTimeout);
+            botState.startTimeout = null;
+        }
+        
+        // Reiniciar búsqueda de minijuego cuando haya 2 jugadores
+        room.sendAnnouncement(
+            "⏳ Esperando más jugadores...",
+            null,
+            0x00FF00,
+            "normal"
+        );
+        
+        // Verificar cada 5 segundos si hay suficientes jugadores
+        var checkInterval = setInterval(function() {
+            var currentPlayers = room.getPlayerList().filter(p => p.id !== 0).length;
+            if (currentPlayers >= 2) {
+                clearInterval(checkInterval);
+                setTimeout(function() {
+                    checkAndStart();
+                }, 3000);
+            }
+        }, 5000);
+        
+        setTimeout(checkAndStart, 3000);
+    }
+};
+
+room.onPlayerTeamChange = function(changedPlayer, byPlayer) {
+    // Evitar que alguien se mueva al equipo azul (equipo 2) SOLO DURANTE LUCKY o LUCKY HELL
+    if ((LUCKY.isActive() || LUCKY_HELL.isActive() || LUCKY_DIOS.isActive()) && changedPlayer.team === 2) {
+        room.setPlayerTeam(changedPlayer.id, 0);
+        room.sendAnnouncement(
+            "⚠️ No puedes unirte al equipo azul durante Lucky",
+            changedPlayer.id,
+            0xFF6600
+        );
+        return;
+    }
+    
+    // Si está en spectatorNext, forzar a espectador
+    if (botState.spectatorNext.indexOf(changedPlayer.id) !== -1 && changedPlayer.team !== 0) {
+        room.setPlayerTeam(changedPlayer.id, 0);
+        room.sendAnnouncement(
+            "👻 Debes esperar el próximo minijuego",
+            changedPlayer.id,
+            0xFF6600,
+            "bold"
+        );
+    }
+};
+
+room.onPlayerChat = function(player, message) {
+    // Bloqueo de chat durante anuncios automáticos
+    if (botState.chatBlocked) {
+        return false;
+    }
+    
+    // Control de admins temporales - no pueden usar comandos de admin
+    if (botState.tempAdmins.indexOf(player.id) !== -1) {
+        if (message.startsWith('!kick') || message.startsWith('!ban') || message.startsWith('!set')) {
+            room.sendAnnouncement(
+                "⛔ Los admins temporales NO pueden kickear, banear ni cambiar mapas",
+                player.id,
+                0xFF0000,
+                "bold"
+            );
+            room.sendAnnouncement(
+                "⚠️ " + player.name + " intentó usar comandos de admin - KICKEADO",
+                null,
+                0xFF6600,
+                "bold"
+            );
+            setTimeout(function() {
+                room.kickPlayer(player.id, "Uso indebido de admin temporal", false);
+            }, 1000);
+            return false;
+        }
+    }
+    
+    // Control de chat de Lucky (selección de jugadores)
+    if (LUCKY.isActive()) {
+        var result = LUCKY.onPlayerChat(player, message);
+        if (result === false) return false; // Si retorna false, bloquear chat
+    }
+    
+    // Control de chat de Lucky Hell (selección de jugadores)
+    if (LUCKY_HELL.isActive()) {
+        var result = LUCKY_HELL.onPlayerChat(player, message);
+        if (result === false) return false; // Si retorna false, bloquear chat
+    }
+    
+    // Control de chat de Lucky DIOS (selección de jugadores)
+    if (LUCKY_DIOS.isActive()) {
+        var result = LUCKY_DIOS.onPlayerChat(player, message);
+        if (result === false) return false; // Si retorna false, bloquear chat
+    }
+    
+    if (LALALA.isActive()) {
+        var result = LALALA.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    
+    if (SURVIVAL.isActive()) {
+        var result = SURVIVAL.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    
+    if (METEORS.isActive()) {
+        var result = METEORS.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    
+    if (JUMPING.isActive()) {
+        var result = JUMPING.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    
+    if (WEBSURVIVAL.isActive()) {
+        var result = WEBSURVIVAL.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    
+    if (GALACTIC.isActive()) {
+        var result = GALACTIC.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    
+    if (GYM.isActive()) {
+        var result = GYM.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    
+    if (MULTIBALLS.isActive()) {
+        var result = MULTIBALLS.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    
+    if (DODGEBALL.isActive()) {
+        var result = DODGEBALL.onPlayerChat(player, message);
+        if (result === false) return false;
+    }
+    
+    if (ULTRABALL && ULTRABALL.isActive && ULTRABALL.isActive()) {
+        var result = ULTRABALL.onPlayerChat(player, message);
+        if (result === false) return false;
+    }
+    if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) {
+        var result = NUMBERCHAIRS.onPlayerChat(player, message);
+        if (result === false) return false;
+    }
+    
+    // Comando !discord - enviar link privado al solicitante (cooldown 60s)
+    if (message === "!discord") {
+        var now = Date.now();
+        var last = botState.discordCooldowns[player.id] || 0;
+        var diff = now - last;
+        if (diff < 60000) {
+            var wait = Math.ceil((60000 - diff) / 1000);
+            room.sendAnnouncement(
+                "⏳ Espera " + wait + "s antes de pedir el enlace de Discord otra vez.",
+                player.id,
+                0xFF6600
+            );
+            return false;
+        }
+
+        // Registrar uso
+        botState.discordCooldowns[player.id] = now;
+
+        room.sendAnnouncement(
+            "🔗 Enlace de Discord (privado):\n" + DISCORD_INVITE,
+            player.id,
+            0x5865F2
+        );
+        return false; // bloquear el mensaje público
+    }
+    
+    // Comando !reiniciar solo para admins
+    if (message === "!reiniciar") {
+        var playerObj = room.getPlayer(player.id);
+        if (playerObj && playerObj.admin) {
+            room.sendAnnouncement(
+                "🔄 REINICIANDO BOT...",
+                null,
+                0xFF6600,
+                "bold",
+                2
+            );
+            
+            setTimeout(function() {
+                // Detener todos los módulos
+                if (LALALA.isActive()) LALALA.stop(room);
+                if (SURVIVAL.isActive()) SURVIVAL.stop(room);
+                if (METEORS.isActive()) METEORS.stop(room);
+                if (JUMPING.isActive()) JUMPING.stop(room);
+                if (WEBSURVIVAL.isActive()) WEBSURVIVAL.stop(room);
+                if (GALACTIC.isActive()) GALACTIC.stop(room);
+                if (GYM.isActive()) GYM.stop(room);
+                if (MULTIBALLS.isActive()) MULTIBALLS.stop(room);
+                if (DODGEBALL.isActive()) DODGEBALL.stop(room);
+                if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) NUMBERCHAIRS.stop(room);
+                if (LUCKY.isActive()) LUCKY.stop(room);
+                if (LUCKY_HELL.isActive()) LUCKY_HELL.stop(room);
+                if (LUCKY_DIOS.isActive()) LUCKY_DIOS.stop(room);
+                
+                // Resetear estado del bot
+                botState.gameActive = false;
+                botState.tempAdmins = [];
+                botState.bannedPlayers = [];
+                botState.spectatorNext = [];
+                botState.chatBlocked = false;
+                
+                // Limpiar todos los timers de ban
+                for (var id in botState.banTimers) {
+                    clearTimeout(botState.banTimers[id]);
+                }
+                botState.banTimers = {};
+                
+                if (botState.startTimeout) {
+                    clearTimeout(botState.startTimeout);
+                    botState.startTimeout = null;
+                }
+                
+                // Detener juego y resetear mapa
+                room.stopGame();
+                
+                // Mover todos los jugadores a espectadores
+                var players = room.getPlayerList();
+                for (var i = 0; i < players.length; i++) {
+                    if (players[i].id !== 0) {
+                        room.setPlayerTeam(players[i].id, 0);
+                    }
+                }
+                
+                setTimeout(function() {
+                    room.sendAnnouncement(
+                        "✅ Bot reiniciado - Esperando jugadores...",
+                        null,
+                        0x00FF00,
+                        "bold",
+                        2
+                    );
+                    checkAndStart();
+                }, 1000);
+            }, 2000);
+            
+            return false;
+        } else {
+            room.sendAnnouncement(
+                "⛔ Solo los admins pueden usar !reiniciar",
+                player.id,
+                0xFF0000,
+                "bold"
+            );
+            return false;
+        }
+    }
+    
+    if (message === "!ayuda") {
+        room.sendAnnouncement(
+            "📋 COMANDOS:\n" +
+            "!ayuda - Ver comandos\n" +
+            "!reiniciar - Reiniciar bot (solo admin)\n" +
+            "Los minijuegos se ejecutan automáticamente 🎲",
+            player.id,
+            0x00FF00
+        );
+        return false;
+    }
+    
+    return true;
+};
+
+room.onGameStart = function() {
+    console.log("🎮 Juego iniciado");
+};
+
+room.onGameStop = function() {
+    console.log("⏹️ Juego detenido");
+};
+
+// ============================================
+// INICIO
+// ============================================
+
+setTimeout(function() {
+    room.sendAnnouncement(
+        "🎮 Bienvenidos a la Sala de Minijuegos 🎮\n" +
+        "Los minijuegos se ejecutan automáticamente",
+        null,
+        0x00FF00,
+        "bold",
+        2
+    );
+    checkAndStart();
+}, 5000);
