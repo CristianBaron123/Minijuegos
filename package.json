@@ -1,0 +1,25 @@
+{
+  "name": "haxball-minijuegos",
+  "version": "1.0.0",
+  "description": "Sala de minijuegos para Haxball Headless",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node bot.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "haxball",
+    "headless",
+    "minijuegos",
+    "bot"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "dependencies": {
+    "puppeteer": "^24.36.1"
+  }
+}
