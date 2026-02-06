@@ -25,6 +25,8 @@ var config = {
         minY: -255,
         maxY: 255
     },
+    // Si true: eliminar solo cuando salen del rectángulo (ignorar impacto con la bola)
+    onlyEliminateWhenOutOfBounds: true,
     checkIntervalMs: 120,
     hitDistance: 26, // distancia para considerar impacto bola->jugador
     explanationMs: 5000,
@@ -124,18 +126,21 @@ function checkPlayers(room) {
 
         // Fuera del cuadro = eliminado
         if (pos.x < config.arena.minX || pos.x > config.arena.maxX || pos.y < config.arena.minY || pos.y > config.arena.maxY) {
-            eliminatePlayer(room, p);
+            eliminatePlayer(room, p, 'salió del cuadro');
             return;
         }
 
-        // Si es ROJO y la bola lo toca -> eliminado
-        if (p.team === 1 && ballPos) {
-            var dx = pos.x - ballPos.x;
-            var dy = pos.y - ballPos.y;
-            var dist2 = dx*dx + dy*dy;
-            if (dist2 <= config.hitDistance * config.hitDistance) {
-                eliminatePlayer(room, p, 'fue golpeado por la bola negra');
-                return;
+        // Impacto con bola: solamente se considera si la opción está desactivada
+        if (!config.onlyEliminateWhenOutOfBounds) {
+            // Si es ROJO y la bola lo toca -> eliminado
+            if (p.team === 1 && ballPos) {
+                var dx = pos.x - ballPos.x;
+                var dy = pos.y - ballPos.y;
+                var dist2 = dx*dx + dy*dy;
+                if (dist2 <= config.hitDistance * config.hitDistance) {
+                    eliminatePlayer(room, p, 'fue golpeado por la bola negra');
+                    return;
+                }
             }
         }
     });

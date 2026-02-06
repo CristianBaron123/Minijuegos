@@ -47,6 +47,7 @@ function start(room, onGameEnd) {
         setTimeout(function() {
             try { room.startGame(); } catch(e){}
             try { room.pauseGame(true); } catch(e){}
+            try { lockTeamChanges(); } catch(e) {}
             gameState.chatBlocked = true;
 
             room.sendAnnouncement('\n📋 INSTRUCCIONES:\n' +
@@ -57,6 +58,7 @@ function start(room, onGameEnd) {
             , null, 0xFFFF00, 'bold', 2);
 
             setTimeout(function() {
+                try { unlockTeamChanges(); } catch(e) {}
                 gameState.chatBlocked = false;
                 try { room.pauseGame(false); } catch(e){}
                 runTournament(room);
@@ -173,6 +175,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
     return new Promise(function(resolve) {
         var scores = { 1:0, 2:0 };
         var stopped = false;
+        var sdTo = null; // sudden-death timeout
         room.startGame();
 
         // Establecer equipos según posición en lista (mitad)
@@ -199,17 +202,53 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         var to = setTimeout(function() {
             if (stopped) return;
             stopped = true;
-            // decidir por mayor score
-            var winnerTeam = (scores[1] === scores[2]) ? (Math.random()<0.5?1:2) : (scores[1] > scores[2] ? 1 : 2);
+            // Si nadie anotó, considerar que no hubo resultado
+            if (scores[1] === 0 && scores[2] === 0) {
+                room.sendAnnouncement('\n⚠️ No hubo goles en el partido. Empate sin resultado.', null, 0xFF6600);
+                cleanupAndResolve(null);
+                return;
+            }
+
+            // Si está empate con goles, entrar a tiempo extra: siguiente gol gana (30s)
+            if (scores[1] === scores[2]) {
+                room.sendAnnouncement('\n⚡ Empate. Tiempo extra: SIGUIENTE GOL GANA (30s)...', null, 0xFFFF00);
+                // instalar handler que resuelve al primer gol
+                var suddenMs = 30000;
+                // sobrescribir onTeamGoal temporalmente
+                room.onTeamGoal = function(team) {
+                    if (stopped) return;
+                    stopped = true;
+                    if (sdTo) { clearTimeout(sdTo); sdTo = null; }
+                    cleanupAndResolve(team);
+                };
+                sdTo = setTimeout(function() {
+                    if (stopped) return;
+                    stopped = true;
+                    // si no hay gol en tiempo extra, elegir ganador aleatoriamente
+                    var winnerTeam = (Math.random() < 0.5) ? 1 : 2;
+                    cleanupAndResolve(winnerTeam);
+                }, suddenMs);
+                return;
+            }
+
+            // decidir por mayor score (si empate lógica anterior no llega aquí)
+            var winnerTeam = (scores[1] > scores[2] ? 1 : 2);
             cleanupAndResolve(winnerTeam);
         }, timeMs);
 
         function cleanupAndResolve(team) {
             clearTimeout(to);
+            if (sdTo) { clearTimeout(sdTo); sdTo = null; }
             // restaurar handler
             try { room.onTeamGoal = prevOnGoal; } catch(e){}
 
             // recopilar ids de ganadores/losers
+            if (team === null) {
+                // No hay ganador (por ejemplo, no se anotaron goles)
+                resolve(null);
+                return;
+            }
+
             var winners = [];
             var losers = [];
             var half = Math.floor(playerIds.length/2);
