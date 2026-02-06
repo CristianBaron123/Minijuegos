@@ -374,7 +374,7 @@ var LUCKY = (function() {
                     2
                 );
                 setTimeout(function() {
-                    stop(room); // Detener Lucky normal
+                    stop(room, true); // Detener Lucky normal sin invocar onGameEnd
                     room.stopGame();
                     room.setCustomStadium(mapLuckDios);
                     room.startGame();
@@ -384,7 +384,7 @@ var LUCKY = (function() {
                         
                         // Iniciar Lucky DIOS
                         if (typeof LUCKY_DIOS !== 'undefined' && LUCKY_DIOS.start) {
-                            LUCKY_DIOS.start(room, targetPlayer, gameState.callbacks);
+                            LUCKY_DIOS.start(room, targetPlayer, gameState.onGameEnd, gameState.callbacks);
                         }
                     }, 100);
                 }, 3000);
@@ -403,9 +403,11 @@ var LUCKY = (function() {
         
         switch(effect) {
             case 'ban_current':
-                // NARANJA: Ban al que está en ruleta
-                room.sendAnnouncement("💥 " + winner.name + " ha sido BANEADO!", null, 0xFF8C00, "bold", 2);
-                room.kickPlayer(winner.id, "Baneado por caer en NARANJA", true);
+                // NARANJA: Ban temporal por 60 segundos (usar callback centralizado)
+                room.sendAnnouncement("⚔️ Has sido BANEADO por 60 segundos!", winner.id, 0xFF8C00, "bold", 2);
+                if (gameState.callbacks && gameState.callbacks.onBanTemp) {
+                    gameState.callbacks.onBanTemp(winner.id, 60);
+                }
                 finishEffect(room);
                 break;
                 
@@ -413,7 +415,7 @@ var LUCKY = (function() {
                 // BLANCO: Cargar ruleta de dios
                 room.sendAnnouncement("✨ Cargando RULETA DE DIOS...", null, 0xFFFFFF, "bold", 2);
                 setTimeout(function() {
-                    stop(room); // Detener Lucky normal
+                    stop(room, true); // Detener Lucky normal sin invocar onGameEnd (se cambiará mapa)
                     room.stopGame();
                     room.setCustomStadium(mapLuckDios);
                     room.startGame();
@@ -423,7 +425,8 @@ var LUCKY = (function() {
                         
                         // Iniciar Lucky DIOS
                         if (typeof LUCKY_DIOS !== 'undefined' && LUCKY_DIOS.start) {
-                            LUCKY_DIOS.start(room, winner, gameState.callbacks);
+                            // Pasar onGameEnd y callbacks
+                            LUCKY_DIOS.start(room, winner, gameState.onGameEnd, gameState.callbacks);
                         }
                     }, 100);
                 }, 3000);
@@ -636,27 +639,27 @@ var LUCKY = (function() {
         }, config.detectionDelay);
     }
     
-    function stop(room) {
+    function stop(room, suppressCallback) {
         gameState.active = false;
-        
+
         if (gameState.checkInterval) {
             clearInterval(gameState.checkInterval);
             gameState.checkInterval = null;
         }
-        
+
         if (gameState.globalTimeout) {
             clearTimeout(gameState.globalTimeout);
             gameState.globalTimeout = null;
         }
-        
+
         room.stopGame();
         console.log("🛑 Lucky Map detenido");
-        
+
         // Llamar al callback para continuar con el siguiente minijuego
-        if (gameState.onGameEnd) {
+        if (!suppressCallback && gameState.onGameEnd) {
             var callback = gameState.onGameEnd;
             gameState.onGameEnd = null;
-            callback();
+            try { callback(); } catch(e) { console.error('[LUCKY] onGameEnd callback error', e); }
         }
     }
     
@@ -667,6 +670,25 @@ var LUCKY = (function() {
     function onPlayerChat(player, message) {
         // Bloquear chat para todos durante la explicación de selección
         if (gameState.chatBlocked) return false;
+
+        // Si hay una selección activa, reenviar el mensaje al manejador de selección
+        // Solo permitir que el GANADOR escriba la opción; bloquear el chat público
+        if (gameState.selectionActive && !gameState.explanationPhase) {
+            if (player && gameState.winner && player.id === gameState.winner.id) {
+                // Usar la referencia a room guardada en el estado
+                handleSelectionInput(gameState.room, message);
+            } else {
+                if (gameState.room) {
+                    gameState.room.sendAnnouncement(
+                        "⛔ Solo el ganador puede elegir el número",
+                        player.id,
+                        0xFF6600
+                    );
+                }
+            }
+            return false; // bloquear el mensaje público
+        }
+
         return true;
     }
     

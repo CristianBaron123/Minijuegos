@@ -1,5 +1,39 @@
-// Lucky DIOS Module - 7 color zones with god-tier effects
+// LUCKY_DIOS - Ruleta "Dios" basada en tu snippet
 const LUCKY_DIOS = (function() {
+    var mapLuckDios = null;
+    var mapLuckNormal = null;
+    var gameState = {
+        active: false,
+        currentPlayer: null, // jugador que tira
+        room: null,
+        onGameEnd: null,
+        callbacks: {},
+        checkInterval: null,
+        globalTimeout: null,
+        detection: {
+            zone: null,
+            startTs: 0
+        },
+        selection: {
+            active: false,
+            explanation: false,
+            effect: null,
+            timeout: null,
+            reminderTimeout: null,
+            playerList: []
+        },
+        kickCounters: {} // map playerId -> remaining kicks (si quieres persistir)
+    };
+
+    var config = {
+        detectionDelay: 1000,
+        checkIntervalMs: 100,
+        maxGameTime: 60000,
+        selectionTimeout: 10000,
+        selectionReminder: 5000,
+        defaultConfirmation: 3000
+    };
+
     const colorZones = [
         {
             name: 'ROJO',
@@ -90,7 +124,8 @@ const LUCKY_DIOS = (function() {
             color: 'CE004',
             minX: 140,
             maxX: 520,
-            minY: 300,  // Ampliado desde 440 hasta 300 para cubrir más zona debajo de la curva
+            minY: 300,
+            maxY: 1000,
             effect: 'pass_dios',
             needsSelection: true,
             confirmationTime: 3000,
@@ -98,469 +133,429 @@ const LUCKY_DIOS = (function() {
         }
     ];
 
-    const gameState = {
-        active: false,
-        winner: null,
-        checkInterval: null,
-        globalTimeout: null,
-        detectionBuffer: [],
-        confirmationStartTime: null,
-        currentZone: null,
-        selectionActive: false,
-        explanationPhase: false,
-        selectionEffect: null,
-        selectionTimeout: null,
-        selectionReminderTimeout: null,
-        playerList: [],
-        kickCounters: {}, // Para trackear kicks restantes por jugador
-        effectExecuted: false, // Flag para evitar ejecuciones múltiples
-        room: null,
-        callbacks: null
-    };
+    // Helpers
+    function inZone(ball, zone) {
+        if (!ball) return false;
+        // platform: strict rectangle
+        if (zone.detectionType === 'platform') {
+            return ball.x >= zone.minX && ball.x <= zone.maxX && ball.y >= zone.minY && ball.y <= zone.maxY;
+        }
+        // curve: allow if ball is below minY (under curve) and x within range
+        if (zone.detectionType === 'curve') {
+            return ball.x >= zone.minX && ball.x <= zone.maxX && ball.y >= zone.minY;
+        }
+        // fallback rectangle
+        return ball.x >= zone.minX && ball.x <= zone.maxX && ball.y >= zone.minY && ball.y <= zone.maxY;
+    }
 
-    const config = {
-        detectionInterval: 100,
-        selectionTimeout: 10000,
-        selectionReminder: 5000,
-        maxGameTime: 60000
-    };
+    function resetDetection() {
+        gameState.detection.zone = null;
+        gameState.detection.startTs = 0;
+    }
 
-    let mapLuckDios = null;
-    let mapLuckNormal = null;
+    // Detección periódica con confirmación por tiempo
+    function detectLoop() {
+        // no procesar nuevas detecciones mientras hay una selección activa
+        if (gameState.selection && gameState.selection.active) return;
+        if (!gameState.active) return;
+        var room = gameState.room;
+        if (!room) return;
+        var ball = room.getBallPosition();
+        if (!ball) return;
+
+        var found = null;
+        for (var i = 0; i < colorZones.length; i++) {
+            var z = colorZones[i];
+            if (inZone(ball, z)) {
+                found = z;
+                break;
+            }
+        }
+
+        var now = Date.now();
+        if (found) {
+            if (!gameState.detection.zone || gameState.detection.zone.name !== found.name) {
+                // nueva detección
+                gameState.detection.zone = found;
+                gameState.detection.startTs = now;
+            } else {
+                var elapsed = now - gameState.detection.startTs;
+                var needed = found.confirmationTime || config.defaultConfirmation;
+                if (elapsed >= needed) {
+                    // confirmar y ejecutar efecto
+                    // reset para evitar re-ejecución inmediata
+                    resetDetection();
+                    executeEffect(room, found);
+                }
+            }
+        } else {
+            resetDetection();
+        }
+    }
+
+    // Selección de jugadores (misma UX que Lucky)
+    function startSelection(room, effectType, effectData) {
+        // evitar iniciar selección si ya hay una en curso
+        if (gameState.selection && gameState.selection.active) return;
+        gameState.selection.active = true;
+        gameState.selection.explanation = true;
+        gameState.selection.effect = { type: effectType, data: effectData };
+        gameState.selection.playerList = room.getPlayerList().filter(function(p) {
+            return p.id !== 0 && (!gameState.currentPlayer || p.id !== gameState.currentPlayer.id);
+        });
+
+        if (gameState.selection.playerList.length === 0) {
+            room.sendAnnouncement("⚠️ No hay otros jugadores para seleccionar", null, 0xFF6600, "bold");
+            finishEffect(room);
+            return;
+        }
+
+        // Pausar juego durante explicación y mover currentPlayer a espectador para evitar solapamientos
+        room.pauseGame(true);
+        try { lockTeamChanges(); } catch(e) {}
+        if (gameState.currentPlayer) {
+            try { room.setPlayerTeam(gameState.currentPlayer.id, 0); } catch(e) {}
+        }
+
+        var purpose = "";
+        switch(effectType) {
+            case 'choose_ban_1min': purpose = "para BANEAR por 1 minuto"; break;
+            case 'choose_admin': purpose = "para dar ADMIN"; break;
+            case 'give_lucky_normal': purpose = "para recibir LUCKY NORMAL"; break;
+            case 'pass_dios': purpose = "para recibir la RULETA DIOS"; break;
+            default: purpose = "para seleccionar";
+        }
+
+        var playerListStr = "\n📋 JUGADORES: ";
+        var parts = [];
+        gameState.selection.playerList.forEach(function(p,i){ parts.push((i+1)+"."+p.name); });
+        playerListStr += parts.join("  |  ");
+        playerListStr += "\n\n📖 " + (gameState.currentPlayer ? gameState.currentPlayer.name : "GANADOR") + ", escribe el NÚMERO " + purpose;
+        playerListStr += "\n⏳ Espera 3 segundos para la explicación...";
+
+        room.sendAnnouncement(playerListStr, null, 0xFFFF00, "bold", 2);
+
+        setTimeout(function() {
+            gameState.selection.explanation = false;
+            room.pauseGame(false);
+            room.sendAnnouncement("⏱️ ¡AHORA! Escribe el NÚMERO (" + (config.selectionTimeout/1000) + " segundos)", null, 0x00FF00, "bold", 2);
+
+            gameState.selection.reminderTimeout = setTimeout(function() {
+                if (gameState.selection.active) {
+                    room.sendAnnouncement("⏰ ¡5 SEGUNDOS RESTANTES! Escribe el NÚMERO", (gameState.currentPlayer ? gameState.currentPlayer.id : null), 0xFFFF00, "bold");
+                }
+            }, config.selectionReminder);
+
+            gameState.selection.timeout = setTimeout(function() {
+                if (gameState.selection.active) {
+                    var randomPlayer = gameState.selection.playerList[Math.floor(Math.random()*gameState.selection.playerList.length)];
+                    room.sendAnnouncement("⏱️ Tiempo agotado - Selección ALEATORIA: " + randomPlayer.name, null, 0xFF6600, "bold");
+                    cancelSelection();
+                    executeSelectionEffect(room, randomPlayer);
+                }
+            }, config.selectionTimeout);
+        }, 3000);
+    }
+
+    function cancelSelection() {
+        gameState.selection.active = false;
+        gameState.selection.explanation = false;
+        gameState.selection.playerList = [];
+        if (gameState.selection.timeout) { clearTimeout(gameState.selection.timeout); gameState.selection.timeout = null; }
+        if (gameState.selection.reminderTimeout) { clearTimeout(gameState.selection.reminderTimeout); gameState.selection.reminderTimeout = null; }
+        // reanudar juego y restaurar equipo del currentPlayer si existe
+        if (gameState.room) {
+            try {
+                try { unlockTeamChanges(); } catch(e) {}
+                gameState.room.pauseGame(false);
+                if (gameState.currentPlayer) {
+                    gameState.room.setPlayerTeam(gameState.currentPlayer.id, 1);
+                }
+            } catch (e) {}
+        }
+    }
+
+    function handleSelectionInput(room, message) {
+        if (!gameState.selection.active || gameState.selection.explanation) return;
+        var selectedNumber = parseInt(message.trim());
+        if (isNaN(selectedNumber) || selectedNumber < 1 || selectedNumber > gameState.selection.playerList.length) {
+            room.sendAnnouncement("❌ Número inválido. Escribe un número del 1 al " + gameState.selection.playerList.length, (gameState.currentPlayer ? gameState.currentPlayer.id : null), 0xFF0000);
+            return;
+        }
+        var selectedPlayer = gameState.selection.playerList[selectedNumber - 1];
+        if (selectedPlayer) {
+            room.sendAnnouncement("✅ " + (gameState.currentPlayer ? gameState.currentPlayer.name : "Se eligió") + " seleccionó a " + selectedPlayer.name, null, 0x00FF00, "bold");
+            cancelSelection();
+            executeSelectionEffect(room, selectedPlayer);
+        }
+    }
+
+    function executeSelectionEffect(room, targetPlayer) {
+        var effect = gameState.selection.effect;
+        if (!effect) {
+            finishEffect(room);
+            return;
+        }
+
+        switch(effect.type) {
+            case 'choose_ban_1min':
+                room.sendAnnouncement("⚔️ " + targetPlayer.name + " ha sido BANEADO por 1 MINUTO (elegido por " + gameState.currentPlayer.name + ")", null, 0xD2AB0B, "bold", 2);
+                if (gameState.callbacks.onBanTemp) gameState.callbacks.onBanTemp(targetPlayer.id, 60);
+                finishEffect(room);
+                break;
+
+            case 'choose_admin':
+                room.sendAnnouncement("👑 " + targetPlayer.name + " recibe ADMIN temporal (otorgado por " + gameState.currentPlayer.name + ")", null, 0xFF0000, "bold", 2);
+                room.sendAnnouncement("⚠️ Admin temporal: NO puedes kickear, banear ni cambiar mapas", targetPlayer.id, 0xFFFF00, "bold");
+                room.setPlayerAdmin(targetPlayer.id, true);
+                if (gameState.callbacks.onTempAdmin) gameState.callbacks.onTempAdmin(targetPlayer.id);
+                finishEffect(room);
+                break;
+
+            case 'give_lucky_normal':
+                room.sendAnnouncement("🎯 " + targetPlayer.name + " recibirá LUCKY NORMAL (elegido por " + gameState.currentPlayer.name + ")", null, 0x2A505E, "bold", 2);
+                setTimeout(function() {
+                    // Invocar lucky normal (LUCKY) si existe
+                    stop(room, true);
+                    try {
+                        room.stopGame();
+                        if (typeof LUCKY !== 'undefined' && LUCKY.start) {
+                            // usar el mapa normal si se proporcionó, si no, usar el mapa dios como fallback
+                            var stadium = mapLuckNormal || mapLuckDios || null;
+                            if (stadium) room.setCustomStadium(stadium);
+                            room.startGame();
+                            // start normal lucky for that player
+                            LUCKY.start(room, targetPlayer, gameState.onGameEnd, gameState.callbacks);
+                        } else {
+                            finishEffect(room);
+                        }
+                    } catch(e) { finishEffect(room); }
+                }, 1000);
+                break;
+
+            case 'pass_dios':
+                room.sendAnnouncement("🔀 " + gameState.currentPlayer.name + " le pasa la RULETA DIOS a " + targetPlayer.name, null, 0xCE004, "bold", 2);
+                setTimeout(function() {
+                    // Detener y recargar mapa, mover equipos: current -> espectador, target -> rojo
+                    try { room.stopGame(); } catch(e){}
+                    try { room.setCustomStadium(mapLuckDios); } catch(e){}
+                    try { room.startGame(); } catch(e){}
+
+                    // mover quien pasa a espectador
+                    if (gameState.currentPlayer) {
+                        try { room.setPlayerTeam(gameState.currentPlayer.id, 0); } catch(e){}
+                    }
+                    // poner receptor en equipo rojo (1)
+                    try { room.setPlayerTeam(targetPlayer.id, 1); } catch(e){}
+
+                    // actualizar currentPlayer
+                    gameState.currentPlayer = targetPlayer;
+
+                    // Reset timers and detection
+                    resetDetection();
+                    if (gameState.globalTimeout) { clearTimeout(gameState.globalTimeout); gameState.globalTimeout = null; }
+                    gameState.globalTimeout = setTimeout(function() {
+                        if (gameState.active) {
+                            room.sendAnnouncement("⏱️ Tiempo agotado en Lucky DIOS!", null, 0xFF6600, "bold");
+                            stop(room);
+                            if (gameState.onGameEnd) gameState.onGameEnd();
+                        }
+                    }, config.maxGameTime);
+                    if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+                    setTimeout(function() {
+                        if (gameState.active) {
+                            gameState.checkInterval = setInterval(detectLoop, config.checkIntervalMs);
+                        }
+                    }, config.detectionDelay);
+                }, 800);
+                break;
+
+            default:
+                finishEffect(room);
+        }
+    }
+
+    // Ejecutar efectos no selectivos
+    function executeEffect(room, zone) {
+        var effect = zone.effect;
+        var player = gameState.currentPlayer;
+
+        room.sendAnnouncement("🎯 Color confirmado: " + zone.name + " (" + zone.color + ")", null, 0xFFFFFF, "bold");
+
+        switch(effect) {
+            case 'receive_admin':
+                room.sendAnnouncement("👑 " + player.name + " recibe ADMIN temporal!", null, 0xFF1100, "bold", 2);
+                room.sendAnnouncement("⚠️ Admin temporal: NO puedes kickear, banear ni cambiar mapas", player.id, 0xFFFF00, "bold");
+                try { room.setPlayerAdmin(player.id, true); } catch(e){}
+                if (gameState.callbacks.onTempAdmin) gameState.callbacks.onTempAdmin(player.id);
+                finishEffect(room);
+                break;
+
+            case 'choose_ban_1min':
+                room.sendAnnouncement("⚔️ " + player.name + " cayó en MAGENTA: debe ESCOGER a quien BANEAR", null, 0xEC08EC, "bold", 2);
+                startSelection(room, 'choose_ban_1min');
+                break;
+
+            case 'give_lucky_normal':
+                room.sendAnnouncement("⭐ " + player.name + " cayó en GRIS: debe elegir quién recibe LUCKY NORMAL", null, 0x2A505E, "bold", 2);
+                startSelection(room, 'give_lucky_normal');
+                break;
+
+            case 'choose_admin':
+                room.sendAnnouncement("👑 " + player.name + " cayó en AZUL: debe ESCOGER a quien dar ADMIN", null, 0x1B4BED, "bold", 2);
+                startSelection(room, 'choose_admin');
+                break;
+
+            case 'protection':
+                room.sendAnnouncement("🛡️ " + player.name + " ¡SALVADO POR EL CONDÓN! 🛡️", null, 0xED7006, "bold", 2);
+                finishEffect(room);
+                break;
+
+            case 'kick_10_times':
+                room.sendAnnouncement("🔨 " + player.name + " ha caído en MARRÓN: recibirá hasta 10 KICKS", null, 0x67290A, "bold", 2);
+                // start kicking attempts
+                var remaining = 10;
+                gameState.kickCounters[player.id] = remaining;
+                (function doKicks(pid) {
+                    if (!gameState.active) return;
+                    var p = room.getPlayer(pid);
+                    if (!p) {
+                        // jugador no está en sala; detener
+                        return;
+                    }
+                    var rem = gameState.kickCounters[pid] || 0;
+                    if (rem <= 0) {
+                        room.sendAnnouncement("✅ " + p.name + " ya recibió todos los kicks.", null, 0xFF6600, "bold");
+                        delete gameState.kickCounters[pid];
+                        finishEffect(room);
+                        return;
+                    }
+                    room.sendAnnouncement("⚠️ Kick a " + p.name + " (" + rem + " restantes)", null, 0x67290A, "bold");
+                    try { room.kickPlayer(pid, "Kick por caer en MARRÓN (" + rem + " restantes)", false); } catch(e) {}
+                    gameState.kickCounters[pid] = rem - 1;
+
+                    // esperar 1.2s y verificar si sigue en sala; si volvió o sigue, intentar de nuevo
+                    setTimeout(function() {
+                        var exists = room.getPlayer(pid);
+                        if (!exists) {
+                            // si no está, intentar de nuevo al reconectar no es trivial; terminamos por ahora
+                            // notificamos cuantos quedaron
+                            // guardamos contador para posteriores lógicas si quisieras implementarlo
+                            room.sendAnnouncement("ℹ️ " + p.name + " fue kickeado. Quedan " + (gameState.kickCounters[pid] || 0) + " kicks pendientes si vuelve.", null, 0xFF6600);
+                            finishEffect(room);
+                            return;
+                        }
+                        // si aún está, continuar
+                        doKicks(pid);
+                    }, 1200);
+                })(player.id);
+                break;
+
+            case 'pass_dios':
+                room.sendAnnouncement("🔀 " + player.name + " puede PASAR la RULETA DIOS", null, 0xCE004, "bold", 2);
+                startSelection(room, 'pass_dios');
+                break;
+
+            default:
+                finishEffect(room);
+        }
+    }
+
+    function finishEffect(room) {
+        // Esperar un poco y continuar (no detener la ruleta DIOS automáticamente si la intención es seguir)
+        setTimeout(function() {
+            if (!gameState.active) return;
+            room.sendAnnouncement("⏸️ Lucky DIOS finalizado\n⏱️ Próximo minijuego en 3 segundos...", null, 0xFFFF00, "bold");
+            setTimeout(function() {
+                stop(room);
+            }, 3000);
+        }, 1500);
+    }
+
+    function start(room, player, onGameEnd, callbacks) {
+        gameState.active = true;
+        gameState.room = room;
+        gameState.currentPlayer = player;
+        gameState.onGameEnd = onGameEnd;
+        gameState.callbacks = callbacks || {};
+
+        // limpiar posibles intervalos previos
+        if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+        if (gameState.globalTimeout) { clearTimeout(gameState.globalTimeout); gameState.globalTimeout = null; }
+
+        room.sendAnnouncement("✨ Iniciando LUCKY DIOS para " + player.name, null, 0xAC6FF3, "bold");
+        // Asegurar que el jugador que tira quede en equipo ROJO (1)
+        try { room.setPlayerTeam(player.id, 1); } catch(e) {}
+        // Timeout global
+        gameState.globalTimeout = setTimeout(function() {
+            if (!gameState.active) return;
+            room.sendAnnouncement("⏱️ Tiempo agotado en Lucky DIOS!", null, 0xFF6600, "bold");
+            stop(room);
+            if (gameState.onGameEnd) gameState.onGameEnd();
+        }, config.maxGameTime);
+
+        // iniciar detección después de delay
+        setTimeout(function() {
+            if (!gameState.active) return;
+            // asegurar único interval
+            if (gameState.checkInterval) clearInterval(gameState.checkInterval);
+            gameState.checkInterval = setInterval(detectLoop, config.checkIntervalMs);
+        }, config.detectionDelay);
+    }
+
+    function stop(room, suppressCallback) {
+        gameState.active = false;
+
+        if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+        if (gameState.globalTimeout) { clearTimeout(gameState.globalTimeout); gameState.globalTimeout = null; }
+
+        // limpiar selección si activa
+        cancelSelection();
+
+        try { room.stopGame(); } catch(e){}
+
+        if (!suppressCallback && gameState.onGameEnd) {
+            var cb = gameState.onGameEnd;
+            gameState.onGameEnd = null;
+            try { cb(); } catch(e) { console.error('[LUCKY_DIOS] onGameEnd callback error', e); }
+        }
+        // reset state
+        gameState.room = null;
+        gameState.currentPlayer = null;
+    }
+
+    function isActive() { return gameState.active; }
+
+    // Manejo de chat para selecciones: solo permitir que currentPlayer escriba durante selección
+    function onPlayerChat(player, message) {
+        if (!gameState.active) return true;
+        if (gameState.selection.active) {
+            if (gameState.selection.explanation) return false; // bloquear todo
+            if (gameState.currentPlayer && player.id === gameState.currentPlayer.id) {
+                handleSelectionInput(gameState.room, message);
+            } else {
+                if (gameState.room) gameState.room.sendAnnouncement("⛔ Solo el jugador con la ruleta puede elegir el número", player.id, 0xFF6600);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    function setMap(map) { mapLuckDios = map; }
 
     function setMaps(diosMap, normalMap) {
         mapLuckDios = diosMap;
         mapLuckNormal = normalMap;
     }
 
-    function detectColor(ballPosition) {
-        const { x, y } = ballPosition;
-        
-        // Buscar la zona de color según el tipo de detección
-        for (const zone of colorZones) {
-            if (zone.detectionType === 'platform') {
-                // Plataformas: verificar rango completo (minY y maxY)
-                if (x >= zone.minX && x <= zone.maxX && 
-                    y >= zone.minY && y <= zone.maxY) {
-                    return zone;
-                }
-            } else if (zone.detectionType === 'curve') {
-                // Curva: solo verificar que esté por encima de minY (como antes)
-                if (x >= zone.minX && x <= zone.maxX && y >= zone.minY) {
-                    return zone;
-                }
-            }
-        }
-        
-        return null;
-    }
-
-    function executeEffect(zone, room) {
-        if (!gameState.winner) return;
-
-        const effect = zone.effect;
-
-        switch(effect) {
-            case 'receive_admin':
-                room.setPlayerAdmin(gameState.winner.id, true);
-                room.sendAnnouncement(`🔴 ${gameState.winner.name} obtuvo ADMIN!`, null, 0xFF1100, 'bold', 2);
-                
-                if (gameState.callbacks && gameState.callbacks.onTempAdmin) {
-                    gameState.callbacks.onTempAdmin(gameState.winner.id);
-                }
-                
-                setTimeout(() => {
-                    stop(room);
-                }, 2000);
-                break;
-
-            case 'protection':
-                room.sendAnnouncement(`🛡️ ${gameState.winner.name} ¡SALVADO POR EL CONDÓN! 🛡️`, null, 0xED7006, 'bold', 2);
-                setTimeout(() => {
-                    stop(room);
-                }, 2000);
-                break;
-
-            case 'pass_dios':
-                startSelection(zone, room, 'Pasarás Lucky DIOS a otra persona. Escribe el número del jugador:');
-                break;
-
-            case 'give_lucky_normal':
-                startSelection(zone, room, 'Darás Lucky NORMAL a otra persona. Escribe el número del jugador:');
-                break;
-
-            case 'kick_10_times':
-                const playerId = gameState.winner.id;
-                if (!gameState.kickCounters[playerId]) {
-                    gameState.kickCounters[playerId] = 10;
-                }
-                
-                const kicksRemaining = gameState.kickCounters[playerId];
-                room.sendAnnouncement(`🟤 ${gameState.winner.name} será kickeado! Le quedan ${kicksRemaining} kicks.`, null, 0x67290A, 'bold', 2);
-                
-                setTimeout(() => {
-                    room.kickPlayer(playerId, 'Kick automático por Lucky DIOS', false);
-                    gameState.kickCounters[playerId]--;
-                    
-                    if (gameState.kickCounters[playerId] <= 0) {
-                        delete gameState.kickCounters[playerId];
-                        room.sendAnnouncement(`${gameState.winner.name} completó sus 10 kicks.`, null, 0x67290A, 'normal', 1);
-                    }
-                }, 1000);
-                
-                stop(room);
-                break;
-
-            case 'choose_ban_1min':
-                startSelection(zone, room, 'Escoge a quién BANEAR por 1 minuto. Escribe el número del jugador:');
-                break;
-
-            case 'choose_admin':
-                startSelection(zone, room, 'Escoge a quién dar ADMIN. Escribe el número del jugador:');
-                break;
-
-            default:
-                room.sendAnnouncement(`Efecto desconocido: ${effect}`, null, 0xFFFFFF, 'normal', 1);
-                setTimeout(() => stop(room), 2000);
-        }
-    }
-
-    function startSelection(zone, room, message) {
-        if (gameState.selectionActive) return;
-
-        gameState.selectionActive = true;
-        gameState.selectionEffect = zone.effect;
-        gameState.explanationPhase = true;
-
-        // Obtener jugadores (excluir bot y ganador)
-        const players = room.getPlayerList().filter(p => p.id !== 0 && p.id !== gameState.winner.id);
-        
-        if (players.length === 0) {
-            room.sendAnnouncement("⚠️ No hay otros jugadores disponibles", null, 0xFF6600, "bold");
-            setTimeout(() => stop(room), 2000);
-            return;
-        }
-
-        gameState.playerList = players;
-
-        // Pausar juego
-        room.pauseGame(true);
-
-        // Mover ganador a espectadores
-        room.setPlayerTeam(gameState.winner.id, 0);
-
-        // Construir mensaje con lista
-        let playerListMsg = "\n📋 JUGADORES DISPONIBLES:\n";
-        const playerNames = [];
-        players.forEach((p, i) => {
-            playerNames.push((i + 1) + "." + p.name);
-        });
-        playerListMsg += playerNames.join("  |  ");
-        playerListMsg += "\n\n📖 " + message;
-        playerListMsg += "\n⏳ Espera 5 segundos...";
-
-        room.sendAnnouncement(playerListMsg, null, 0xFFFF00, "bold", 2);
-
-        // Fase de explicación (5 segundos)
-        setTimeout(() => {
-            gameState.explanationPhase = false;
-            room.pauseGame(false);
-            
-            room.sendAnnouncement(
-                "✍️ " + gameState.winner.name + ", ESCRIBE EL NÚMERO (1-" + players.length + ")",
-                null,
-                0xFFFF00,
-                "bold",
-                2
-            );
-
-            // Recordatorio a los 5 segundos
-            gameState.selectionReminderTimeout = setTimeout(() => {
-                if (gameState.selectionActive) {
-                    room.sendAnnouncement(
-                        "⏰ ¡5 SEGUNDOS RESTANTES! Escribe el NÚMERO",
-                        gameState.winner.id,
-                        0xFFFF00,
-                        "bold"
-                    );
-                }
-            }, 5000);
-
-            // Timeout de 10 segundos
-            gameState.selectionTimeout = setTimeout(() => {
-                if (gameState.selectionActive) {
-                    room.sendAnnouncement("⏱️ Tiempo agotado! No escogiste a nadie.", null, 0xFF0000, "bold", 2);
-                    gameState.selectionActive = false;
-                    gameState.explanationPhase = false;
-                    gameState.selectionEffect = null;
-                    gameState.playerList = [];
-                    stop(room);
-                }
-            }, 10000);
-        }, 5000);
-    }
-
-    function handleSelectionInput(player, message, room) {
-        if (!gameState.selectionActive || player.id !== gameState.winner.id) {
-            return false;
-        }
-
-        // Durante fase de explicación, bloquear
-        if (gameState.explanationPhase) {
-            return true;
-        }
-
-        // Parsear número
-        const num = parseInt(message.trim());
-        if (isNaN(num) || num < 1 || num > gameState.playerList.length) {
-            room.sendAnnouncement(`Número inválido. Escribe entre 1 y ${gameState.playerList.length}.`, player.id, 0xFF0000, 'normal', 1);
-            return true;
-        }
-
-        const selectedPlayer = gameState.playerList[num - 1];
-        
-        // Cancelar timeout
-        if (gameState.selectionTimeout) {
-            clearTimeout(gameState.selectionTimeout);
-            gameState.selectionTimeout = null;
-        }
-
-        // Ejecutar efecto de selección
-        executeSelectionEffect(selectedPlayer, room);
-        
-        return true;
-    }
-
-    function executeSelectionEffect(selectedPlayer, room) {
-        gameState.selectionActive = false;
-        gameState.explanationPhase = false;
-        room.pauseGame(false);
-
-        switch(gameState.selectionEffect) {
-            case 'pass_dios':
-                room.sendAnnouncement(`🔄 ${gameState.winner.name} pasa Lucky DIOS a ${selectedPlayer.name}!`, null, 0x0CE004, 'bold', 2);
-                
-                setTimeout(() => {
-                    // Mover ganador actual a espectadores
-                    room.setPlayerTeam(gameState.winner.id, 0);
-                    
-                    // Guardar callbacks antes de stop
-                    const savedCallbacks = gameState.callbacks;
-                    
-                    // Detener Lucky DIOS actual
-                    stop(room);
-                    
-                    // Reiniciar mapa
-                    room.stopGame();
-                    room.setCustomStadium(mapLuckDios);
-                    room.startGame();
-                    
-                    setTimeout(() => {
-                        // Mover nuevo jugador al rojo
-                        room.setPlayerTeam(selectedPlayer.id, 1);
-                        
-                        // Iniciar Lucky DIOS con nuevo jugador
-                        setTimeout(() => {
-                            start(room, selectedPlayer, savedCallbacks);
-                        }, 500);
-                    }, 1000);
-                }, 2000);
-                return; // No llamar a finishEffect
-                break;
-
-            case 'give_lucky_normal':
-                room.sendAnnouncement(`${gameState.winner.name} dio Lucky NORMAL a ${selectedPlayer.name}!`, null, 0x2A505E, 'bold', 2);
-                
-                // Detener Lucky DIOS
-                stop(room);
-                
-                // Cargar Lucky Normal (Map 2)
-                setTimeout(() => {
-                    if (mapLuckNormal) {
-                        room.stopGame();
-                        room.setDefaultStadium(mapLuckNormal);
-                        room.startGame();
-                        
-                        setTimeout(() => {
-                            room.setPlayerTeam(selectedPlayer.id, 1);
-                            
-                            // Iniciar Lucky normal (el módulo LUCKY)
-                            if (typeof LUCKY !== 'undefined' && LUCKY.start) {
-                                LUCKY.start(room, selectedPlayer, gameState.callbacks);
-                            }
-                        }, 100);
-                    }
-                }, 2000);
-                break;
-
-            case 'choose_ban_1min':
-                room.sendAnnouncement(`${gameState.winner.name} escogió BANEAR a ${selectedPlayer.name} por 1 minuto!`, null, 0xEC08EC, 'bold', 2);
-                
-                setTimeout(() => {
-                    if (gameState.callbacks && gameState.callbacks.onBanTemp) {
-                        gameState.callbacks.onBanTemp(selectedPlayer.id, 60);
-                    }
-                    
-                    // Detener y continuar al siguiente minijuego
-                    stop(room);
-                }, 1000);
-                break;
-
-            case 'choose_admin':
-                room.sendAnnouncement(`${gameState.winner.name} escogió dar ADMIN a ${selectedPlayer.name}!`, null, 0x1B4BED, 'bold', 2);
-                
-                setTimeout(() => {
-                    room.setPlayerAdmin(selectedPlayer.id, true);
-                    
-                    if (gameState.callbacks && gameState.callbacks.onTempAdmin) {
-                        gameState.callbacks.onTempAdmin(selectedPlayer.id);
-                    }
-                    
-                    // Detener y continuar al siguiente minijuego
-                    stop(room);
-                }, 1000);
-                break;
-        }
-
-        gameState.selectionEffect = null;
-        gameState.playerList = [];
-    }
-
-    function start(room, winner, callbacks) {
-        if (gameState.active) return;
-
-        gameState.active = true;
-        gameState.winner = winner;
-        gameState.room = room;
-        gameState.callbacks = callbacks;
-        gameState.detectionBuffer = [];
-        gameState.confirmationStartTime = null;
-        gameState.currentZone = null;
-        gameState.effectExecuted = false;
-
-        room.sendAnnouncement(`🌟 LUCKY DIOS activado para ${winner.name}! 🌟`, null, 0xFFD700, 'bold', 2);
-
-        // Timeout global: 60 segundos máximo
-        gameState.globalTimeout = setTimeout(() => {
-            if (gameState.active) {
-                room.sendAnnouncement(
-                    `⏱️ Tiempo agotado en Lucky DIOS! (60 segundos)`,
-                    null,
-                    0xFF6600,
-                    'bold',
-                    2
-                );
-                stop(room);
-            }
-        }, config.maxGameTime);
-
-        gameState.checkInterval = setInterval(() => {
-            const ball = room.getDiscProperties(0);
-            if (!ball) return;
-
-            // Si ya se ejecutó un efecto, no continuar detectando
-            if (gameState.effectExecuted) {
-                clearInterval(gameState.checkInterval);
-                gameState.checkInterval = null;
-                return;
-            }
-
-            const detectedZone = detectColor(ball);
-
-            if (detectedZone) {
-                // Sistema de confirmación por tiempo (3 segundos)
-                if (!gameState.currentZone || gameState.currentZone.name !== detectedZone.name) {
-                    // Nueva zona detectada - iniciar contador
-                    gameState.currentZone = detectedZone;
-                    gameState.confirmationStartTime = Date.now();
-                } else {
-                    // Misma zona - verificar si ya pasaron 3 segundos
-                    const timeInZone = Date.now() - gameState.confirmationStartTime;
-                    if (timeInZone >= detectedZone.confirmationTime && !gameState.effectExecuted) {
-                        gameState.effectExecuted = true;
-                        clearInterval(gameState.checkInterval);
-                        gameState.checkInterval = null;
-                        executeEffect(detectedZone, room);
-                    }
-                }
-            } else {
-                // Fuera de zona - resetear
-                gameState.currentZone = null;
-                gameState.confirmationStartTime = null;
-            }
-        }, config.detectionInterval);
-    }
-
-    function stop(room) {
-        var endCb = gameState.callbacks && gameState.callbacks.onGameEnd ? gameState.callbacks.onGameEnd : null;
-
-        if (gameState.checkInterval) {
-            clearInterval(gameState.checkInterval);
-            gameState.checkInterval = null;
-        }
-
-        if (gameState.globalTimeout) {
-            clearTimeout(gameState.globalTimeout);
-            gameState.globalTimeout = null;
-        }
-
-        if (gameState.selectionTimeout) {
-            clearTimeout(gameState.selectionTimeout);
-            gameState.selectionTimeout = null;
-        }
-
-        if (gameState.selectionReminderTimeout) {
-            clearTimeout(gameState.selectionReminderTimeout);
-            gameState.selectionReminderTimeout = null;
-        }
-
-        if (gameState.selectionActive) {
-            room.pauseGame(false);
-        }
-
-        gameState.active = false;
-        gameState.winner = null;
-        gameState.detectionBuffer = [];
-        gameState.confirmationStartTime = null;
-        gameState.currentZone = null;
-        gameState.selectionActive = false;
-        gameState.explanationPhase = false;
-        gameState.selectionEffect = null;
-        gameState.playerList = [];
-        gameState.effectExecuted = false;
-        gameState.room = null;
-        // Guardar y limpiar callbacks antes de llamar
-        gameState.callbacks = null;
-
-        // Llamar callback de fin si existe (continuar con siguiente minijuego)
-        if (endCb && typeof endCb === 'function') {
-            try { endCb(); } catch(e) { console.error('[LUCKY_DIOS] error calling onGameEnd callback', e); }
-        }
-    }
-
-    function isActive() {
-        return gameState.active;
-    }
-
-    function onPlayerChat(player, message) {
-        // Bloquear chat durante la explicación de la selección
-        if (gameState.explanationPhase) return false;
-
-        // Si hay una selección activa, dejar que el ganador escriba el número
-        if (gameState.selectionActive) {
-            var handled = handleSelectionInput(player, message, gameState.room);
-            if (handled) return false; // Si lo manejamos, bloquear el chat público
-        }
-
-        return true;
-    }
-
-    // API pública
     return {
         start: start,
         stop: stop,
         isActive: isActive,
         onPlayerChat: onPlayerChat,
-        setMaps: setMaps
+        setMap: setMap,
+        setMaps: setMaps,
+        config: config,
+        zones: colorZones
     };
 })();
