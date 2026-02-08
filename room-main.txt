@@ -7,9 +7,12 @@ var roomConfig = {
 };
 
 var room = HBInit(roomConfig);
+room.setTeamsLock(true);
 
 console.log("✅ Bot iniciado");
 console.log("🔗 Link: " + room.link);
+// Asegurar que la sala no tenga límite de tiempo ni de goles
+try { if (typeof room !== 'undefined') { if (room.setTimeLimit) room.setTimeLimit(0); if (room.setScoreLimit) room.setScoreLimit(0); } } catch(e) {}
 
 // ============================================
 // SISTEMA DE OWNER (DUEÑO)
@@ -28,7 +31,8 @@ var botState = {
     lastKickBy: {}, // timestamps of last kick action by admin id
     teamLock: false, // si true, se evita que jugadores cambien equipo via UI
     discordCooldowns: {}, // Timestamps de último uso del comando !discord por jugador
-    lastMinigame: null  // Último minijuego jugado para evitar repeticiones
+    lastMinigame: null, // Último minijuego jugado para evitar repeticiones
+    pendingAnnouncement: false // Si true, hay un anuncio pendiente por haber sido omitido
 };
 
 // Invite de Discord (usado por comando !discord)
@@ -44,6 +48,8 @@ var mapSuperman = ##MAP_SUPERMAN##;
 var mapUltraball = ##MAP_ULTRABALL##;
 var mapSurvivalSquare = ##MAP_SURVIVAL_SQUARE##;
 var mapNumberChairs = ##MAP_NUMBERCHAIRS##;
+var mapCollision = ##MAP_COLLISION##;
+var mapSpaceMelee = ##MAP_SPACE_MELEE##;
 
 // Parsear mapas
 mapLuck = JSON.parse(mapLuck);
@@ -59,6 +65,10 @@ mapUltraball = JSON.parse(mapUltraball);
 mapSurvivalSquare = JSON.parse(mapSurvivalSquare);
 // Parsear NumberChairs
 mapNumberChairs = JSON.parse(mapNumberChairs);
+// Parsear mapa Collision Team Racing
+mapCollision = JSON.parse(mapCollision);
+// Parsear mapa Space Melee
+mapSpaceMelee = JSON.parse(mapSpaceMelee);
 
 // Configurar mapas en LUCKY, LUCKY_HELL y LUCKY_DIOS
 LUCKY.setMaps(mapLuck, mapLuckDios, mapLuckHell);
@@ -84,6 +94,14 @@ if (typeof SURVIVAL_SQ !== 'undefined' && SURVIVAL_SQ.setMapData) {
 if (typeof NUMBERCHAIRS !== 'undefined' && NUMBERCHAIRS.setMapData) {
     NUMBERCHAIRS.setMapData(mapNumberChairs);
 }
+// Inyectar mapa en COLLISION_TEAM_RACING (si existe)
+if (typeof COLLISION_TEAM_RACING !== 'undefined' && COLLISION_TEAM_RACING.setMapData) {
+    COLLISION_TEAM_RACING.setMapData(mapCollision);
+}
+// Inyectar mapa en SPACE_MELEE (si existe)
+if (typeof SPACE_MELEE !== 'undefined' && SPACE_MELEE.setMapData) {
+    SPACE_MELEE.setMapData(mapSpaceMelee);
+}
 
 // ============================================
 // SISTEMA DE ANUNCIOS AUTOMÁTICOS
@@ -91,8 +109,10 @@ if (typeof NUMBERCHAIRS !== 'undefined' && NUMBERCHAIRS.setMapData) {
 function startAutoAnnouncements() {
     setInterval(function() {
         // No enviar anuncios si hay un juego activo (minijuego en curso)
-        if (botState.gameActive) {
-            return; // No enviar anuncios durante juegos activos
+        if (botState.gameActive || botState.chatBlocked) {
+            // Marcar anuncio pendiente para enviarlo cuando termine la explicación/minijuego
+            botState.pendingAnnouncement = true;
+            return; // No enviar anuncios durante juegos activos o cuando el chat está bloqueado
         }
         
         botState.chatBlocked = true;
@@ -114,6 +134,30 @@ function startAutoAnnouncements() {
     }, 120000); // Cada 2 minutos
 }
 
+// Vigilar anuncios pendientes y enviarlos cuando sea seguro
+function startPendingAnnouncementWatcher() {
+    setInterval(function() {
+        if (botState.pendingAnnouncement && !botState.gameActive && !botState.chatBlocked) {
+            botState.pendingAnnouncement = false;
+            botState.chatBlocked = true;
+            room.sendAnnouncement(
+                "━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                "💬 ÚNETE A NUESTRO DISCORD\n" +
+                "🔗 https://discord.gg/ACpTeXu7Pj\n" +
+                "━━━━━━━━━━━━━━━━━━━━━━━━",
+                null,
+                0x5865F2,
+                "bold",
+                2
+            );
+            setTimeout(function() { botState.chatBlocked = false; }, 2000);
+        }
+    }, 2000);
+}
+
+// Iniciar watcher de pendientes
+startPendingAnnouncementWatcher();
+
 // Iniciar anuncios automáticos
 startAutoAnnouncements();
 
@@ -122,8 +166,14 @@ startAutoAnnouncements();
 // ============================================
 
 // Bloquear cambios de equipo (uso: lockTeamChanges(); unlockTeamChanges();)
-function lockTeamChanges() { botState.teamLock = true; }
-function unlockTeamChanges() { botState.teamLock = false; }
+function lockTeamChanges() {
+    botState.teamLock = true;
+    try { if (typeof room !== 'undefined' && room.setTeamsLock) room.setTeamsLock(true); } catch(e){}
+}
+function unlockTeamChanges() {
+    botState.teamLock = false;
+    try { if (typeof room !== 'undefined' && room.setTeamsLock) room.setTeamsLock(false); } catch(e){}
+}
 
 // Manejar kicks/bans realizados desde la UI (click en jugador)
 // Firma: onPlayerKicked(kickedPlayer, reason, ban, byPlayer)
@@ -232,6 +282,41 @@ function startGALACTIC() {
             setTimeout(checkAndStart, 5000);
         }
     });
+}
+
+function startSPACE_MELEE() {
+    botState.gameActive = true;
+    if (typeof SPACE_MELEE !== 'undefined') {
+        SPACE_MELEE.start(room, function(winner) {
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
+
+function startCOLLISION() {
+    botState.gameActive = true;
+    if (typeof COLLISION_TEAM_RACING !== 'undefined') {
+        COLLISION_TEAM_RACING.start(room, function(winner) {
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        // Módulo no disponible
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
 }
 
 function startGYM() {
@@ -453,20 +538,10 @@ function checkAndStart() {
         botState.startTimeout = setTimeout(checkAndStart, 10000);
     } else {
         // SISTEMA DE MINIJUEGOS ALEATORIOS (evitar repetir el último)
+        // Durante pruebas, solo habilitamos COLLISION_TEAM_RACING
+        // MODO PRUEBAS: Solo habilitado SPACE_MELEE. Los demás minijuegos están desactivados/commented para pruebas.
         var minigames = [
-            { name: 'LALALA', module: LALALA, displayName: 'LALALA - Juego de ruleta', starter: startLALALA },
-            { name: 'SURVIVAL', module: SURVIVAL, displayName: 'SURVIVAL - Último en pie', starter: startSURVIVAL },
-            { name: 'METEORS', module: METEORS, displayName: 'METEORS - Evita los meteoros', starter: startMETEORS },
-            { name: 'JUMPING', module: JUMPING, displayName: 'JUMPING - Salta plataformas', starter: startJUMPING },
-            { name: 'WEBSURVIVAL', module: WEBSURVIVAL, displayName: 'WEB SURVIVAL - Supervivencia web', starter: startWEBSURVIVAL },
-            { name: 'GALACTIC', module: GALACTIC, displayName: 'GALACTIC - Gym/parkour', starter: startGALACTIC },
-            { name: 'GYM', module: GYM, displayName: 'GYM - Gimnasio', starter: startGYM },
-            { name: 'MULTIBALLS', module: MULTIBALLS, displayName: 'MULTIBALLS - Multibalas', starter: startMULTIBALLS },
-            { name: 'DODGEBALL', module: DODGEBALL, displayName: 'DODGEBALL - ESQUIVA LA BOLA NEGRA', starter: startDODGEBALL },
-            { name: 'SUPERMAN', module: SUPERMAN, displayName: 'SUPERMAN CHAIR - Párate en la cabeza de Superman', starter: startSUPERMAN },
-            { name: 'ULTRABALL', module: ULTRABALL, displayName: 'ULTRABALL - Partido de goles', starter: startULTRABALL },
-            { name: 'SURVIVAL_SQ', module: SURVIVAL_SQ, displayName: 'SURVIVAL SQUARE - Último en el cuadro', starter: startSURVIVAL_SQ },
-            { name: 'NUMBERCHAIRS', module: NUMBERCHAIRS, displayName: 'NUMBERCHAIRS - Silla número 1', starter: startNUMBERCHAIRS }
+            { name: 'SPACE_MELEE', module: SPACE_MELEE, displayName: 'SPACE MELEE', starter: startSPACE_MELEE }
         ];
 
         // Filtrar el último minijuego jugado
@@ -608,6 +683,9 @@ room.onPlayerLeave = function(player) {
     if (GALACTIC.isActive()) {
         GALACTIC.onPlayerLeave(room, player);
     }
+    if (SPACE_MELEE && SPACE_MELEE.isActive && SPACE_MELEE.isActive()) {
+        try { SPACE_MELEE.onPlayerLeave(room, player); } catch(e){}
+    }
     if (GYM.isActive()) {
         GYM.onPlayerLeave(room, player);
     }
@@ -660,6 +738,9 @@ room.onPlayerLeave = function(player) {
         }
         if (GALACTIC.isActive()) {
             GALACTIC.stop(room);
+        }
+        if (SPACE_MELEE && SPACE_MELEE.isActive && SPACE_MELEE.isActive()) {
+            SPACE_MELEE.stop(room);
         }
         if (GYM.isActive()) {
             GYM.stop(room);

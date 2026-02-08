@@ -181,6 +181,14 @@ function checkPlayers(room, onGameEnd) {
                 reason = "fue tocado por una bola negra (esquina superior-izquierda)";
                 console.log("⚫ " + p.name + " tocado - esquina superior-izquierda - X: " + pos.x.toFixed(0) + " Y: " + pos.y.toFixed(0));
             }
+
+            // Detectar si llegó a la esquina superior-derecha (fuera por la "L" derecha)
+            // x > 420 y y < -200
+            if (!eliminated && pos.x > config.respawnRightX && pos.y < config.respawnTopY) {
+                eliminated = true;
+                reason = "fue tocado por una bola negra (esquina superior-derecha)";
+                console.log("⚫ " + p.name + " tocado - esquina superior-derecha - X: " + pos.x.toFixed(0) + " Y: " + pos.y.toFixed(0));
+            }
         
         if (eliminated && gameState.eliminated.indexOf(p.id) === -1) {
             gameState.eliminated.push(p.id);

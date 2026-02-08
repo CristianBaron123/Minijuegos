@@ -124,9 +124,15 @@ function checkPlayers(room) {
         var pos = playerObj.position;
         if (!pos) return;
 
-        // Fuera del cuadro = eliminado
+        // Fuera del cuadro = eliminado (solo afecta a ROJOS)
         if (pos.x < config.arena.minX || pos.x > config.arena.maxX || pos.y < config.arena.minY || pos.y > config.arena.maxY) {
-            eliminatePlayer(room, p, 'salió del cuadro');
+            if (p.team === 1) {
+                eliminatePlayer(room, p, 'salió del cuadro');
+            } else {
+                // Ignorar azules fuera del cuadro (no afectan al conteo de rojos)
+                // Opcional: mover azul a espectador silenciosamente si deseas
+                try { room.setPlayerTeam(p.id, 2); } catch(e){}
+            }
             return;
         }
 
@@ -159,6 +165,13 @@ function checkPlayers(room) {
 
 function eliminatePlayer(room, player, reason) {
     if (!player || !player.alive) return;
+    // Solo procesamos eliminaciones visibles para ROJOS
+    if (player.team !== 1) {
+        // Marcar como no activo pero no contar ni anunciar
+        player.alive = false;
+        try { room.setPlayerTeam(player.id, 0); } catch(e){}
+        return;
+    }
     player.alive = false;
     try { room.setPlayerTeam(player.id, 0); } catch(e){}
 

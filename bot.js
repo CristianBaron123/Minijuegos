@@ -50,6 +50,13 @@ const mapDodgeballData = fs.readFileSync(mapDodgeballPath, 'utf8');
 const mapNumberChairsPath = path.join(__dirname, 'Mapas', 'NumberChairs v2 by Şerefli Şeref [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
 const mapNumberChairsData = fs.readFileSync(mapNumberChairsPath, 'utf8');
 
+const mapCollisionPath = path.join(__dirname, 'Mapas', 'Collision team racing 9 by MC  from HaxMaps.hbs');
+const mapCollisionData = fs.readFileSync(mapCollisionPath, 'utf8');
+
+// Map: Space Melee
+const mapSpaceMeleePath = path.join(__dirname, 'Mapas', 'Space Melee by Namajunas [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
+const mapSpaceMeleeData = fs.readFileSync(mapSpaceMeleePath, 'utf8');
+
 // Cargar mapas de luckys
 const mapLuckPath = path.join(__dirname, 'Lucks', 'Lucky-Map-2-by-Meeelany-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_667a7e7e87381.hbs');
 const mapLuckData = fs.readFileSync(mapLuckPath, 'utf8');
@@ -104,6 +111,10 @@ const ultraballModulePath = path.join(__dirname, 'games', 'minijuegos', 'ultraba
 const ultraballModuleCode = fs.readFileSync(ultraballModulePath, 'utf8');
 const survSquareModulePath = path.join(__dirname, 'games', 'minijuegos', 'survivalsquare.js');
 const survSquareModuleCode = fs.readFileSync(survSquareModulePath, 'utf8');
+const collisionModulePath = path.join(__dirname, 'games', 'minijuegos', 'collision_team_racing.js');
+const collisionModuleCode = fs.readFileSync(collisionModulePath, 'utf8');
+const spaceMeleeModulePath = path.join(__dirname, 'games', 'minijuegos', 'space_melee.js');
+const spaceMeleeModuleCode = fs.readFileSync(spaceMeleeModulePath, 'utf8');
 
 // Cargar código principal de la sala
 const roomMainCodePath = path.join(__dirname, 'room-main.txt');
@@ -137,13 +148,15 @@ const getBotScript = () => {
     const jumpingModule = transformModuleForBrowser(jumpingModuleCode, mapJumpingData);
     const websurvivalModule = transformModuleForBrowser(websurvivalModuleCode, mapWebSurvivalData);
     const galacticModule = transformModuleForBrowser(galacticModuleCode, mapGalacticData);
+    const spaceMeleeModule = transformModuleForBrowser(spaceMeleeModuleCode, mapSpaceMeleeData);
     const gymModule = transformModuleForBrowser(gymModuleCode, mapGymData);
     const multiballsModule = transformModuleForBrowser(multiballsModuleCode, mapMultiBallsData);
     const supermanModule = transformModuleForBrowser(supermanModuleCode, mapSupermanData);
     const dodgeballModule = transformModuleForBrowser(dodgeballModuleCode, mapDodgeballData);
-        const numberChairsModule = transformModuleForBrowser(numberChairsModuleCode, mapNumberChairsData);
-        const ultraballModule = transformModuleForBrowser(ultraballModuleCode, mapUltraBallData);
-            const survSquareModule = transformModuleForBrowser(survSquareModuleCode, mapSurvivalSquareData);
+    const collisionModule = transformModuleForBrowser(collisionModuleCode, mapCollisionData);
+    const numberChairsModule = transformModuleForBrowser(numberChairsModuleCode, mapNumberChairsData);
+    const ultraballModule = transformModuleForBrowser(ultraballModuleCode, mapUltraBallData);
+    const survSquareModule = transformModuleForBrowser(survSquareModuleCode, mapSurvivalSquareData);
     
     // Escapar el código de los módulos Lucky
     const escapedLuckyCode = luckyModuleCode;
@@ -161,7 +174,9 @@ const getBotScript = () => {
         .replace(/##MAP_SUPERMAN##/g, JSON.stringify(JSON.stringify(mapSupermanData)))
         .replace(/##MAP_ULTRABALL##/g, JSON.stringify(JSON.stringify(mapUltraBallData)))
         .replace(/##MAP_NUMBERCHAIRS##/g, JSON.stringify(JSON.stringify(mapNumberChairsData)))
-        .replace(/##MAP_SURVIVAL_SQUARE##/g, JSON.stringify(JSON.stringify(mapSurvivalSquareData)));
+        .replace(/##MAP_SURVIVAL_SQUARE##/g, JSON.stringify(JSON.stringify(mapSurvivalSquareData)))
+        .replace(/##MAP_COLLISION##/g, JSON.stringify(JSON.stringify(mapCollisionData)))
+        .replace(/##MAP_SPACE_MELEE##/g, JSON.stringify(JSON.stringify(mapSpaceMeleeData)));
     
     // Construir el script completo
     return `
@@ -194,6 +209,11 @@ var WEBSURVIVAL = ` + websurvivalModule + `;
 // MÓDULO: GALACTIC FIT
 // ============================================
 var GALACTIC = ` + galacticModule + `;
+
+// ============================================
+// MÓDULO: SPACE MELEE
+// ============================================
+var SPACE_MELEE = ` + spaceMeleeModule + `;
 
 // ============================================
 // MÓDULO: GYM
@@ -229,6 +249,11 @@ var NUMBERCHAIRS = ` + numberChairsModule + `;
 // MÓDULO: SURVIVAL SQUARE
 // ============================================
 var SURVIVAL_SQ = ` + survSquareModule + `;
+
+// ============================================
+// MÓDULO: COLLISION TEAM RACING
+// ============================================
+var COLLISION_TEAM_RACING = ` + collisionModule + `;
 
 // ============================================
 // MÓDULO: LUCKY
