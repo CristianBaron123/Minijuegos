@@ -291,6 +291,8 @@ const LUCKY_DIOS = (function() {
     }
 
     function executeSelectionEffect(room, targetPlayer) {
+        // Asegurar que la selección quede cancelada antes de ejecutar el efecto
+        try { cancelSelection(); } catch(e){}
         var effect = gameState.selection.effect;
         if (!effect) {
             finishEffect(room);

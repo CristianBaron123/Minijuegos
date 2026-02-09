@@ -26,6 +26,8 @@ var botState = {
     tempAdmins: [],  // Admins temporales
     bannedPlayers: [],  // Jugadores baneados temporalmente
     spectatorNext: [],  // Jugadores que deben estar en espectador el siguiente minijuego
+        spectatorLocked: [], // Jugadores bloqueados para cambiar de equipo (no pueden jugar el siguiente minijuego)
+        spectatorLockedTimers: {}, // timers para desbloquear automáticamente
     chatBlocked: false,  // Bloqueo de chat temporal para anuncios
     banTimers: {},  // Timers de unban individuales por jugador
     lastKickBy: {}, // timestamps of last kick action by admin id
@@ -430,6 +432,7 @@ function loadLuckyMap(winner) {
         try {
             room.setCustomStadium(mapLuck);
             room.startGame();
+            room.setTeamsLock(true);
             
             room.sendAnnouncement(
                 "🍀 LUCKY MAP - MAPA DE LA SUERTE 🍀\n" +
@@ -467,6 +470,20 @@ function loadLuckyMap(winner) {
                     if (botState.spectatorNext.indexOf(playerId) === -1) {
                         botState.spectatorNext.push(playerId);
                         console.log("👻 Espectador próximo minijuego: " + playerId);
+                    }
+                    // Bloquear al jugador para que no pueda cambiar de equipo (ni ser movido)
+                    if (botState.spectatorLocked.indexOf(playerId) === -1) {
+                        botState.spectatorLocked.push(playerId);
+                        try { room.setPlayerTeam(playerId, 0); } catch(e){}
+                        try { room.sendAnnouncement('👻 Has sido seleccionado para NO jugar el siguiente minijuego', playerId, 0xFF6600, 'bold'); } catch(e){}
+                        // Programar desbloqueo automático (por si algo falla). 90s por defecto.
+                        if (botState.spectatorLockedTimers[playerId]) clearTimeout(botState.spectatorLockedTimers[playerId]);
+                        botState.spectatorLockedTimers[playerId] = setTimeout(function() {
+                            var idx = botState.spectatorLocked.indexOf(playerId);
+                            if (idx !== -1) botState.spectatorLocked.splice(idx,1);
+                            delete botState.spectatorLockedTimers[playerId];
+                            console.log('🔓 Desbloqueo automático de spectatorLocked para ' + playerId);
+                        }, 15000);
                     }
                 },
                 onBanTemp: function(playerId, duration) {
@@ -539,9 +556,23 @@ function checkAndStart() {
     } else {
         // SISTEMA DE MINIJUEGOS ALEATORIOS (evitar repetir el último)
         // Durante pruebas, solo habilitamos COLLISION_TEAM_RACING
-        // MODO PRUEBAS: Solo habilitado SPACE_MELEE. Los demás minijuegos están desactivados/commented para pruebas.
+        // Lista completa de minijuegos disponibles (se habilitan todos)
         var minigames = [
-            { name: 'SPACE_MELEE', module: SPACE_MELEE, displayName: 'SPACE MELEE', starter: startSPACE_MELEE }
+            { name: 'LALALA', module: LALALA, displayName: 'LALALA', starter: startLALALA },
+            { name: 'SURVIVAL', module: SURVIVAL, displayName: 'SURVIVAL', starter: startSURVIVAL },
+            { name: 'METEORS', module: METEORS, displayName: 'METEORS SURVIVAL', starter: startMETEORS },
+            { name: 'JUMPING', module: JUMPING, displayName: 'JUMPING ARENA', starter: startJUMPING },
+            { name: 'WEBSURVIVAL', module: WEBSURVIVAL, displayName: 'WEB SURVIVAL', starter: startWEBSURVIVAL },
+            { name: 'GALACTIC', module: GALACTIC, displayName: 'GALACTIC FIT', starter: startGALACTIC },
+            { name: 'SPACE_MELEE', module: SPACE_MELEE, displayName: 'SPACE MELEE', starter: startSPACE_MELEE },
+            { name: 'GYM', module: GYM, displayName: 'GYM', starter: startGYM },
+            { name: 'MULTIBALLS', module: MULTIBALLS, displayName: 'MULTIBALLS', starter: startMULTIBALLS },
+            { name: 'DODGEBALL', module: DODGEBALL, displayName: 'DODGEBALL', starter: startDODGEBALL },
+            { name: 'SUPERMAN', module: SUPERMAN, displayName: 'SUPERMAN', starter: startSUPERMAN },
+            { name: 'ULTRABALL', module: ULTRABALL, displayName: 'ULTRABALL', starter: startULTRABALL },
+            { name: 'NUMBERCHAIRS', module: NUMBERCHAIRS, displayName: 'NUMBER CHAIRS', starter: startNUMBERCHAIRS },
+            { name: 'SURVIVAL_SQ', module: SURVIVAL_SQ, displayName: 'SURVIVAL SQUARE', starter: startSURVIVAL_SQ },
+            { name: 'COLLISION', module: COLLISION_TEAM_RACING, displayName: 'COLLISION TEAM RACING', starter: startCOLLISION }
         ];
 
         // Filtrar el último minijuego jugado
@@ -799,6 +830,15 @@ room.onPlayerTeamChange = function(changedPlayer, byPlayer) {
         return;
     }
 
+    // Si el jugador está bloqueado como "spectatorLocked", forzar espectador
+    if (botState.spectatorLocked && botState.spectatorLocked.indexOf(changedPlayer.id) !== -1) {
+        if (changedPlayer.team !== 0) {
+            try { room.setPlayerTeam(changedPlayer.id, 0); } catch(e){}
+            try { room.sendAnnouncement('👻 No puedes unirte al equipo: estás bloqueado para el siguiente minijuego', changedPlayer.id, 0xFF6600, 'bold'); } catch(e){}
+        }
+        return;
+    }
+
     // Evitar que alguien se mueva al equipo azul (equipo 2) SOLO DURANTE LUCKY o LUCKY HELL
     if ((LUCKY.isActive() || LUCKY_HELL.isActive() || LUCKY_DIOS.isActive()) && changedPlayer.team === 2) {
         room.setPlayerTeam(changedPlayer.id, 0);
@@ -895,6 +935,11 @@ room.onPlayerChat = function(player, message) {
     
     if (GALACTIC.isActive()) {
         var result = GALACTIC.onPlayerChat(player);
+        if (result === false) return false;
+    }
+    // Control de chat de SPACE_MELEE (bloqueo durante explicación)
+    if (SPACE_MELEE && SPACE_MELEE.isActive && SPACE_MELEE.isActive()) {
+        var result = SPACE_MELEE.onPlayerChat(player);
         if (result === false) return false;
     }
     

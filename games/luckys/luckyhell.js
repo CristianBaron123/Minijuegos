@@ -204,6 +204,8 @@ const LUCKY_HELL = (function() {
     }
 
     function executeSelectionEffect(room, target) {
+        // Asegurar que la selección quede cancelada antes de ejecutar el efecto
+        try { cancelSelection(); } catch(e){}
         var eff = gameState.selection.effect;
         if (!eff) { finishEffect(room); return; }
         switch(eff.type) {
