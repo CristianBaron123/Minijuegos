@@ -222,7 +222,9 @@ var LUCKY = (function() {
                         0xFF6600,
                         "bold"
                     );
-                    executeSelectionEffect(room, randomPlayer);
+                        // Limpiar estado de selección antes de aplicar el efecto
+                        cancelSelection();
+                        executeSelectionEffect(room, randomPlayer);
                 }
             }, 10000);
         }, 5000); // 5 segundos de explicación
@@ -244,6 +246,9 @@ var LUCKY = (function() {
         if (gameState.room) {
             gameState.room.pauseGame(false);
         }
+        // Asegurar que el chat vuelva a la normalidad y limpiar efecto pendiente
+        gameState.chatBlocked = false;
+        gameState.selectionEffect = null;
     }
     
     function handleSelectionInput(room, message) {
@@ -277,6 +282,8 @@ var LUCKY = (function() {
     }
     
     function executeSelectionEffect(room, targetPlayer) {
+        // Asegurarse de limpiar cualquier estado de selección activo
+        try { cancelSelection(); } catch(e){}
         var effect = gameState.selectionEffect;
         
         switch(effect.type) {

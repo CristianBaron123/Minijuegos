@@ -10,6 +10,7 @@ var gameState = {
     eliminated: [],
     checkInterval: null,
     chatBlocked: false,
+    explanationPhase: false,
     callback: null
 };
 
@@ -42,6 +43,7 @@ function start(room, onGameEnd) {
     // Anuncio y explicación (pausar mapa y bloquear chat durante explicación)
     room.sendAnnouncement('🧱 SURVIVAL SQUARE - Empuja la pelota roja y evita salir del cuadro', null, 0x00BFFF, 'bold', 2);
     gameState.chatBlocked = true;
+    gameState.explanationPhase = true;
     try { room.startGame(); } catch(e){}
     try { room.pauseGame(true); } catch(e){}
 
@@ -53,6 +55,7 @@ function start(room, onGameEnd) {
     , null, 0xFFFF00, 'bold', 2);
 
     setTimeout(function() {
+        gameState.explanationPhase = false;
         gameState.chatBlocked = false;
         try { room.pauseGame(false); } catch(e){}
         // Comenzar verificación periódica
@@ -117,8 +120,7 @@ function onPlayerLeave(room, player) {
         gameState.eliminated.push(player.id);
     }
 }
-
-function onPlayerChat(room, player, message) {
+function onPlayerChat(player, message) {
     if (gameState.chatBlocked) return false;
     return true;
 }

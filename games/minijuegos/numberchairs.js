@@ -38,7 +38,9 @@ function start(room, onGameEnd) {
     gameState.players = players.map(p => ({ id: p.id, name: p.name }));
     gameState.timers = {};
 
-    // Explanation phase: block chat for a few seconds, then start the game and begin checks
+    // Explanation phase: load map, start and pause the room, block chat for explanation, then unpause and begin checks
+    try { room.startGame(); } catch(e){}
+    try { room.pauseGame(true); } catch(e){}
     gameState.chatBlocked = true;
     room.sendAnnouncement('\n🔢 NUMBER CHAIRS - Entra en el número 1 y quédate 3s\n', null, 0x00BFFF, 'bold', 2);
     room.sendAnnouncement('\n📋 INSTRUCCIONES:\n' +
@@ -48,7 +50,7 @@ function start(room, onGameEnd) {
 
     setTimeout(function(){
         gameState.chatBlocked = false;
-        try { room.startGame(); } catch(e){}
+        try { room.pauseGame(false); } catch(e){}
         // Ensure previous interval cleared
         if (gameState.checkInterval) clearInterval(gameState.checkInterval);
         gameState.checkInterval = setInterval(() => checkPlayers(room), config.checkIntervalMs);
@@ -104,7 +106,7 @@ function onPlayerLeave(room, player){
     if (idx!==-1) gameState.players.splice(idx,1);
 }
 
-function onPlayerChat(room, player, message){
+function onPlayerChat(player, message){
     if (gameState.chatBlocked) return false;
     return true;
 }

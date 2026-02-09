@@ -50,6 +50,7 @@ function start(room, onGameEnd) {
     room.startGame();
     room.pauseGame(true);
     gameState.chatBlocked = true;
+    gameState.explanationPhase = true;
 
     room.sendAnnouncement('\n📋 INSTRUCCIONES:\n' +
         '🔴 Todos se separan en equipos\n' +
@@ -135,7 +136,7 @@ function onPlayerLeave(room, player) {
     if (p) p.alive = false;
 }
 
-function onPlayerChat(room, player, message) {
+function onPlayerChat(player, message) {
     if (gameState.chatBlocked) return false;
     return true;
 }

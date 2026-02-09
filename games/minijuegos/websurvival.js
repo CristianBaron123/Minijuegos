@@ -20,14 +20,12 @@ let gameState = {
 // Configuración
 const config = {
     minPlayers: 2,
-    // Zona de respawn izquierda: x = -500, desde y = -522 hasta y = 500
-    respawnLeftX: -500,
-    respawnLeftMinY: -522,
-    respawnLeftMaxY: 500,
-    // Zona de respawn arriba: y = -525, desde x = -15000 hasta x = 1000
-    respawnTopY: -525,
-    respawnTopMinX: -15000,
-    respawnTopMaxX: 1000
+    // Rectángulo válido definido por vértices A(-500,500), B(500,500), C(500,-528), D(-500,-528)
+    // Usamos: minX, maxX, minY, maxY
+    minX: -500,
+    maxX: 500,
+    minY: -528,
+    maxY: 500
 };
 
 // ============================================
@@ -134,26 +132,12 @@ function checkPlayers(room, onGameEnd) {
         
         var eliminated = false;
         var reason = "";
-        
-        // Detectar si llegó a la zona de respawn izquierda
-        // x < -500 (más a la izquierda de -500), desde y = -522 hasta y = 500
-        if (pos.x < config.respawnLeftX && 
-            pos.y >= config.respawnLeftMinY && 
-            pos.y <= config.respawnLeftMaxY) {
+
+        // Comprobar si el jugador está fuera del rectángulo permitido
+        if (pos.x < config.minX || pos.x > config.maxX || pos.y < config.minY || pos.y > config.maxY) {
             eliminated = true;
-            reason = "fue mandado fuera de la telaraña (izquierda)";
-            console.log("💀 " + p.name + " llegó al respawn izquierdo - X: " + pos.x.toFixed(0) + " Y: " + pos.y.toFixed(0));
-        }
-        
-        // Detectar si llegó a la zona de respawn arriba
-        // y < -525 (más arriba de -525), desde x = -15000 hasta x = 1000
-        if (!eliminated && 
-            pos.y < config.respawnTopY && 
-            pos.x >= config.respawnTopMinX && 
-            pos.x <= config.respawnTopMaxX) {
-            eliminated = true;
-            reason = "fue mandado fuera de la telaraña (arriba)";
-            console.log("💀 " + p.name + " llegó al respawn superior - X: " + pos.x.toFixed(0) + " Y: " + pos.y.toFixed(0));
+            reason = "salió del área permitida";
+            console.log("💀 " + p.name + " fuera del rectángulo - X: " + pos.x.toFixed(0) + " Y: " + pos.y.toFixed(0));
         }
         
         if (eliminated && gameState.eliminated.indexOf(p.id) === -1) {

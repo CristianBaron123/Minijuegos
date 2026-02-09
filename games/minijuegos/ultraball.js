@@ -42,8 +42,10 @@ function start(room, onGameEnd) {
     // Anuncio inicial
     room.sendAnnouncement('⚽ ULTRABALL - Partido de goles. Primero a ' + config.goalsToWin + ' goles gana cada ronda.', null, 0x00BFFF, 'bold', 2);
 
-    // Seguir el patrón de otros minijuegos: cargar mapa, esperar un momento, startGame(), pause(), instrucciones, despause
+    // Seguir el patrón de otros minijuegos: cargar mapa, asegurar pausa/instrucciones y luego iniciar torneo
     if (gameState.firstRound) {
+        // Hacemos la secuencia de explicación de forma robusta y síncrona respecto a la sala
+        try { room.stopGame(); } catch(e){}
         setTimeout(function() {
             try { room.startGame(); } catch(e){}
             try { room.pauseGame(true); } catch(e){}
@@ -61,6 +63,7 @@ function start(room, onGameEnd) {
                 try { unlockTeamChanges(); } catch(e) {}
                 gameState.chatBlocked = false;
                 try { room.pauseGame(false); } catch(e){}
+                gameState.firstRound = false;
                 runTournament(room);
             }, config.firstExplanationMs);
         }, 1500);
@@ -209,25 +212,15 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
                 return;
             }
 
-            // Si está empate con goles, entrar a tiempo extra: siguiente gol gana (30s)
+            // Si está empate con goles, entrar a TIEMPO EXTRA de muerte súbita: SIGUIENTE GOL GANA (sin límite)
             if (scores[1] === scores[2]) {
-                room.sendAnnouncement('\n⚡ Empate. Tiempo extra: SIGUIENTE GOL GANA (30s)...', null, 0xFFFF00);
-                // instalar handler que resuelve al primer gol
-                var suddenMs = 30000;
-                // sobrescribir onTeamGoal temporalmente
+                room.sendAnnouncement('\n⚡ Empate. Tiempo extra Muerte Súbita: SIGUIENTE GOL GANA (sin límite)...', null, 0xFFFF00);
+                // sobrescribir onTeamGoal temporalmente para resolver al primer gol (sin timeout)
                 room.onTeamGoal = function(team) {
                     if (stopped) return;
                     stopped = true;
-                    if (sdTo) { clearTimeout(sdTo); sdTo = null; }
                     cleanupAndResolve(team);
                 };
-                sdTo = setTimeout(function() {
-                    if (stopped) return;
-                    stopped = true;
-                    // si no hay gol en tiempo extra, elegir ganador aleatoriamente
-                    var winnerTeam = (Math.random() < 0.5) ? 1 : 2;
-                    cleanupAndResolve(winnerTeam);
-                }, suddenMs);
                 return;
             }
 
@@ -238,7 +231,6 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
 
         function cleanupAndResolve(team) {
             clearTimeout(to);
-            if (sdTo) { clearTimeout(sdTo); sdTo = null; }
             // restaurar handler
             try { room.onTeamGoal = prevOnGoal; } catch(e){}
 

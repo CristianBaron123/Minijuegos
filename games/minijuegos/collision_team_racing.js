@@ -11,6 +11,7 @@ var gameState = {
     players: [], // { id, name, team, finished }
     checkInterval: null,
     chatBlocked: false,
+    explanationPhase: false,
     callback: null,
     firstCross: {}, // playerId -> { crossedLine1: bool }
     winnerDeclared: false
@@ -71,6 +72,7 @@ function start(room, onGameEnd) {
     room.startGame();
     try { room.pauseGame(true); } catch(e){}
     gameState.chatBlocked = true;
+    gameState.explanationPhase = true;
 
     room.sendAnnouncement('\n📋 INSTRUCCIONES:\n' +
         '🔴 vs 🔵 — Cruza la meta primero para ganar\n' +
@@ -81,6 +83,7 @@ function start(room, onGameEnd) {
     setTimeout(() => {
         // Fin de explicación
         try { room.pauseGame(false); } catch(e){}
+        gameState.explanationPhase = false;
         gameState.chatBlocked = false;
 
         // Iniciar verificación periódica
@@ -151,7 +154,7 @@ function onPlayerLeave(room, player) {
     if (rec) rec.finished = true;
 }
 
-function onPlayerChat(room, player, message) {
+function onPlayerChat(player, message) {
     if (gameState.chatBlocked) return false;
     return true;
 }
