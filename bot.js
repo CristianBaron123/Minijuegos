@@ -57,6 +57,10 @@ const mapCollisionData = fs.readFileSync(mapCollisionPath, 'utf8');
 const mapSpaceMeleePath = path.join(__dirname, 'Mapas', 'Space Melee by Namajunas [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
 const mapSpaceMeleeData = fs.readFileSync(mapSpaceMeleePath, 'utf8');
 
+// Map: Spot Bonk
+const mapSpotBonkPath = path.join(__dirname, 'Mapas', 'Spot Bonk by MC from HaxMaps.hbs');
+const mapSpotBonkData = fs.readFileSync(mapSpotBonkPath, 'utf8');
+
 // Cargar mapas de luckys
 const mapLuckPath = path.join(__dirname, 'Lucks', 'Lucky-Map-2-by-Meeelany-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_667a7e7e87381.hbs');
 const mapLuckData = fs.readFileSync(mapLuckPath, 'utf8');
@@ -113,6 +117,8 @@ const survSquareModulePath = path.join(__dirname, 'games', 'minijuegos', 'surviv
 const survSquareModuleCode = fs.readFileSync(survSquareModulePath, 'utf8');
 const collisionModulePath = path.join(__dirname, 'games', 'minijuegos', 'collision_team_racing.js');
 const collisionModuleCode = fs.readFileSync(collisionModulePath, 'utf8');
+const spotBonkModulePath = path.join(__dirname, 'games', 'minijuegos', 'spot_bonk.js');
+const spotBonkModuleCode = fs.readFileSync(spotBonkModulePath, 'utf8');
 const spaceMeleeModulePath = path.join(__dirname, 'games', 'minijuegos', 'space_melee.js');
 const spaceMeleeModuleCode = fs.readFileSync(spaceMeleeModulePath, 'utf8');
 
@@ -149,6 +155,7 @@ const getBotScript = () => {
     const websurvivalModule = transformModuleForBrowser(websurvivalModuleCode, mapWebSurvivalData);
     const galacticModule = transformModuleForBrowser(galacticModuleCode, mapGalacticData);
     const spaceMeleeModule = transformModuleForBrowser(spaceMeleeModuleCode, mapSpaceMeleeData);
+    const spotBonkModule = transformModuleForBrowser(spotBonkModuleCode, mapSpotBonkData);
     const gymModule = transformModuleForBrowser(gymModuleCode, mapGymData);
     const multiballsModule = transformModuleForBrowser(multiballsModuleCode, mapMultiBallsData);
     const supermanModule = transformModuleForBrowser(supermanModuleCode, mapSupermanData);
@@ -176,6 +183,7 @@ const getBotScript = () => {
         .replace(/##MAP_NUMBERCHAIRS##/g, JSON.stringify(JSON.stringify(mapNumberChairsData)))
         .replace(/##MAP_SURVIVAL_SQUARE##/g, JSON.stringify(JSON.stringify(mapSurvivalSquareData)))
         .replace(/##MAP_COLLISION##/g, JSON.stringify(JSON.stringify(mapCollisionData)))
+        .replace(/##MAP_SPOT_BONK##/g, JSON.stringify(JSON.stringify(mapSpotBonkData)))
         .replace(/##MAP_SPACE_MELEE##/g, JSON.stringify(JSON.stringify(mapSpaceMeleeData)));
     
     // Construir el script completo
@@ -254,6 +262,10 @@ var SURVIVAL_SQ = ` + survSquareModule + `;
 // MÓDULO: COLLISION TEAM RACING
 // ============================================
 var COLLISION_TEAM_RACING = ` + collisionModule + `;
+// ============================================
+// MÓDULO: SPOT_BONK
+// ============================================
+var SPOT_BONK = ` + spotBonkModule + `;
 
 // ============================================
 // MÓDULO: LUCKY

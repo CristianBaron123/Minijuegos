@@ -52,6 +52,7 @@ var mapSurvivalSquare = ##MAP_SURVIVAL_SQUARE##;
 var mapNumberChairs = ##MAP_NUMBERCHAIRS##;
 var mapCollision = ##MAP_COLLISION##;
 var mapSpaceMelee = ##MAP_SPACE_MELEE##;
+var mapSpotBonk = ##MAP_SPOT_BONK##;
 
 // Parsear mapas
 mapLuck = JSON.parse(mapLuck);
@@ -71,6 +72,15 @@ mapNumberChairs = JSON.parse(mapNumberChairs);
 mapCollision = JSON.parse(mapCollision);
 // Parsear mapa Space Melee
 mapSpaceMelee = JSON.parse(mapSpaceMelee);
+// Parsear mapa Spot Bonk
+try {
+    mapSpotBonk = JSON.parse(mapSpotBonk);
+} catch(e) {
+    // Fallback: si el placeholder no fue reemplazado por el generador,
+    // evitar que el bundle final sea sintácticamente inválido y usar
+    // un mapa vacío como fallback para que la ejecución continúe.
+    mapSpotBonk = {};
+}
 
 // Configurar mapas en LUCKY, LUCKY_HELL y LUCKY_DIOS
 LUCKY.setMaps(mapLuck, mapLuckDios, mapLuckHell);
@@ -103,6 +113,10 @@ if (typeof COLLISION_TEAM_RACING !== 'undefined' && COLLISION_TEAM_RACING.setMap
 // Inyectar mapa en SPACE_MELEE (si existe)
 if (typeof SPACE_MELEE !== 'undefined' && SPACE_MELEE.setMapData) {
     SPACE_MELEE.setMapData(mapSpaceMelee);
+}
+// Inyectar mapa en SPOT_BONK (si existe)
+if (typeof SPOT_BONK !== 'undefined' && SPOT_BONK.setMapData) {
+    SPOT_BONK.setMapData(mapSpotBonk);
 }
 
 // ============================================
@@ -290,6 +304,23 @@ function startSPACE_MELEE() {
     botState.gameActive = true;
     if (typeof SPACE_MELEE !== 'undefined') {
         SPACE_MELEE.start(room, function(winner) {
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
+
+function startSPOT_BONK() {
+    botState.gameActive = true;
+    if (typeof SPOT_BONK !== 'undefined') {
+        SPOT_BONK.start(room, function(winner) {
             if (winner) {
                 loadLuckyMap(winner);
             } else {
@@ -557,22 +588,9 @@ function checkAndStart() {
         // SISTEMA DE MINIJUEGOS ALEATORIOS (evitar repetir el último)
         // Durante pruebas, solo habilitamos COLLISION_TEAM_RACING
         // Lista completa de minijuegos disponibles (se habilitan todos)
+        // PARA PRUEBAS: solamente SPOT_BONK habilitado
         var minigames = [
-            { name: 'LALALA', module: LALALA, displayName: 'LALALA', starter: startLALALA },
-            { name: 'SURVIVAL', module: SURVIVAL, displayName: 'SURVIVAL', starter: startSURVIVAL },
-            { name: 'METEORS', module: METEORS, displayName: 'METEORS SURVIVAL', starter: startMETEORS },
-            { name: 'JUMPING', module: JUMPING, displayName: 'JUMPING ARENA', starter: startJUMPING },
-            { name: 'WEBSURVIVAL', module: WEBSURVIVAL, displayName: 'WEB SURVIVAL', starter: startWEBSURVIVAL },
-            { name: 'GALACTIC', module: GALACTIC, displayName: 'GALACTIC FIT', starter: startGALACTIC },
-            { name: 'SPACE_MELEE', module: SPACE_MELEE, displayName: 'SPACE MELEE', starter: startSPACE_MELEE },
-            { name: 'GYM', module: GYM, displayName: 'GYM', starter: startGYM },
-            { name: 'MULTIBALLS', module: MULTIBALLS, displayName: 'MULTIBALLS', starter: startMULTIBALLS },
-            { name: 'DODGEBALL', module: DODGEBALL, displayName: 'DODGEBALL', starter: startDODGEBALL },
-            { name: 'SUPERMAN', module: SUPERMAN, displayName: 'SUPERMAN', starter: startSUPERMAN },
-            { name: 'ULTRABALL', module: ULTRABALL, displayName: 'ULTRABALL', starter: startULTRABALL },
-            { name: 'NUMBERCHAIRS', module: NUMBERCHAIRS, displayName: 'NUMBER CHAIRS', starter: startNUMBERCHAIRS },
-            { name: 'SURVIVAL_SQ', module: SURVIVAL_SQ, displayName: 'SURVIVAL SQUARE', starter: startSURVIVAL_SQ },
-            { name: 'COLLISION', module: COLLISION_TEAM_RACING, displayName: 'COLLISION TEAM RACING', starter: startCOLLISION }
+            { name: 'SPOT_BONK', module: SPOT_BONK, displayName: 'SPOT BONK', starter: startSPOT_BONK }
         ];
 
         // Filtrar el último minijuego jugado
