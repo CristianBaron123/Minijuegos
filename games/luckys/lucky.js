@@ -141,8 +141,10 @@ var LUCKY = (function() {
         // PAUSAR EL JUEGO durante la selección
         room.pauseGame(true);
         
-        // Mover al ganador a espectador para que no haya 2 en rojo
-        room.setPlayerTeam(gameState.winner.id, 0);
+        // Nota: NO mover al ganador a espectador aquí — puede causar efectos indeseados
+        // (antes movíamos al ganador para evitar dos jugadores en equipo, pero esto
+        // provocó que el ganador quedara fuera si hubo desconexiones). Mantener al
+        // ganador en su equipo y simplemente excluirlo de la lista de selección.
         
         // Determinar el propósito de la selección
         var purpose = "";
@@ -285,6 +287,20 @@ var LUCKY = (function() {
         // Asegurarse de limpiar cualquier estado de selección activo
         try { cancelSelection(); } catch(e){}
         var effect = gameState.selectionEffect;
+        // Validar que el jugador objetivo sigue en la sala
+        var currentTargetObj = room.getPlayer ? room.getPlayer(targetPlayer.id) : null;
+        if (!currentTargetObj) {
+            // Si ya no está, elegir aleatorio válido o terminar
+            var remaining = (gameState.playerList && gameState.playerList.length) ? gameState.playerList.filter(function(p){ return room.getPlayer && room.getPlayer(p.id); }) : [];
+            if (remaining.length > 0) {
+                targetPlayer = remaining[Math.floor(Math.random() * remaining.length)];
+                room.sendAnnouncement('⚠️ El jugador elegido no está en la sala, seleccionando aleatorio: ' + targetPlayer.name, null, 0xFF6600, 'bold');
+            } else {
+                room.sendAnnouncement('⚠️ El jugador elegido ya no está en la sala. Efecto cancelado.', null, 0xFF6600, 'bold');
+                finishEffect(room);
+                return;
+            }
+        }
         
         switch(effect.type) {
             case 'choose_kick':
@@ -351,22 +367,32 @@ var LUCKY = (function() {
                     2
                 );
                 setTimeout(function() {
-                    room.stopGame();
-                    room.setCustomStadium(mapLuck);
-                    room.startGame();
-                    room.setPlayerTeam(targetPlayer.id, 1);
-                    // Cambiar el ganador por el nuevo jugador
+                    // Reiniciar el mapa y asignar al nuevo ganador
+                    try { if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; } } catch(e){}
+                    try { room.stopGame(); } catch(e){}
+                    try { room.setCustomStadium(mapLuck); } catch(e){}
+                    try { room.startGame(); } catch(e){}
+                    try { room.setPlayerTeam(targetPlayer.id, 1); } catch(e){}
+                    // Cambiar el ganador por el nuevo jugador y resetear detección
                     gameState.winner = targetPlayer;
                     gameState.colorDetected = false;
                     gameState.detectionBuffer = [];
                     gameState.lastDetectedZone = null;
-                    
-                    // Reiniciar detección con timeout completo
+                    // Cancelar timeout global anterior si existe
+                    if (gameState.globalTimeout) { clearTimeout(gameState.globalTimeout); }
+                    gameState.startTime = Date.now();
+                    gameState.globalTimeout = setTimeout(function() {
+                        if (gameState.active && !gameState.colorDetected) {
+                            console.log('⏰ Lucky: Timeout global alcanzado tras pass_roulette');
+                            room.sendAnnouncement('⏰ Tiempo agotado en Lucky - Continuando...', null, 0xFF6600, 'bold');
+                            finishEffect(room);
+                        }
+                    }, config.maxGameTime);
+                    // Reiniciar detección con retraso configurado
                     setTimeout(function() {
                         if (gameState.active) {
-                            gameState.checkInterval = setInterval(function() {
-                                detectColor(room);
-                            }, 100);
+                            if (gameState.checkInterval) clearInterval(gameState.checkInterval);
+                            gameState.checkInterval = setInterval(function() { detectColor(room); }, 100);
                         }
                     }, config.detectionDelay);
                 }, 3000);
@@ -698,6 +724,24 @@ var LUCKY = (function() {
 
         return true;
     }
+
+    function onPlayerLeave(player) {
+        // Si el ganador se desconecta durante una selección, cancelar y finalizar
+        try {
+            if (!gameState.active) return;
+            if (gameState.selectionActive && gameState.winner && player && player.id === gameState.winner.id) {
+                if (gameState.room) {
+                    gameState.room.sendAnnouncement('⚠️ El ganador se desconectó durante la selección. Cancelando selección y finalizando Lucky.', null, 0xFF6600, 'bold');
+                }
+                try { cancelSelection(); } catch(e){}
+                try { finishEffect(gameState.room); } catch(e){}
+            }
+            // Si el jugador desconectado estaba en playerList, removerlo para evitar selecciones inválidas
+            if (gameState.playerList && player) {
+                gameState.playerList = gameState.playerList.filter(function(p){ return p.id !== player.id; });
+            }
+        } catch(e) { console.error('[LUCKY] onPlayerLeave error', e); }
+    }
     
     function setMaps(luck, dios, hell) {
         mapLuck = luck;
@@ -712,6 +756,7 @@ var LUCKY = (function() {
         stop: stop,
         isActive: isActive,
         onPlayerChat: onPlayerChat,
+        onPlayerLeave: onPlayerLeave,
         setMaps: setMaps
     };
 })();

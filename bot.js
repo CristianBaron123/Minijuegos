@@ -50,6 +50,9 @@ const mapDodgeballData = fs.readFileSync(mapDodgeballPath, 'utf8');
 const mapNumberChairsPath = path.join(__dirname, 'Mapas', 'NumberChairs v2 by Şerefli Şeref [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
 const mapNumberChairsData = fs.readFileSync(mapNumberChairsPath, 'utf8');
 
+const mapChairMixPath = path.join(__dirname, 'Mapas', 'ChairMix by Vhagar.hbs');
+const mapChairMixData = fs.readFileSync(mapChairMixPath, 'utf8');
+
 const mapCollisionPath = path.join(__dirname, 'Mapas', 'Collision team racing 9 by MC  from HaxMaps.hbs');
 const mapCollisionData = fs.readFileSync(mapCollisionPath, 'utf8');
 
@@ -121,6 +124,8 @@ const spotBonkModulePath = path.join(__dirname, 'games', 'minijuegos', 'spot_bon
 const spotBonkModuleCode = fs.readFileSync(spotBonkModulePath, 'utf8');
 const spaceMeleeModulePath = path.join(__dirname, 'games', 'minijuegos', 'space_melee.js');
 const spaceMeleeModuleCode = fs.readFileSync(spaceMeleeModulePath, 'utf8');
+const chairmixModulePath = path.join(__dirname, 'games', 'minijuegos', 'chairmix.js');
+const chairmixModuleCode = fs.readFileSync(chairmixModulePath, 'utf8');
 
 // Cargar código principal de la sala
 const roomMainCodePath = path.join(__dirname, 'room-main.txt');
@@ -156,6 +161,7 @@ const getBotScript = () => {
     const galacticModule = transformModuleForBrowser(galacticModuleCode, mapGalacticData);
     const spaceMeleeModule = transformModuleForBrowser(spaceMeleeModuleCode, mapSpaceMeleeData);
     const spotBonkModule = transformModuleForBrowser(spotBonkModuleCode, mapSpotBonkData);
+        const chairmixModule = transformModuleForBrowser(chairmixModuleCode, mapChairMixData);
     const gymModule = transformModuleForBrowser(gymModuleCode, mapGymData);
     const multiballsModule = transformModuleForBrowser(multiballsModuleCode, mapMultiBallsData);
     const supermanModule = transformModuleForBrowser(supermanModuleCode, mapSupermanData);
@@ -184,7 +190,8 @@ const getBotScript = () => {
         .replace(/##MAP_SURVIVAL_SQUARE##/g, JSON.stringify(JSON.stringify(mapSurvivalSquareData)))
         .replace(/##MAP_COLLISION##/g, JSON.stringify(JSON.stringify(mapCollisionData)))
         .replace(/##MAP_SPOT_BONK##/g, JSON.stringify(JSON.stringify(mapSpotBonkData)))
-        .replace(/##MAP_SPACE_MELEE##/g, JSON.stringify(JSON.stringify(mapSpaceMeleeData)));
+        .replace(/##MAP_SPACE_MELEE##/g, JSON.stringify(JSON.stringify(mapSpaceMeleeData)))
+        .replace(/##MAP_CHAIRMIX##/g, JSON.stringify(JSON.stringify(mapChairMixData)));
     
     // Construir el script completo
     return `
@@ -266,6 +273,10 @@ var COLLISION_TEAM_RACING = ` + collisionModule + `;
 // MÓDULO: SPOT_BONK
 // ============================================
 var SPOT_BONK = ` + spotBonkModule + `;
+// ============================================
+// MÓDULO: CHAIRMIX
+// ============================================
+var CHAIRMIX = ` + chairmixModule + `;
 
 // ============================================
 // MÓDULO: LUCKY
