@@ -53,6 +53,7 @@ var mapNumberChairs = ##MAP_NUMBERCHAIRS##;
 var mapCollision = ##MAP_COLLISION##;
 var mapSpaceMelee = ##MAP_SPACE_MELEE##;
 var mapSpotBonk = ##MAP_SPOT_BONK##;
+var mapChairMix = ##MAP_CHAIRMIX##;
 
 // Parsear mapas
 mapLuck = JSON.parse(mapLuck);
@@ -80,6 +81,13 @@ try {
     // evitar que el bundle final sea sintácticamente inválido y usar
     // un mapa vacío como fallback para que la ejecución continúe.
     mapSpotBonk = {};
+}
+
+// Parsear mapa ChairMix
+try {
+    mapChairMix = JSON.parse(mapChairMix);
+} catch(e) {
+    mapChairMix = {};
 }
 
 // Configurar mapas en LUCKY, LUCKY_HELL y LUCKY_DIOS
@@ -117,6 +125,10 @@ if (typeof SPACE_MELEE !== 'undefined' && SPACE_MELEE.setMapData) {
 // Inyectar mapa en SPOT_BONK (si existe)
 if (typeof SPOT_BONK !== 'undefined' && SPOT_BONK.setMapData) {
     SPOT_BONK.setMapData(mapSpotBonk);
+}
+// Inyectar mapa en CHAIRMIX (si existe)
+if (typeof CHAIRMIX !== 'undefined' && CHAIRMIX.setMapData) {
+    CHAIRMIX.setMapData(mapChairMix);
 }
 
 // ============================================
@@ -439,6 +451,23 @@ function startNUMBERCHAIRS() {
     });
 }
 
+function startCHAIRMIX() {
+    botState.gameActive = true;
+    if (typeof CHAIRMIX !== 'undefined') {
+        CHAIRMIX.start(room, function(winner) {
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
+
 function loadLuckyMap(winner) {
     room.setPlayerTeam(winner.id, 1);
     
@@ -589,8 +618,12 @@ function checkAndStart() {
         // Durante pruebas, solo habilitamos COLLISION_TEAM_RACING
         // Lista completa de minijuegos disponibles (se habilitan todos)
         // PARA PRUEBAS: solamente SPOT_BONK habilitado
+        // Minijuegos deshabilitados para pruebas — solo CHAIRMIX activo
+        // var minigames = [
+        //     { name: 'CHAIRMIX', module: CHAIRMIX, displayName: 'CHAIRMIX', starter: startCHAIRMIX }
+        // ];
         var minigames = [
-            { name: 'SPOT_BONK', module: SPOT_BONK, displayName: 'SPOT BONK', starter: startSPOT_BONK }
+            { name: 'CHAIRMIX', module: CHAIRMIX, displayName: 'CHAIRMIX', starter: startCHAIRMIX }
         ];
 
         // Filtrar el último minijuego jugado
@@ -717,6 +750,9 @@ room.onPlayerLeave = function(player) {
     if (LALALA.isActive()) {
         LALALA.onPlayerLeave(room, player);
     }
+    if (LUCKY && LUCKY.isActive && LUCKY.isActive()) {
+        try { LUCKY.onPlayerLeave(player); } catch(e){}
+    }
     if (SURVIVAL.isActive()) {
         SURVIVAL.onPlayerLeave(room, player);
     }
@@ -749,6 +785,9 @@ room.onPlayerLeave = function(player) {
     }
     if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) {
         NUMBERCHAIRS.onPlayerLeave(room, player);
+    }
+    if (CHAIRMIX && CHAIRMIX.isActive && CHAIRMIX.isActive()) {
+        try { CHAIRMIX.onPlayerLeave(room, player); } catch(e){}
     }
     
     var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
@@ -808,6 +847,9 @@ room.onPlayerLeave = function(player) {
         }
         if (ULTRABALL && ULTRABALL.isActive && ULTRABALL.isActive()) {
             ULTRABALL.stop(room);
+        }
+        if (CHAIRMIX && CHAIRMIX.isActive && CHAIRMIX.isActive()) {
+            CHAIRMIX.stop(room);
         }
         
         botState.gameActive = false;
@@ -944,6 +986,12 @@ room.onPlayerChat = function(player, message) {
     if (JUMPING.isActive()) {
         var result = JUMPING.onPlayerChat(player);
         if (result === false) return false;
+    }
+    if (CHAIRMIX && CHAIRMIX.isActive && CHAIRMIX.isActive()) {
+        try {
+            var result = CHAIRMIX.onPlayerChat(player, message);
+            if (result === false) return false;
+        } catch(e){}
     }
     
     if (WEBSURVIVAL.isActive()) {
