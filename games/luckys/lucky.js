@@ -224,8 +224,7 @@ var LUCKY = (function() {
                         0xFF6600,
                         "bold"
                     );
-                        // Limpiar estado de selección antes de aplicar el efecto
-                        cancelSelection();
+                        // No llamar cancelSelection() aquí — executeSelectionEffect ya lo hace
                         executeSelectionEffect(room, randomPlayer);
                 }
             }, 10000);
@@ -278,15 +277,22 @@ var LUCKY = (function() {
                 0x00FF00,
                 "bold"
             );
-            cancelSelection();
+            // No llamar cancelSelection() aquí — executeSelectionEffect ya lo hace
+            // después de leer el efecto pendiente
             executeSelectionEffect(room, selectedPlayer);
         }
     }
     
     function executeSelectionEffect(room, targetPlayer) {
-        // Asegurarse de limpiar cualquier estado de selección activo
-        try { cancelSelection(); } catch(e){}
+        // Leer el efecto ANTES de cancelar (cancelSelection borra selectionEffect)
         var effect = gameState.selectionEffect;
+        // Ahora sí limpiar estado de selección
+        try { cancelSelection(); } catch(e){}
+        // Si no hay efecto (ya fue limpiado), terminar
+        if (!effect) {
+            finishEffect(room);
+            return;
+        }
         // Validar que el jugador objetivo sigue en la sala
         var currentTargetObj = room.getPlayer ? room.getPlayer(targetPlayer.id) : null;
         if (!currentTargetObj) {
@@ -566,8 +572,11 @@ var LUCKY = (function() {
                 break;
                 
             case 'gay_message':
-                // ROSA: Mensaje gay
-                room.sendAnnouncement("🌈 " + winner.name + " ES GAY 🌈", null, 0xFFC0CB, "bold", 2);
+                // ROSA: Mensaje gay + etiqueta GAY por 4 minijuegos
+                room.sendAnnouncement("🌈 " + winner.name + " ES GAY 🌈\n📛 Tendrá la etiqueta [GAY] por 4 minijuegos", null, 0xFFC0CB, "bold", 2);
+                if (gameState.callbacks.onGayTag) {
+                    gameState.callbacks.onGayTag(winner.auth);
+                }
                 finishEffect(room);
                 break;
                 
