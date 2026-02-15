@@ -64,6 +64,22 @@ const mapSpaceMeleeData = fs.readFileSync(mapSpaceMeleePath, 'utf8');
 const mapSpotBonkPath = path.join(__dirname, 'Mapas', 'Spot Bonk by MC from HaxMaps.hbs');
 const mapSpotBonkData = fs.readFileSync(mapSpotBonkPath, 'utf8');
 
+// Map: COVID-19 Survival (Teams)
+const mapCovid19Path = path.join(__dirname, 'Mapas', 'Covid-19 Survival [Teams] by Galactic Boy.hbs');
+const mapCovid19Data = fs.readFileSync(mapCovid19Path, 'utf8');
+
+// Map: Gymmix 6
+const mapGymmixPath = path.join(__dirname, 'Mapas', 'Gymmix 6 by MC.hbs');
+const mapGymmixData = fs.readFileSync(mapGymmixPath, 'utf8');
+
+// Map: TRIVIA
+const mapTriviaPath = path.join(__dirname, 'Mapas', 'TRIVIA Wolfgang fixed by_ _R [\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D].hbs');
+const mapTriviaData = fs.readFileSync(mapTriviaPath, 'utf8');
+
+// Map: Game Of Thrones
+const mapGOTPath = path.join(__dirname, 'Mapas', 'Game Of Thrones from HaxMaps.hbs');
+const mapGOTData = fs.readFileSync(mapGOTPath, 'utf8');
+
 // Cargar mapas de luckys
 const mapLuckPath = path.join(__dirname, 'Lucks', 'Lucky-Map-2-by-Meeelany-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_667a7e7e87381.hbs');
 const mapLuckData = fs.readFileSync(mapLuckPath, 'utf8');
@@ -126,6 +142,14 @@ const spaceMeleeModulePath = path.join(__dirname, 'games', 'minijuegos', 'space_
 const spaceMeleeModuleCode = fs.readFileSync(spaceMeleeModulePath, 'utf8');
 const chairmixModulePath = path.join(__dirname, 'games', 'minijuegos', 'chairmix.js');
 const chairmixModuleCode = fs.readFileSync(chairmixModulePath, 'utf8');
+const covidModulePath = path.join(__dirname, 'games', 'minijuegos', 'covid19.js');
+const covidModuleCode = fs.readFileSync(covidModulePath, 'utf8');
+const gymmixModulePath = path.join(__dirname, 'games', 'minijuegos', 'gymmix.js');
+const gymmixModuleCode = fs.readFileSync(gymmixModulePath, 'utf8');
+const triviaModulePath = path.join(__dirname, 'games', 'minijuegos', 'trivia.js');
+const triviaModuleCode = fs.readFileSync(triviaModulePath, 'utf8');
+const gotModulePath = path.join(__dirname, 'games', 'minijuegos', 'got.js');
+const gotModuleCode = fs.readFileSync(gotModulePath, 'utf8');
 
 // Cargar código principal de la sala
 const roomMainCodePath = path.join(__dirname, 'room-main.txt');
@@ -162,6 +186,10 @@ const getBotScript = () => {
     const spaceMeleeModule = transformModuleForBrowser(spaceMeleeModuleCode, mapSpaceMeleeData);
     const spotBonkModule = transformModuleForBrowser(spotBonkModuleCode, mapSpotBonkData);
         const chairmixModule = transformModuleForBrowser(chairmixModuleCode, mapChairMixData);
+        const covidModule = transformModuleForBrowser(covidModuleCode, mapCovid19Data);
+        const gymmixModule = transformModuleForBrowser(gymmixModuleCode, mapGymmixData);
+        const triviaModule = transformModuleForBrowser(triviaModuleCode, mapTriviaData);
+        const gotModule = transformModuleForBrowser(gotModuleCode, mapGOTData);
     const gymModule = transformModuleForBrowser(gymModuleCode, mapGymData);
     const multiballsModule = transformModuleForBrowser(multiballsModuleCode, mapMultiBallsData);
     const supermanModule = transformModuleForBrowser(supermanModuleCode, mapSupermanData);
@@ -192,7 +220,12 @@ const getBotScript = () => {
         .replace(/##MAP_SPOT_BONK##/g, JSON.stringify(JSON.stringify(mapSpotBonkData)))
         .replace(/##MAP_SPACE_MELEE##/g, JSON.stringify(JSON.stringify(mapSpaceMeleeData)))
         .replace(/##MAP_CHAIRMIX##/g, JSON.stringify(JSON.stringify(mapChairMixData)));
-    
+        
+    mainCode = mainCode.replace(/##MAP_COVID19##/g, JSON.stringify(JSON.stringify(mapCovid19Data)));
+    mainCode = mainCode.replace(/##MAP_GYMMIX##/g, JSON.stringify(JSON.stringify(mapGymmixData)));
+    mainCode = mainCode.replace(/##MAP_TRIVIA##/g, JSON.stringify(JSON.stringify(mapTriviaData)));
+    mainCode = mainCode.replace(/##MAP_GOT##/g, JSON.stringify(JSON.stringify(mapGOTData)));
+
     // Construir el script completo
     return `
 // ============================================
@@ -279,6 +312,26 @@ var SPOT_BONK = ` + spotBonkModule + `;
 var CHAIRMIX = ` + chairmixModule + `;
 
 // ============================================
+// MÓDULO: COVID19
+// ============================================
+var COVID19 = ` + covidModule + `;
+
+// ============================================
+// MÓDULO: GYMMIX
+// ============================================
+var GYMMIX = ` + gymmixModule + `;
+
+// ============================================
+// MÓDULO: TRIVIA
+// ============================================
+var TRIVIA = ` + triviaModule + `;
+
+// ============================================
+// MÓDULO: GAME OF THRONES
+// ============================================
+var GOT = ` + gotModule + `;
+
+// ============================================
 // MÓDULO: LUCKY
 // ============================================
 ` + escapedLuckyCode + `
@@ -312,9 +365,21 @@ var CHAIRMIX = ` + chairmixModule + `;
         timeout: 60000
     });
     
-    console.log('⏳ Esperando que cargue...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
+    console.log('⏳ Esperando que pase Cloudflare y cargue HBInit...');
+    // Cloudflare puede tardar bastante, esperamos hasta 120 segundos
+    for (let attempt = 1; attempt <= 12; attempt++) {
+        const found = await page.waitForFunction('typeof HBInit === "function"', { timeout: 10000 }).then(() => true).catch(() => false);
+        if (found) {
+            console.log('✅ HBInit detectado!');
+            break;
+        }
+        console.log('⏳ Intento ' + attempt + '/12 - HBInit aún no disponible, esperando...');
+        if (attempt === 12) {
+            console.log('⚠️ HBInit no se detectó tras 120s. Intentando inyectar de todas formas...');
+        }
+    }
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
     console.log('📝 Inyectando script automáticamente...');
     
     // Generar y guardar script para debugging

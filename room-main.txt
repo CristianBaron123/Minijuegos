@@ -34,11 +34,76 @@ var botState = {
     teamLock: false, // si true, se evita que jugadores cambien equipo via UI
     discordCooldowns: {}, // Timestamps de último uso del comando !discord por jugador
     lastMinigame: null, // Último minijuego jugado para evitar repeticiones
-    pendingAnnouncement: false // Si true, hay un anuncio pendiente por haber sido omitido
+    pendingAnnouncement: false, // Si true, hay un anuncio pendiente por haber sido omitido
+    // Sistema de etiquetas
+    playerTags: {}, // { authKey: { type: 'GAY', remaining: 4 } } - tags temporales por auth
+    winStreaks: {}, // { authKey: count } - rachas de victorias consecutivas
+    gamesPlayed: {} // { authKey: count } - partidas jugadas por jugador (para PRINCIPIANTE)
 };
 
 // Invite de Discord (usado por comando !discord)
 var DISCORD_INVITE = "https://discord.gg/ACpTeXu7Pj";
+
+// ============================================
+// SISTEMA DE ETIQUETAS
+// ============================================
+function getPlayerTag(player) {
+    // Prioridad: CREADOR > MVP > GAY > PRINCIPIANTE
+    if (player.auth === OWNER_AUTH) {
+        return { label: '[CREADOR]', color: 0x00BFFF };
+    }
+    if (botState.winStreaks[player.auth] >= 2) {
+        return { label: '[MVP]', color: 0xFFD700 };
+    }
+    var tag = botState.playerTags[player.auth];
+    if (tag && tag.remaining > 0) {
+        if (tag.type === 'GAY') {
+            return { label: '[GAY]', color: 0xFFC0CB };
+        }
+    }
+    if ((botState.gamesPlayed[player.auth] || 0) < 3) {
+        return { label: '[PRINCIPIANTE]', color: 0x90EE90 };
+    }
+    return null;
+}
+
+function decrementTempTags() {
+    for (var auth in botState.playerTags) {
+        var tag = botState.playerTags[auth];
+        if (tag && tag.remaining > 0) {
+            tag.remaining--;
+            if (tag.remaining <= 0) {
+                delete botState.playerTags[auth];
+            }
+        }
+    }
+}
+
+// Mensajes variados de victoria (se muestran al ganar, antes del Lucky)
+var victoryMessages = [
+    "🔥 Increible!",
+    "💪 Domino como un campeon!",
+    "⭐ Jugada magistral!",
+    "🎯 Precision perfecta!",
+    "👑 Es el rey del minijuego!",
+    "🚀 Imparable!",
+    "💥 Aplasto a todos!",
+    "🏅 Partida legendaria!"
+];
+
+function showGameStats(module) {
+    if (module && module.getStats) {
+        try {
+            var stats = module.getStats();
+            if (stats && stats.firstEliminated) {
+                room.sendAnnouncement(
+                    "⚡ Primer eliminado: " + stats.firstEliminated.name + " (" + stats.firstEliminated.timeS + "s)",
+                    null, 0xFF6600
+                );
+            }
+        } catch(e) {}
+    }
+}
 
 // Cargar mapas Lucky
 var mapLuck = ##MAP_LUCK##;
@@ -54,6 +119,10 @@ var mapCollision = ##MAP_COLLISION##;
 var mapSpaceMelee = ##MAP_SPACE_MELEE##;
 var mapSpotBonk = ##MAP_SPOT_BONK##;
 var mapChairMix = ##MAP_CHAIRMIX##;
+var mapCovid19 = ##MAP_COVID19##;
+var mapGymmix = ##MAP_GYMMIX##;
+var mapTrivia = ##MAP_TRIVIA##;
+var mapGOT = ##MAP_GOT##;
 
 // Parsear mapas
 mapLuck = JSON.parse(mapLuck);
@@ -88,6 +157,34 @@ try {
     mapChairMix = JSON.parse(mapChairMix);
 } catch(e) {
     mapChairMix = {};
+}
+
+// Parsear mapa COVID19
+try {
+    mapCovid19 = JSON.parse(mapCovid19);
+} catch(e) {
+    mapCovid19 = {};
+}
+
+// Parsear mapa GYMMIX
+try {
+    mapGymmix = JSON.parse(mapGymmix);
+} catch(e) {
+    mapGymmix = {};
+}
+
+// Parsear mapa TRIVIA
+try {
+    mapTrivia = JSON.parse(mapTrivia);
+} catch(e) {
+    mapTrivia = {};
+}
+
+// Parsear mapa GOT
+try {
+    mapGOT = JSON.parse(mapGOT);
+} catch(e) {
+    mapGOT = {};
 }
 
 // Configurar mapas en LUCKY, LUCKY_HELL y LUCKY_DIOS
@@ -129,6 +226,22 @@ if (typeof SPOT_BONK !== 'undefined' && SPOT_BONK.setMapData) {
 // Inyectar mapa en CHAIRMIX (si existe)
 if (typeof CHAIRMIX !== 'undefined' && CHAIRMIX.setMapData) {
     CHAIRMIX.setMapData(mapChairMix);
+}
+// Inyectar mapa en COVID19 (si existe)
+if (typeof COVID19 !== 'undefined' && COVID19.setMapData) {
+    COVID19.setMapData(mapCovid19);
+}
+// Inyectar mapa en GYMMIX (si existe)
+if (typeof GYMMIX !== 'undefined' && GYMMIX.setMapData) {
+    GYMMIX.setMapData(mapGymmix);
+}
+// Inyectar mapa en TRIVIA (si existe)
+if (typeof TRIVIA !== 'undefined' && TRIVIA.setMapData) {
+    TRIVIA.setMapData(mapTrivia);
+}
+// Inyectar mapa en GOT (si existe)
+if (typeof GOT !== 'undefined' && GOT.setMapData) {
+    GOT.setMapData(mapGOT);
 }
 
 // ============================================
@@ -346,6 +459,24 @@ function startSPOT_BONK() {
     }
 }
 
+function startCOVID19() {
+    botState.gameActive = true;
+    if (typeof COVID19 !== 'undefined') {
+        COVID19.start(room, function(winner) {
+            showGameStats(COVID19);
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
+
 function startCOLLISION() {
     botState.gameActive = true;
     if (typeof COLLISION_TEAM_RACING !== 'undefined') {
@@ -468,16 +599,86 @@ function startCHAIRMIX() {
     }
 }
 
+function startGYMMIX() {
+    botState.gameActive = true;
+    if (typeof GYMMIX !== 'undefined') {
+        GYMMIX.start(room, function(winner) {
+            showGameStats(GYMMIX);
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
+
+function startTRIVIA() {
+    botState.gameActive = true;
+    if (typeof TRIVIA !== 'undefined') {
+        TRIVIA.start(room, function(winner) {
+            showGameStats(TRIVIA);
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
+
+function startGOT() {
+    botState.gameActive = true;
+    if (typeof GOT !== 'undefined') {
+        GOT.start(room, function(winner) {
+            showGameStats(GOT);
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
+
 function loadLuckyMap(winner) {
+    // Mensaje de victoria aleatorio
+    var vMsg = victoryMessages[Math.floor(Math.random() * victoryMessages.length)];
+    room.sendAnnouncement(vMsg, null, 0xFFD700, "bold");
+
+    // Sistema de rachas
+    for (var auth in botState.winStreaks) {
+        if (auth !== winner.auth) {
+            delete botState.winStreaks[auth];
+        }
+    }
+    botState.winStreaks[winner.auth] = (botState.winStreaks[winner.auth] || 0) + 1;
+    var streak = botState.winStreaks[winner.auth];
+    if (streak >= 2) {
+        room.sendAnnouncement("🔥 " + winner.name + " lleva " + streak + " VICTORIAS SEGUIDAS!", null, 0xFF4500, "bold", 2);
+    }
+
     room.setPlayerTeam(winner.id, 1);
-    
+
     var allPlayers = room.getPlayerList().filter(p => p.id !== 0);
     allPlayers.forEach(p => {
         if (p.id !== winner.id) {
             room.setPlayerTeam(p.id, 0);
         }
     });
-    
+
     room.sendAnnouncement(
         "\n🎰 PREPARANDO LUCKY...\n🎲 Cargando la ruleta de la suerte...",
         null,
@@ -534,8 +735,7 @@ function loadLuckyMap(winner) {
                     // Bloquear al jugador para que no pueda cambiar de equipo (ni ser movido)
                     if (botState.spectatorLocked.indexOf(playerId) === -1) {
                         botState.spectatorLocked.push(playerId);
-                        try { room.setPlayerTeam(playerId, 0); } catch(e){}
-                        try { room.sendAnnouncement('👻 Has sido seleccionado para NO jugar el siguiente minijuego', playerId, 0xFF6600, 'bold'); } catch(e){}
+                            try { room.sendAnnouncement('👻 Has sido seleccionado para NO jugar el siguiente minijuego', playerId, 0xFF6600, 'bold'); } catch(e){}
                         // Programar desbloqueo automático (por si algo falla). 90s por defecto.
                         if (botState.spectatorLockedTimers[playerId]) clearTimeout(botState.spectatorLockedTimers[playerId]);
                         botState.spectatorLockedTimers[playerId] = setTimeout(function() {
@@ -545,6 +745,11 @@ function loadLuckyMap(winner) {
                             console.log('🔓 Desbloqueo automático de spectatorLocked para ' + playerId);
                         }, 15000);
                     }
+                },
+                onGayTag: function(playerAuth) {
+                    // Asignar etiqueta GAY por 4 minijuegos
+                    botState.playerTags[playerAuth] = { type: 'GAY', remaining: 4 };
+                    console.log("🌈 Etiqueta GAY asignada a auth: " + playerAuth);
                 },
                 onBanTemp: function(playerId, duration) {
                     // Banear temporalmente
@@ -614,16 +819,35 @@ function checkAndStart() {
         );
         botState.startTimeout = setTimeout(checkAndStart, 10000);
     } else {
+        // Decrementar etiquetas temporales al iniciar nuevo minijuego
+        decrementTempTags();
+
         // SISTEMA DE MINIJUEGOS ALEATORIOS (evitar repetir el último)
         // Durante pruebas, solo habilitamos COLLISION_TEAM_RACING
         // Lista completa de minijuegos disponibles (se habilitan todos)
         // PARA PRUEBAS: solamente SPOT_BONK habilitado
-        // Minijuegos deshabilitados para pruebas — solo CHAIRMIX activo
-        // var minigames = [
-        //     { name: 'CHAIRMIX', module: CHAIRMIX, displayName: 'CHAIRMIX', starter: startCHAIRMIX }
-        // ];
         var minigames = [
-            { name: 'CHAIRMIX', module: CHAIRMIX, displayName: 'CHAIRMIX', starter: startCHAIRMIX }
+            { name: 'LALALA', module: LALALA, displayName: 'LALALA', starter: startLALALA },
+            { name: 'SURVIVAL', module: SURVIVAL, displayName: 'SURVIVAL', starter: startSURVIVAL },
+            { name: 'METEORS', module: METEORS, displayName: 'METEORS', starter: startMETEORS },
+            { name: 'JUMPING', module: JUMPING, displayName: 'JUMPING ARENA', starter: startJUMPING },
+            { name: 'WEBSURVIVAL', module: WEBSURVIVAL, displayName: 'WEB SURVIVAL', starter: startWEBSURVIVAL },
+            { name: 'GALACTIC', module: GALACTIC, displayName: 'GALACTIC FIT', starter: startGALACTIC },
+            { name: 'SPACE_MELEE', module: SPACE_MELEE, displayName: 'SPACE MELEE', starter: startSPACE_MELEE },
+            { name: 'GYM', module: GYM, displayName: 'GYM', starter: startGYM },
+            { name: 'MULTIBALLS', module: MULTIBALLS, displayName: 'MULTIBALLS', starter: startMULTIBALLS },
+            { name: 'DODGEBALL', module: DODGEBALL, displayName: 'DODGEBALL', starter: startDODGEBALL },
+            { name: 'SUPERMAN', module: SUPERMAN, displayName: 'SUPERMAN CHAIR', starter: startSUPERMAN },
+            { name: 'ULTRABALL', module: ULTRABALL, displayName: 'ULTRABALL', starter: startULTRABALL },
+            { name: 'NUMBERCHAIRS', module: NUMBERCHAIRS, displayName: 'NUMBER CHAIRS', starter: startNUMBERCHAIRS },
+            { name: 'SURVIVAL_SQ', module: SURVIVAL_SQ, displayName: 'SURVIVAL SQUARE', starter: startSURVIVAL_SQ },
+            { name: 'COLLISION', module: COLLISION_TEAM_RACING, displayName: 'COLLISION TEAM RACING', starter: startCOLLISION },
+            { name: 'SPOT_BONK', module: SPOT_BONK, displayName: 'SPOT BONK', starter: startSPOT_BONK },
+            { name: 'CHAIRMIX', module: CHAIRMIX, displayName: 'CHAIRMIX', starter: startCHAIRMIX },
+            { name: 'COVID19', module: COVID19, displayName: 'COVID-19', starter: startCOVID19 },
+            { name: 'GYMMIX', module: GYMMIX, displayName: 'GYMMIX - Carrera de Obstaculos', starter: startGYMMIX },
+            { name: 'TRIVIA', module: TRIVIA, displayName: 'TRIVIA', starter: startTRIVIA },
+            { name: 'GOT', module: GOT, displayName: 'GAME OF THRONES', starter: startGOT }
         ];
 
         // Filtrar el último minijuego jugado
@@ -659,14 +883,25 @@ function checkAndStart() {
         
         botState.lastMinigame = selectedGame.name;
         botState.currentMinigame = selectedGame.name;
-        
+        botState.gameActive = true; // Marcar activo INMEDIATAMENTE para evitar duplicados
+
+        // Incrementar gamesPlayed para todos los jugadores presentes
+        var currentPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+        currentPlayers.forEach(function(p) {
+            if (p.auth) {
+                botState.gamesPlayed[p.auth] = (botState.gamesPlayed[p.auth] || 0) + 1;
+            }
+        });
+
+        // Anuncio del minijuego + cuenta regresiva
         room.sendAnnouncement(
-            "🎲 Minijuego: " + selectedGame.displayName + "\n👥 Jugadores: " + playerCount + "\n⏱️ Iniciando en 3 segundos...",
-            null,
-            0x00BFFF,
-            "bold",
-            2
+            "🎲 Proximo: " + selectedGame.displayName + "\n👥 Jugadores: " + playerCount,
+            null, 0x00BFFF, "bold", 2
         );
+        setTimeout(function() { room.sendAnnouncement("⏱️ 3...", null, 0xFFFF00, "bold", 2); }, 500);
+        setTimeout(function() { room.sendAnnouncement("⏱️ 2...", null, 0xFFA500, "bold", 2); }, 1500);
+        setTimeout(function() { room.sendAnnouncement("⏱️ 1...", null, 0xFF6600, "bold", 2); }, 2500);
+
         // Aplicar spectactorNext SOLO para el próximo minijuego: mover a espectador ahora y limpiar la lista
         if (botState.spectatorNext && botState.spectatorNext.length > 0) {
             try {
@@ -676,7 +911,7 @@ function checkAndStart() {
             } catch(e) {}
             botState.spectatorNext = [];
         }
-        botState.startTimeout = setTimeout(selectedGame.starter, 3000);
+        botState.startTimeout = setTimeout(selectedGame.starter, 3500);
     }
 }
 
@@ -789,7 +1024,19 @@ room.onPlayerLeave = function(player) {
     if (CHAIRMIX && CHAIRMIX.isActive && CHAIRMIX.isActive()) {
         try { CHAIRMIX.onPlayerLeave(room, player); } catch(e){}
     }
-    
+    if (COVID19 && COVID19.isActive && COVID19.isActive()) {
+        try { COVID19.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (GYMMIX && GYMMIX.isActive && GYMMIX.isActive()) {
+        try { GYMMIX.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) {
+        try { TRIVIA.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (GOT && GOT.isActive && GOT.isActive()) {
+        try { GOT.onPlayerLeave(room, player); } catch(e){}
+    }
+
     var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
     if (playerCount < 2 && botState.gameActive) {
         room.sendAnnouncement(
@@ -851,7 +1098,16 @@ room.onPlayerLeave = function(player) {
         if (CHAIRMIX && CHAIRMIX.isActive && CHAIRMIX.isActive()) {
             CHAIRMIX.stop(room);
         }
-        
+        if (GYMMIX && GYMMIX.isActive && GYMMIX.isActive()) {
+            GYMMIX.stop(room);
+        }
+        if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) {
+            TRIVIA.stop(room);
+        }
+        if (GOT && GOT.isActive && GOT.isActive()) {
+            GOT.stop(room);
+        }
+
         botState.gameActive = false;
         if (botState.startTimeout) {
             clearTimeout(botState.startTimeout);
@@ -871,13 +1127,9 @@ room.onPlayerLeave = function(player) {
             var currentPlayers = room.getPlayerList().filter(p => p.id !== 0).length;
             if (currentPlayers >= 2) {
                 clearInterval(checkInterval);
-                setTimeout(function() {
-                    checkAndStart();
-                }, 3000);
+                checkAndStart();
             }
         }, 5000);
-        
-        setTimeout(checkAndStart, 3000);
     }
 };
 
@@ -927,7 +1179,7 @@ room.onPlayerChat = function(player, message) {
     if (botState.chatBlocked) {
         return false;
     }
-    
+
     // Control de admins temporales - no pueden usar comandos de admin
     if (botState.tempAdmins.indexOf(player.id) !== -1) {
         if (message.startsWith('!kick') || message.startsWith('!ban') || message.startsWith('!set')) {
@@ -993,7 +1245,31 @@ room.onPlayerChat = function(player, message) {
             if (result === false) return false;
         } catch(e){}
     }
-    
+    if (COVID19 && COVID19.isActive && COVID19.isActive()) {
+        try {
+            var result = COVID19.onPlayerChat(player, message);
+            if (result === false) return false;
+        } catch(e){}
+    }
+    if (GYMMIX && GYMMIX.isActive && GYMMIX.isActive()) {
+        try {
+            var result = GYMMIX.onPlayerChat(player, message);
+            if (result === false) return false;
+        } catch(e){}
+    }
+    if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) {
+        try {
+            var result = TRIVIA.onPlayerChat(player, message);
+            if (result === false) return false;
+        } catch(e){}
+    }
+    if (GOT && GOT.isActive && GOT.isActive()) {
+        try {
+            var result = GOT.onPlayerChat(player, message);
+            if (result === false) return false;
+        } catch(e){}
+    }
+
     if (WEBSURVIVAL.isActive()) {
         var result = WEBSURVIVAL.onPlayerChat(player);
         if (result === false) return false;
@@ -1032,7 +1308,19 @@ room.onPlayerChat = function(player, message) {
         var result = NUMBERCHAIRS.onPlayerChat(player, message);
         if (result === false) return false;
     }
-    
+
+    // Sistema de etiquetas: mostrar tag antes del nombre
+    // Solo para mensajes normales (no comandos)
+    // NOTA: debe ir DESPUES de los checks de modulos para que el chat
+    // se bloquee correctamente durante explicaciones de minijuegos
+    if (!message.startsWith('!')) {
+        var tag = getPlayerTag(player);
+        if (tag) {
+            room.sendAnnouncement(tag.label + ' ' + player.name + ': ' + message, null, tag.color, 'bold');
+            return false;
+        }
+    }
+
     // Comando !discord - enviar link privado al solicitante (cooldown 60s)
     if (message === "!discord") {
         var now = Date.now();
@@ -1083,6 +1371,8 @@ room.onPlayerChat = function(player, message) {
                 if (MULTIBALLS.isActive()) MULTIBALLS.stop(room);
                 if (DODGEBALL.isActive()) DODGEBALL.stop(room);
                 if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) NUMBERCHAIRS.stop(room);
+                if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) TRIVIA.stop(room);
+                if (GOT && GOT.isActive && GOT.isActive()) GOT.stop(room);
                 if (LUCKY.isActive()) LUCKY.stop(room);
                 if (LUCKY_HELL.isActive()) LUCKY_HELL.stop(room);
                 if (LUCKY_DIOS.isActive()) LUCKY_DIOS.stop(room);
