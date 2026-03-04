@@ -37,7 +37,7 @@ function start(room, onGameEnd) {
             console.error('❌ mapData es null o undefined!');
             return;
         }
-        
+
         room.setCustomStadium(mapData);
         console.log('✅ Mapa cargado');
     } catch (e) {

@@ -14,7 +14,8 @@ let gameState = {
     players: [],
     eliminated: [],
     checkInterval: null,
-    chatBlocked: false
+    chatBlocked: false,
+    gameStartTime: null
 };
 
 // Configuración
@@ -36,7 +37,7 @@ const config = {
     // Zona derecha: x >= 420, y entre -200 y 200
     respawnRightX: 420,
     respawnRightMinY: -200,
-    respawnRightMaxY: 200
+    respawnRightMaxY: 200,
 };
 
 // ============================================
@@ -72,6 +73,7 @@ function start(room, onGameEnd) {
     gameState.active = true;
     gameState.players = room.getPlayerList().filter(p => p.id !== 0);
     gameState.eliminated = [];
+    gameState.gameStartTime = null;
     
     room.sendAnnouncement(
         "🎮 GYM - ¡ENTRA A LOS RECUADROS! 🎮\n" +
@@ -92,7 +94,8 @@ function start(room, onGameEnd) {
             "\n📋 INSTRUCCIONES:\n" +
             "⚠️ Entra a los recuadros para evitar las bolas negras\n" +
             "⚫ Si una bola negra te toca, serás eliminado\n" +
-            "🏋️ Las bolas te mandan a los lados cuando te tocan\n" +
+            "🔵 NO TOQUES LO AZUL!\n" +
+            "💨 Cuidado: te deslizas muy rápido\n" +
             "🏆 El último jugador en pie gana!\n\n" +
             "⏱️ El juego comenzará en 5 segundos...",
             null,
@@ -104,6 +107,7 @@ function start(room, onGameEnd) {
         setTimeout(() => {
             room.pauseGame(false);
             gameState.chatBlocked = false;
+            gameState.gameStartTime = Date.now();
             room.sendAnnouncement(
                 "🟢 ¡COMIENZA!",
                 null,
@@ -111,7 +115,7 @@ function start(room, onGameEnd) {
                 "bold",
                 2
             );
-            
+
             // Iniciar verificación INMEDIATAMENTE cuando empieza el juego
             gameState.checkInterval = setInterval(() => checkPlayers(room, onGameEnd), 100);
         }, 5000);
@@ -141,7 +145,7 @@ function checkPlayers(room, onGameEnd) {
         
         var eliminated = false;
         var reason = "";
-        
+
         // Detectar si llegó a la zona de respawn arriba
         // y < -200 (más arriba de -200), x entre -420 y 420
         if (pos.y < config.respawnTopY && 
@@ -226,7 +230,7 @@ function declareWinner(room, winner, onGameEnd) {
     }
     
     room.sendAnnouncement(
-        "\n🏆 ¡" + winner.name.toUpperCase() + " HA GANADO! 🏆\n",
+        "\n🏆 ¡" + winner.name.toUpperCase() + " HA GANADO GYM! 🏆\n🎯 Ultimo jugador en pie!\n",
         null,
         0xFFD700,
         "bold",

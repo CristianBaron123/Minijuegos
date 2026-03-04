@@ -12,7 +12,8 @@ var gameState = {
     checkInterval: null,
     chatBlocked: false,
     gameStartTime: null,
-    firstEliminated: null
+    firstEliminated: null,
+    hasBeenInBounds: {}
 };
 
 const config = {
@@ -58,6 +59,7 @@ function start(room, onGameEnd) {
     gameState.active = true;
     gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
     gameState.eliminated = [];
+    gameState.hasBeenInBounds = {};
     gameState.firstEliminated = null;
     gameState.gameStartTime = null;
 
@@ -115,8 +117,12 @@ function checkPlayers(room, onGameEnd, dangerousDiscs) {
 
         // Fuera de límites (usar el mismo método que en WEB SURVIVAL)
         if (pos.x < config.minX || pos.x > config.maxX || pos.y < config.minY || pos.y > config.maxY) {
+            // Protección de spawn: no eliminar si nunca estuvo dentro
+            if (!gameState.hasBeenInBounds[p.id]) return;
             eliminated = true;
             reason = 'salió del área';
+        } else {
+            gameState.hasBeenInBounds[p.id] = true;
         }
 
         // Colisión con discos peligrosos

@@ -36,6 +36,15 @@ function start(room, onGameEnd) {
     gameState.players = players.map(p => p.id);
     gameState.spectatorPool = [];
 
+    // Si hay cantidad impar de jugadores, mover uno aleatorio a espectador para equilibrar equipos
+    if (gameState.players.length > 2 && (gameState.players.length % 2) === 1) {
+        var rndIdx = Math.floor(Math.random() * gameState.players.length);
+        var movedId = gameState.players.splice(rndIdx, 1)[0];
+        gameState.spectatorPool.push(movedId);
+        try { room.setPlayerTeam(movedId, 0); } catch(e){}
+        room.sendAnnouncement('ℹ️ Se movió a un jugador a espectador para equilibrar equipos (impar).', null, 0xFFFF00);
+    }
+
     // Repartir equipos inicialmente
     shuffleTeams(room);
 
@@ -99,6 +108,29 @@ function runTournament(room) {
                     }
             if (gameState.players.length === 2) {
                 var ids = gameState.players.slice();
+
+                // 50% probabilidad de juego especial 1v1 (Dominic Survivor o Air Hockey)
+                var _finaleGames = [];
+                if (typeof DOMINIC_SURVIVOR !== 'undefined') _finaleGames.push(DOMINIC_SURVIVOR);
+                if (typeof AIR_HOCKEY !== 'undefined') _finaleGames.push(AIR_HOCKEY);
+                if (typeof SURVIVOR_VOL17 !== 'undefined') _finaleGames.push(SURVIVOR_VOL17);
+                if (_finaleGames.length > 0 && Math.random() < 0.50) {
+                    var p1 = room.getPlayerList().find(function(x) { return x.id === ids[0]; });
+                    var p2 = room.getPlayerList().find(function(x) { return x.id === ids[1]; });
+                    if (p1 && p2) {
+                        var _chosenFinale = _finaleGames[Math.floor(Math.random() * _finaleGames.length)];
+                        _chosenFinale.start(room, p1, p2, function(winner) {
+                            if (winner && gameState.callback) {
+                                gameState.callback(winner);
+                            } else if (gameState.callback) {
+                                gameState.callback(null);
+                            }
+                            stop(room);
+                        });
+                        return;
+                    }
+                }
+
                 // Asignar equipos 1 vs 2
                 try { room.setPlayerTeam(ids[0], 1); room.setPlayerTeam(ids[1], 2); } catch(e){}
                 var result = await playMatch(room, ids, config.goalsToWin, config.matchTimeMs);
@@ -157,17 +189,47 @@ function runTournament(room) {
                 // mantener gameState.players como los winners
                 gameState.players = winners.slice();
             } else if (winners.length === 1) {
-                // único ganador => final, enviar a Lucky
-                var p = room.getPlayerList().find(x => x.id === winners[0]);
-                if (p && gameState.callback) gameState.callback({ id: p.id, name: p.name });
-                stop(room);
-                return;
+                // Solo queda 1 — dejar que el loop intente traer espectador para 1v1
+                gameState.players = [winners[0]];
             } else {
                 stop(room); return;
             }
 
             gameState.firstRound = false;
-            // pequeña pausa antes de la siguiente ronda
+            // Verificar jugadores antes de siguiente ronda
+            var activePlayers = gameState.players.filter(function(id) { return !!room.getPlayer(id); });
+            gameState.players = activePlayers;
+            gameState.spectatorPool = gameState.spectatorPool.filter(function(id) { return !!room.getPlayer(id); });
+            // Si impar y hay espectadores, traer uno para equilibrar
+            if (gameState.players.length > 1 && (gameState.players.length % 2) === 1 && gameState.spectatorPool.length > 0) {
+                var rndIdx = Math.floor(Math.random() * gameState.spectatorPool.length);
+                var picked = gameState.spectatorPool.splice(rndIdx, 1)[0];
+                gameState.players.push(picked);
+                try { room.setPlayerTeam(picked, 1); } catch(e){}
+                room.sendAnnouncement('ℹ️ Se trajo un jugador de espectador para equilibrar equipos.', null, 0xFFFF00);
+            }
+            // Si sigue impar (no hay espectadores), mover uno a espectador
+            if (gameState.players.length > 2 && (gameState.players.length % 2) === 1) {
+                var moveIdx = Math.floor(Math.random() * gameState.players.length);
+                var movedToSpec = gameState.players.splice(moveIdx, 1)[0];
+                gameState.spectatorPool.push(movedToSpec);
+                try { room.setPlayerTeam(movedToSpec, 0); } catch(e){}
+            }
+            // Si queda 1 y hay espectador, traerlo para continuar
+            if (gameState.players.length === 1 && gameState.spectatorPool.length > 0) {
+                var rndIdx2 = Math.floor(Math.random() * gameState.spectatorPool.length);
+                var picked2 = gameState.spectatorPool.splice(rndIdx2, 1)[0];
+                gameState.players.push(picked2);
+                try { room.setPlayerTeam(picked2, 1); } catch(e){}
+            }
+            if (gameState.players.length <= 1) {
+                if (gameState.players.length === 1) {
+                    var wp = room.getPlayer(gameState.players[0]);
+                    if (wp && gameState.callback) { var cb = gameState.callback; gameState.callback = null; stop(room); cb({ id: wp.id, name: wp.name }); }
+                    else { stop(room); }
+                } else { var cb = gameState.callback; gameState.callback = null; stop(room); if (cb) cb(null); }
+                return;
+            }
             await new Promise(r => setTimeout(r, 2000));
         }
     })();
@@ -179,13 +241,56 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         var scores = { 1:0, 2:0 };
         var stopped = false;
         var sdTo = null; // sudden-death timeout
-        room.startGame();
 
-        // Establecer equipos según posición en lista (mitad)
+        // Asignar equipos ANTES de iniciar para que spawneen en posicion correcta
+        try { room.stopGame(); } catch(e){}
+
+        // Verificar jugadores validos antes de iniciar
+        var validIds = [];
+        for (var vi = 0; vi < playerIds.length; vi++) {
+            if (room.getPlayer(playerIds[vi])) validIds.push(playerIds[vi]);
+        }
+        playerIds = validIds;
+        if (playerIds.length < 2) { resolve(null); return; }
+        // Si impar y hay espectadores, traer uno para equilibrar
+        if ((playerIds.length % 2) === 1 && gameState.spectatorPool.length > 0) {
+            for (var si = 0; si < gameState.spectatorPool.length; si++) {
+                var sp = gameState.spectatorPool[si];
+                if (room.getPlayer(sp)) {
+                    gameState.spectatorPool.splice(si, 1);
+                    playerIds.push(sp);
+                    if (gameState.players.indexOf(sp) === -1) gameState.players.push(sp);
+                    room.sendAnnouncement('ℹ️ Se trajo un jugador de espectador para equilibrar equipos.', null, 0xFFFF00);
+                    break;
+                }
+            }
+        }
+
+        // Si sigue impar (no habia espectador disponible), mover uno a espectador
+        if ((playerIds.length % 2) === 1) {
+            var moveIdx = Math.floor(Math.random() * playerIds.length);
+            var movedToSpec = playerIds.splice(moveIdx, 1)[0];
+            gameState.spectatorPool.push(movedToSpec);
+            try { room.setPlayerTeam(movedToSpec, 0); } catch(e){}
+            var pIdx = gameState.players.indexOf(movedToSpec);
+            if (pIdx !== -1) gameState.players.splice(pIdx, 1);
+        }
+        if (playerIds.length < 2) { resolve(null); return; }
+
+        // Mover jugadores no participantes a espectador para evitar desbalance
+        var allP = room.getPlayerList();
+        for (var ni = 0; ni < allP.length; ni++) {
+            if (allP[ni].id === 0) continue;
+            if (playerIds.indexOf(allP[ni].id) === -1) {
+                try { room.setPlayerTeam(allP[ni].id, 0); } catch(e){}
+            }
+        }
+
         var half = Math.floor(playerIds.length/2);
         for (var i=0;i<playerIds.length;i++) {
             try { room.setPlayerTeam(playerIds[i], i < half ? 1 : 2); } catch(e){}
         }
+        room.startGame();
 
         // Handler de gol
         var prevOnGoal = room.onTeamGoal;
@@ -205,26 +310,20 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         var to = setTimeout(function() {
             if (stopped) return;
             stopped = true;
-            // Si nadie anotó, considerar que no hubo resultado
-            if (scores[1] === 0 && scores[2] === 0) {
-                room.sendAnnouncement('\n⚠️ No hubo goles en el partido. Empate sin resultado.', null, 0xFF6600);
-                cleanupAndResolve(null);
-                return;
-            }
-
-            // Si está empate con goles, entrar a TIEMPO EXTRA de muerte súbita: SIGUIENTE GOL GANA (sin límite)
+            // Si hay empate (incluyendo 0-0), entrar a TIEMPO EXTRA muerte súbita: SIGUIENTE GOL GANA
             if (scores[1] === scores[2]) {
                 room.sendAnnouncement('\n⚡ Empate. Tiempo extra Muerte Súbita: SIGUIENTE GOL GANA (sin límite)...', null, 0xFFFF00);
-                // sobrescribir onTeamGoal temporalmente para resolver al primer gol (sin timeout)
+                stopped = false;
                 room.onTeamGoal = function(team) {
                     if (stopped) return;
                     stopped = true;
+                    room.sendAnnouncement('⚽ ¡GOL! Equipo ' + (team===1?'🔴':'🔵') + ' GANA en muerte súbita!', null, 0xFFD700, 'bold', 2);
                     cleanupAndResolve(team);
                 };
                 return;
             }
 
-            // decidir por mayor score (si empate lógica anterior no llega aquí)
+            // decidir por mayor score
             var winnerTeam = (scores[1] > scores[2] ? 1 : 2);
             cleanupAndResolve(winnerTeam);
         }, timeMs);
@@ -246,6 +345,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             var half = Math.floor(playerIds.length/2);
             for (var i=0;i<playerIds.length;i++) {
                 var id = playerIds[i];
+                if (!room.getPlayer(id)) continue;
                 var teamOf = (i < half) ? 1 : 2;
                 if (teamOf === team) winners.push(id); else losers.push(id);
             }
@@ -259,6 +359,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
 function stop(room) {
     gameState.active = false;
     gameState.stopRequested = true;
+    gameState.firstRound = true;
     gameState.players = [];
     gameState.spectatorPool = [];
     try { room.stopGame(); } catch(e){}
@@ -266,7 +367,24 @@ function stop(room) {
 
 function onPlayerLeave(room, player) {
     var idx = gameState.players.indexOf(player.id);
-    if (idx !== -1) gameState.players.splice(idx,1);
+    if (idx !== -1) gameState.players.splice(idx, 1);
+    var idx2 = gameState.spectatorPool.indexOf(player.id);
+    if (idx2 !== -1) gameState.spectatorPool.splice(idx2, 1);
+    // Si queda 1 jugador, gana automaticamente
+    if (gameState.active && gameState.players.length === 1) {
+        var winnerId = gameState.players[0];
+        var winner = room.getPlayerList().find(function(p) { return p.id === winnerId; });
+        var cb = gameState.callback;
+        gameState.callback = null;
+        stop(room);
+        if (winner && cb) cb({ id: winner.id, name: winner.name });
+        else if (cb) cb(null);
+    } else if (gameState.active && gameState.players.length === 0) {
+        var cb = gameState.callback;
+        gameState.callback = null;
+        stop(room);
+        if (cb) cb(null);
+    }
 }
 
 function onPlayerChat(room, player, message) {
@@ -278,14 +396,14 @@ function isActive() { return gameState.active; }
 
 // Helpers
 function shuffleTeams(room) {
-    var players = room.getPlayerList().filter(p => p.id !== 0);
-    for (var i = players.length - 1; i > 0; i--) {
+    var ids = gameState.players.slice();
+    for (var i = ids.length - 1; i > 0; i--) {
         var j = Math.floor(Math.random() * (i + 1));
-        var tmp = players[i]; players[i] = players[j]; players[j] = tmp;
+        var tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
     }
-    var half = Math.floor(players.length / 2);
-    for (var i = 0; i < players.length; i++) {
-        try { room.setPlayerTeam(players[i].id, i < half ? 1 : 2); } catch(e){}
+    var half = Math.floor(ids.length / 2);
+    for (var i = 0; i < ids.length; i++) {
+        try { room.setPlayerTeam(ids[i], i < half ? 1 : 2); } catch(e){}
     }
 }
 

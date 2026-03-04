@@ -2,228 +2,141 @@
 // MINIJUEGO: METEORS SURVIVAL - Esquiva los meteoritos
 // ============================================
 
-// NOTA: El mapa será inyectado por bot.js
-// No se carga aquí para evitar problemas con fs en el contexto del navegador
-// ⚠️ IMPORTANTE: mapData debe ser una STRING JSON, no un objeto JavaScript
-// Haxball's room.setCustomStadium() requiere string JSON
-let mapData = null; // Será inyectado desde bot.js como string JSON
+var mapData = null;
 
-// Estado del juego
-let gameState = {
+var gameState = {
     active: false,
     players: [],
     eliminated: [],
     checkInterval: null,
-    chatBlocked: false
+    chatBlocked: false,
+    hasBeenInBounds: {}
 };
 
-// Configuración
-const config = {
+var config = {
     minPlayers: 2,
-    outOfBoundsDistance: 350  // Si |X| > 350 o |Y| > 350 = fuera del mapa
+    arena: {
+        minX: -350,
+        maxX: 350,
+        minY: -350,
+        maxY: 350
+    },
+    checkMs: 100,
+    explanationMs: 5000
 };
 
-// ============================================
-// INICIAR JUEGO
-// ============================================
 function start(room, onGameEnd) {
-    console.log('☄️ METEORS - Iniciando juego...');
-    console.log('📊 Jugadores:', room.getPlayerList().filter(p => p.id !== 0).length);
-    
-    room.setCustomStadium(mapData);
-    console.log('✅ Mapa cargado');
-    
-    // Revolver y asignar equipos
-    shuffleTeams(room);
-    console.log('✅ Equipos asignados');
-    
+    if (gameState.active) return;
     gameState.active = true;
-    gameState.players = room.getPlayerList().filter(p => p.id !== 0);
-    gameState.eliminated = [];
-    
-    // Mover a espectador a los jugadores que deben estar en spectator
-    botState.spectatorNext.forEach(function(playerId) {
-        var player = room.getPlayer(playerId);
-        if (player) {
-            room.setPlayerTeam(playerId, 0);
-            room.sendAnnouncement(
-                "👻 " + player.name + " debe esperar este minijuego",
-                null,
-                0xFF6600,
-                "bold"
-            );
+
+    // Verificacion 1: cargar mapa al inicio
+    try {
+        if (!mapData) {
+            console.error('❌ METEORS: mapData no disponible');
+        } else {
+            room.setCustomStadium(mapData);
         }
-    });
-    // Limpiar la lista después de aplicar
-    botState.spectatorNext = [];
-    
-    room.sendAnnouncement(
-        "🎮 METEORS SURVIVAL 🎮\n" +
-        "👥 Jugadores: " + gameState.players.length,
-        null,
-        0x8B4513,
-        "bold",
-        2
-    );
-    
-    setTimeout(() => {
+    } catch (e) { console.error('❌ METEORS: fallo al cargar mapa', e && e.message); }
+
+    // Todos al mismo equipo
+    var players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
+    for (var k = 0; k < players.length; k++) {
+        try { room.setPlayerTeam(players[k].id, 1); } catch(e){}
+    }
+
+    gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
+    gameState.eliminated = [];
+    gameState.hasBeenInBounds = {};
+
+    room.sendAnnouncement('☄️ METEORS SURVIVAL\n👥 Jugadores: ' + gameState.players.length, null, 0x8B4513, 'bold', 2);
+
+    setTimeout(function(){
+        // Verificacion 2: confirmar mapa antes de iniciar
+        try { room.setCustomStadium(mapData); } catch(e){}
         room.startGame();
-        room.pauseGame(true);
-        
+        try { room.pauseGame(true); } catch(e){}
         gameState.chatBlocked = true;
-        
+
         room.sendAnnouncement(
-            "\n📋 INSTRUCCIONES:\n" +
-            "☄️ Esquiva los meteoritos negros que se mueven\n" +
-            "⚠️ Puedes tocarlos a veces, pero cuidado!\n" +
-            "🚫 Si te empujan fuera del área, quedas ELIMINADO\n" +
-            "🏆 El último jugador dentro del área gana!\n\n" +
-            "⏱️ El juego comenzará en 5 segundos...",
-            null,
-            0xFFFF00,
-            "bold",
-            2
+            '\n📋 INSTRUCCIONES:\n' +
+            '☄️ Esquiva los meteoritos negros!\n' +
+            '🚫 Si te empujan fuera del area, quedas ELIMINADO\n' +
+            '🏆 El ultimo jugador dentro del area gana!\n\n' +
+            '⏱️ Comienza en 5s...',
+            null, 0xFFFF00, 'bold', 2
         );
-        
-        setTimeout(() => {
-            room.pauseGame(false);
+
+        setTimeout(function(){
+            try { room.pauseGame(false); } catch(e){}
             gameState.chatBlocked = false;
-            room.sendAnnouncement(
-                "🟢 ¡COMIENZA!",
-                null,
-                0x00FF00,
-                "bold",
-                2
-            );
-        }, 5000);
+            room.sendAnnouncement('🟢 ¡COMIENZA METEORS SURVIVAL!', null, 0x00FF00, 'bold', 2);
+        }, config.explanationMs);
     }, 1500);
-    
-    // Esperar 8 segundos antes de empezar a verificar
-    setTimeout(() => {
-        gameState.checkInterval = setInterval(() => checkPlayers(room, onGameEnd), 100);
+
+    setTimeout(function(){
+        gameState.checkInterval = setInterval(function(){ checkPlayers(room, onGameEnd); }, config.checkMs);
     }, 8500);
 }
 
-// ============================================
-// VERIFICAR JUGADORES
-// ============================================
 function checkPlayers(room, onGameEnd) {
     if (!gameState.active) return;
-    
-    const alivePlayers = [];
-    
-    gameState.players.forEach(p => {
+
+    var minX = config.arena.minX, maxX = config.arena.maxX, minY = config.arena.minY, maxY = config.arena.maxY;
+    var alivePlayers = [];
+
+    gameState.players.forEach(function(p){
         if (gameState.eliminated.indexOf(p.id) !== -1) return;
-        
-        const player = room.getPlayer(p.id);
-        if (!player) {
+
+        var pl = room.getPlayer(p.id);
+        if (!pl) {
             gameState.eliminated.push(p.id);
-            room.sendAnnouncement("❌ " + p.name + " se desconectó", null, 0xFF6600);
             return;
         }
-        
-        const pos = player.position;
-        if (!pos) return;
-        
-        // Verificar si está fuera de los límites
-        const outOfBounds = Math.abs(pos.x) > config.outOfBoundsDistance || 
-                           Math.abs(pos.y) > config.outOfBoundsDistance;
-        
-        if (outOfBounds && gameState.eliminated.indexOf(p.id) === -1) {
+
+        var px = (typeof pl.x === 'number') ? pl.x : (pl.position && typeof pl.position.x === 'number' ? pl.position.x : null);
+        var py = (typeof pl.y === 'number') ? pl.y : (pl.position && typeof pl.position.y === 'number' ? pl.position.y : null);
+        if (px === null || py === null) return;
+
+        var eliminated = false;
+        if (px < minX || px > maxX || py < minY || py > maxY) {
+            if (!gameState.hasBeenInBounds[p.id]) return;
+            eliminated = true;
+        } else {
+            gameState.hasBeenInBounds[p.id] = true;
+        }
+
+        if (eliminated && gameState.eliminated.indexOf(p.id) === -1) {
             gameState.eliminated.push(p.id);
-            room.setPlayerTeam(p.id, 0);
-            
-            const remaining = gameState.players.length - gameState.eliminated.length;
-            room.sendAnnouncement(
-                "☄️ " + p.name + " fue expulsado fuera del área! (" + remaining + " restantes)",
-                null,
-                0xFF6600
-            );
-        } else if (!outOfBounds) {
+            try { room.setPlayerTeam(p.id, 0); } catch(e){}
+            var remaining = gameState.players.length - gameState.eliminated.length;
+            room.sendAnnouncement('☄️ ' + p.name + ' fue expulsado fuera del area! (' + remaining + ' restantes)', null, 0xFF6600);
+        } else if (!eliminated) {
             alivePlayers.push(p);
         }
     });
-    
-    // Verificar condiciones de victoria
+
     if (alivePlayers.length === 1) {
-        declareWinner(room, alivePlayers[0], onGameEnd);
+        var winner = alivePlayers[0];
+        if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+        gameState.active = false;
+        room.sendAnnouncement('\n🏆 ¡' + winner.name.toUpperCase() + ' HA GANADO METEORS SURVIVAL! 🏆', null, 0xFFD700, 'bold', 2);
+        setTimeout(function(){ if (onGameEnd) onGameEnd(winner); }, 1000);
     } else if (alivePlayers.length === 0 && gameState.eliminated.length > 0) {
-        room.sendAnnouncement("❌ No hay ganador - todos fueron expulsados", null, 0xFF0000);
+        room.sendAnnouncement('❌ No hay ganador - todos fueron eliminados', null, 0xFF0000);
         stop(room);
         if (onGameEnd) onGameEnd(null);
     }
 }
 
-// ============================================
-// DECLARAR GANADOR
-// ============================================
-function declareWinner(room, winner, onGameEnd) {
-    gameState.active = false;
-    
-    if (gameState.checkInterval) {
-        clearInterval(gameState.checkInterval);
-        gameState.checkInterval = null;
-    }
-    
-    room.sendAnnouncement(
-        "\n🏆 ¡¡¡" + winner.name.toUpperCase() + " HA GANADO!!! 🏆\n",
-        null,
-        0xFFD700,
-        "bold",
-        2
-    );
-    
-    setTimeout(() => {
-        if (onGameEnd) {
-            onGameEnd(winner);
-        }
-    }, 3000);
-}
-
-// ============================================
-// REVOLVER Y ASIGNAR EQUIPOS
-// ============================================
-function shuffleTeams(room) {
-    const players = room.getPlayerList().filter(p => p.id !== 0);
-    
-    // Algoritmo de Fisher-Yates para revolver array
-    for (let i = players.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [players[i], players[j]] = [players[j], players[i]];
-    }
-    
-    // Dividir en dos equipos
-    const halfPoint = Math.floor(players.length / 2);
-    
-    players.forEach((player, index) => {
-        if (index < halfPoint) {
-            room.setPlayerTeam(player.id, 1);  // Equipo rojo
-        } else {
-            room.setPlayerTeam(player.id, 2);  // Equipo azul
-        }
-    });
-}
-
-// ============================================
-// DETENER JUEGO
-// ============================================
 function stop(room) {
+    if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
     gameState.active = false;
-    
-    if (gameState.checkInterval) {
-        clearInterval(gameState.checkInterval);
-        gameState.checkInterval = null;
-    }
-    
     gameState.players = [];
     gameState.eliminated = [];
-    
-    room.stopGame();
+    gameState.chatBlocked = false;
+    try { room.stopGame(); } catch(e){}
 }
 
-// ============================================
-// EVENTOS
-// ============================================
 function onPlayerLeave(room, player) {
     if (gameState.active && gameState.eliminated.indexOf(player.id) === -1) {
         gameState.eliminated.push(player.id);
@@ -231,24 +144,19 @@ function onPlayerLeave(room, player) {
 }
 
 function onPlayerChat(player) {
-    if (gameState.chatBlocked) {
-        return false;
-    }
+    if (gameState.chatBlocked) return false;
     return true;
 }
 
-function isActive() {
-    return gameState.active;
-}
+function setMapData(m) { mapData = m; }
 
-// ============================================
-// EXPORTAR
-// ============================================
+function isActive() { return gameState.active; }
+
 module.exports = {
-    config: config,
     start: start,
     stop: stop,
     onPlayerLeave: onPlayerLeave,
     onPlayerChat: onPlayerChat,
+    setMapData: setMapData,
     isActive: isActive
 };

@@ -14,7 +14,8 @@ let gameState = {
     players: [],
     eliminated: [],
     checkInterval: null,
-    chatBlocked: false
+    chatBlocked: false,
+    hasBeenInBounds: {} // protección de spawn
 };
 
 // Configuración
@@ -40,23 +41,8 @@ function start(room, onGameEnd) {
     gameState.active = true;
     gameState.players = room.getPlayerList().filter(p => p.id !== 0);
     gameState.eliminated = [];
-    
-    // Mover a espectador a los jugadores que deben estar en spectator
-    botState.spectatorNext.forEach(function(playerId) {
-        var player = room.getPlayer(playerId);
-        if (player) {
-            room.setPlayerTeam(playerId, 0);
-            room.sendAnnouncement(
-                "👻 " + player.name + " debe esperar este minijuego",
-                null,
-                0xFF6600,
-                "bold"
-            );
-        }
-    });
-    // Limpiar la lista después de aplicar
-    botState.spectatorNext = [];
-    
+    gameState.hasBeenInBounds = {};
+
     room.sendAnnouncement(
         "🎮 SURVIVAL ROOM 🎮\n" +
         "👥 Jugadores: " + gameState.players.length,
@@ -129,11 +115,15 @@ function checkPlayers(room, onGameEnd) {
         
         // Detectar si salió del área (empujado por los discos negros)
         if (Math.abs(pos.x) > config.outOfBoundsDistance || Math.abs(pos.y) > config.outOfBoundsDistance) {
+            // Protección de spawn: no eliminar si nunca estuvo dentro
+            if (!gameState.hasBeenInBounds[p.id]) return;
             eliminated = true;
             reason = "salió del área";
             console.log("💀 " + p.name + " salió del área - X: " + pos.x.toFixed(0) + ", Y: " + pos.y.toFixed(0));
+        } else {
+            gameState.hasBeenInBounds[p.id] = true;
         }
-        
+
         if (eliminated && gameState.eliminated.indexOf(p.id) === -1) {
             gameState.eliminated.push(p.id);
             room.setPlayerTeam(p.id, 0);
@@ -195,6 +185,7 @@ function stop(room) {
     gameState.players = [];
     gameState.eliminated = [];
     gameState.chatBlocked = false;
+    try { room.stopGame(); } catch(e){}
 }
 
 // ============================================

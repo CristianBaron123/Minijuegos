@@ -18,8 +18,8 @@ var LUCKY = (function() {
         { name: 'AMARILLO', color: 'FFFF00', x: -10, minX: -30, maxX: 10, effect: 'kick_current' },
         { name: 'AZUL', color: '0000FF', x: 30, minX: 10, maxX: 50, effect: 'protection' },
         { name: 'VERDE', color: '4BE608', x: 70, minX: 50, maxX: 90, effect: 'choose_kick' },
-        { name: 'ROJO', color: 'FF0000', x: 110, minX: 90, maxX: 130, effect: 'choose_admin' },
-        { name: 'ROJO OSCURO', color: '8B0000', x: 150, minX: 130, maxX: 170, effect: 'receive_admin' },
+        { name: 'ROJO', color: 'FF0000', x: 110, minX: 90, maxX: 130, effect: 'choose_money_5k' },
+        { name: 'ROJO OSCURO', color: '8B0000', x: 150, minX: 130, maxX: 170, effect: 'receive_money_5k' },
         { name: 'DORADO', color: 'D2AB0B', x: 190, minX: 170, maxX: 210, effect: 'choose_ban_1min' },
         { name: 'CELESTE', color: '93C9FF', x: 230, minX: 210, maxX: 250, effect: 'repeat_roulette' },
         { name: 'MORADO', color: '800180', x: 270, minX: 250, maxX: 290, effect: 'choose_spectator_next' },
@@ -40,7 +40,7 @@ var LUCKY = (function() {
         detectionBuffer: [],  // Buffer para confirmar detecciones
         lastDetectedZone: null,
         callbacks: {
-            onTempAdmin: null,
+            onReceiveMoney: null,
             onSpectatorNext: null,
             onBanTemp: null
         },
@@ -126,7 +126,10 @@ var LUCKY = (function() {
         gameState.selectionEffect = { type: effectType, data: effectData };
         
         var players = room.getPlayerList().filter(function(p) {
-            return p.id !== 0 && p.id !== gameState.winner.id;
+            if (p.id === 0 || p.id === gameState.winner.id) return false;
+            // Excluir jugadores AFK
+            if (gameState.callbacks.isAfk && gameState.callbacks.isAfk(p.id)) return false;
+            return true;
         });
         
         if (players.length === 0) {
@@ -152,8 +155,8 @@ var LUCKY = (function() {
             case 'choose_kick':
                 purpose = "para KICKEAR";
                 break;
-            case 'choose_admin':
-                purpose = "para dar ADMIN";
+            case 'choose_money_5k':
+                purpose = "para dar $5.000";
                 break;
             case 'choose_ban_1min':
                 purpose = "para BANEAR por 1 minuto";
@@ -310,6 +313,10 @@ var LUCKY = (function() {
         
         switch(effect.type) {
             case 'choose_kick':
+                if (gameState.callbacks.isProtected && gameState.callbacks.isProtected(targetPlayer.id)) {
+                    room.sendAnnouncement("🛡️ " + targetPlayer.name + " está PROTEGIDO! Kick cancelado", null, 0x0000FF, "bold", 2);
+                    break;
+                }
                 room.sendAnnouncement(
                     "⚡ " + targetPlayer.name + " ha sido KICKEADO por " + gameState.winner.name,
                     null,
@@ -318,27 +325,30 @@ var LUCKY = (function() {
                     2
                 );
                 setTimeout(function() {
+                    var _tAuth = (typeof botState !== 'undefined' && botState.authMap) ? botState.authMap[targetPlayer.id] : null;
+                    if (_tAuth && typeof botState !== 'undefined') botState.kickedByGame[_tAuth] = true;
                     room.kickPlayer(targetPlayer.id, "Kickeado por " + gameState.winner.name, false);
                 }, 2000);
                 break;
-                
-            case 'choose_admin':
+
+            case 'choose_money_5k':
                 room.sendAnnouncement(
-                    "👑 " + targetPlayer.name + " recibe ADMIN temporal (otorgado por " + gameState.winner.name + ")",
+                    "💰 " + targetPlayer.name + " recibe $5.000 (otorgado por " + gameState.winner.name + ")",
                     null,
                     0xFF0000,
                     "bold",
                     2
                 );
-                room.sendAnnouncement("⚠️ Admin temporal: NO puedes kickear, banear ni cambiar mapas", targetPlayer.id, 0xFFFF00, "bold");
-                // Dar permisos de admin visible
-                room.setPlayerAdmin(targetPlayer.id, true);
-                if (gameState.callbacks.onTempAdmin) {
-                    gameState.callbacks.onTempAdmin(targetPlayer.id);
+                if (gameState.callbacks.onReceiveMoney) {
+                    gameState.callbacks.onReceiveMoney(targetPlayer.id, targetPlayer.name, 5000);
                 }
                 break;
                 
             case 'choose_ban_1min':
+                if (gameState.callbacks.isProtected && gameState.callbacks.isProtected(targetPlayer.id)) {
+                    room.sendAnnouncement("🛡️ " + targetPlayer.name + " está PROTEGIDO! Ban cancelado", null, 0x0000FF, "bold", 2);
+                    break;
+                }
                 room.sendAnnouncement(
                     "⚔️ " + targetPlayer.name + " ha sido BANEADO por 1 MINUTO (por " + gameState.winner.name + ")",
                     null,
@@ -365,6 +375,7 @@ var LUCKY = (function() {
                 break;
                 
             case 'choose_pass_roulette':
+                if (gameState.callbacks.onLuckyPass) gameState.callbacks.onLuckyPass(gameState.winner.id, targetPlayer.id);
                 room.sendAnnouncement(
                     "🔀 " + gameState.winner.name + " le pasa la ruleta a " + targetPlayer.name,
                     null,
@@ -379,6 +390,15 @@ var LUCKY = (function() {
                     try { room.setCustomStadium(mapLuck); } catch(e){}
                     try { room.startGame(); } catch(e){}
                     try { room.setPlayerTeam(targetPlayer.id, 1); } catch(e){}
+
+                    // Mover a todos los demás jugadores a espectador
+                    var allPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+                    allPlayers.forEach(function(p) {
+                        if (p.id !== targetPlayer.id) {
+                            try { room.setPlayerTeam(p.id, 0); } catch(e){}
+                        }
+                    });
+
                     // Cambiar el ganador por el nuevo jugador y resetear detección
                     gameState.winner = targetPlayer;
                     gameState.colorDetected = false;
@@ -405,6 +425,7 @@ var LUCKY = (function() {
                 return; // No llamar finishEffect aún
                 
             case 'choose_dios_player':
+                if (gameState.callbacks.onLuckyPass) gameState.callbacks.onLuckyPass(gameState.winner.id, targetPlayer.id);
                 room.sendAnnouncement(
                     "⭐ " + targetPlayer.name + " tirará la RULETA DE DIOS (elegido por " + gameState.winner.name + ")",
                     null,
@@ -414,13 +435,23 @@ var LUCKY = (function() {
                 );
                 setTimeout(function() {
                     stop(room, true); // Detener Lucky normal sin invocar onGameEnd
+                    if (typeof stopReplay === 'function') stopReplay(); // Enviar replay del Lucky
                     room.stopGame();
                     room.setCustomStadium(mapLuckDios);
                     room.startGame();
-                    
+                    if (typeof startReplay === 'function') startReplay('Lucky Dios - ' + targetPlayer.name);
+
                     setTimeout(function() {
                         room.setPlayerTeam(targetPlayer.id, 1);
-                        
+
+                        // Mover a todos los demás a espectador (incluido el que escogió)
+                        var allPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+                        allPlayers.forEach(function(p) {
+                            if (p.id !== targetPlayer.id) {
+                                try { room.setPlayerTeam(p.id, 0); } catch(e){}
+                            }
+                        });
+
                         // Iniciar Lucky DIOS
                         if (typeof LUCKY_DIOS !== 'undefined' && LUCKY_DIOS.start) {
                             LUCKY_DIOS.start(room, targetPlayer, gameState.onGameEnd, gameState.callbacks);
@@ -443,6 +474,10 @@ var LUCKY = (function() {
         switch(effect) {
             case 'ban_current':
                 // NARANJA: Ban temporal por 60 segundos (usar callback centralizado)
+                if (gameState.callbacks.isProtected && gameState.callbacks.isProtected(winner.id)) {
+                    room.sendAnnouncement("🛡️ " + winner.name + " está PROTEGIDO! Ban cancelado", null, 0x0000FF, "bold", 2);
+                    finishEffect(room); break;
+                }
                 room.sendAnnouncement("⚔️ Has sido BANEADO por 60 segundos!", winner.id, 0xFF8C00, "bold", 2);
                 if (gameState.callbacks && gameState.callbacks.onBanTemp) {
                     gameState.callbacks.onBanTemp(winner.id, 60);
@@ -455,9 +490,11 @@ var LUCKY = (function() {
                 room.sendAnnouncement("✨ Cargando RULETA DE DIOS...", null, 0xFFFFFF, "bold", 2);
                 setTimeout(function() {
                     stop(room, true); // Detener Lucky normal sin invocar onGameEnd (se cambiará mapa)
+                    if (typeof stopReplay === 'function') stopReplay(); // Enviar replay del Lucky
                     room.stopGame();
                     room.setCustomStadium(mapLuckDios);
                     room.startGame();
+                    if (typeof startReplay === 'function') startReplay('Lucky Dios - ' + winner.name);
                     
                     setTimeout(function() {
                         room.setPlayerTeam(winner.id, 1);
@@ -482,16 +519,23 @@ var LUCKY = (function() {
                 
             case 'kick_current':
                 // AMARILLO: Kickeado
+                if (gameState.callbacks.isProtected && gameState.callbacks.isProtected(winner.id)) {
+                    room.sendAnnouncement("🛡️ " + winner.name + " está PROTEGIDO! Kick cancelado", null, 0x0000FF, "bold", 2);
+                    finishEffect(room); break;
+                }
                 room.sendAnnouncement("⚡ " + winner.name + " ha sido KICKEADO!", null, 0xFFFF00, "bold", 2);
                 setTimeout(function() {
+                    var _wAuth = (typeof botState !== 'undefined' && botState.authMap) ? botState.authMap[winner.id] : null;
+                    if (_wAuth && typeof botState !== 'undefined') botState.kickedByGame[_wAuth] = true;
                     room.kickPlayer(winner.id, "Kickeado por caer en AMARILLO", false);
                     finishEffect(room);
                 }, 2000);
                 break;
                 
             case 'protection':
-                // AZUL: Protección
-                room.sendAnnouncement("🛡️ " + winner.name + " ¡SALVADO POR EL CONDÓN! 🛡️", null, 0x0000FF, "bold", 2);
+                // AZUL: Protección - otorga escudo para el próximo Lucky
+                room.sendAnnouncement("🛡️ " + winner.name + " ¡SALVADO POR EL CONDÓN! 🛡️\n🛡️ Tiene protección para el próximo Lucky!", null, 0x0000FF, "bold", 2);
+                if (gameState.callbacks.onProtection) gameState.callbacks.onProtection(winner.id);
                 finishEffect(room);
                 break;
                 
@@ -501,20 +545,17 @@ var LUCKY = (function() {
                 startSelection(room, 'choose_kick');
                 break;
                 
-            case 'choose_admin':
-                // ROJO: Escoger admin
-                room.sendAnnouncement("👑 " + winner.name + " debe ESCOGER UN ADMIN", null, 0xFF0000, "bold", 2);
-                startSelection(room, 'choose_admin');
+            case 'choose_money_5k':
+                // ROJO: Escoger a quien dar $5.000
+                room.sendAnnouncement("💰 " + winner.name + " debe ESCOGER A QUIEN DAR $5.000", null, 0xFF0000, "bold", 2);
+                startSelection(room, 'choose_money_5k');
                 break;
-                
-            case 'receive_admin':
-                // ROJO OSCURO: Recibe admin
-                room.sendAnnouncement("👑 " + winner.name + " recibe ADMIN temporal!", null, 0x8B0000, "bold", 2);
-                room.sendAnnouncement("⚠️ Admin temporal: NO puedes kickear, banear ni cambiar mapas", winner.id, 0xFFFF00, "bold");
-                // Dar permisos de admin visible
-                room.setPlayerAdmin(winner.id, true);
-                if (gameState.callbacks.onTempAdmin) {
-                    gameState.callbacks.onTempAdmin(winner.id);
+
+            case 'receive_money_5k':
+                // ROJO OSCURO: Recibe $5.000
+                room.sendAnnouncement("💰 " + winner.name + " recibe $5.000!", null, 0x8B0000, "bold", 2);
+                if (gameState.callbacks.onReceiveMoney) {
+                    gameState.callbacks.onReceiveMoney(winner.id, winner.name, 5000);
                 }
                 finishEffect(room);
                 break;
@@ -533,18 +574,26 @@ var LUCKY = (function() {
                     room.setCustomStadium(mapLuck);
                     room.startGame();
                     room.setPlayerTeam(winner.id, 1);
-                    
+
+                    // Mover a todos los demás jugadores a espectador
+                    var allPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+                    allPlayers.forEach(function(p) {
+                        if (p.id !== winner.id) {
+                            try { room.setPlayerTeam(p.id, 0); } catch(e){}
+                        }
+                    });
+
                     // Reiniciar Lucky completamente
                     gameState.colorDetected = false;
                     gameState.detectionBuffer = [];
                     gameState.lastDetectedZone = null;
                     gameState.startTime = Date.now(); // RESETEAR TIEMPO para timeout global
-                    
+
                     // Cancelar timeout global anterior si existe
                     if (gameState.globalTimeout) {
                         clearTimeout(gameState.globalTimeout);
                     }
-                    
+
                     // Nuevo timeout global
                     gameState.globalTimeout = setTimeout(function() {
                         if (gameState.active && !gameState.colorDetected) {
@@ -553,7 +602,7 @@ var LUCKY = (function() {
                             finishEffect(room);
                         }
                     }, config.maxGameTime);
-                    
+
                     // Reiniciar detección con timeout completo
                     setTimeout(function() {
                         if (gameState.active) {
@@ -574,38 +623,51 @@ var LUCKY = (function() {
             case 'gay_message':
                 // ROSA: Mensaje gay + etiqueta GAY por 4 minijuegos
                 room.sendAnnouncement("🌈 " + winner.name + " ES GAY 🌈\n📛 Tendrá la etiqueta [GAY] por 4 minijuegos", null, 0xFFC0CB, "bold", 2);
-                if (gameState.callbacks.onGayTag) {
-                    gameState.callbacks.onGayTag(winner.auth);
+                if (gameState.callbacks.onGayTag && winner) {
+                    // Obtener auth del authMap (auth solo disponible en onPlayerJoin)
+                    var winnerAuth = (typeof botState !== 'undefined' && botState.authMap && botState.authMap[winner.id])
+                        ? botState.authMap[winner.id] : winner.auth;
+                    if (winnerAuth) {
+                        gameState.callbacks.onGayTag(winnerAuth);
+                    } else {
+                        console.error("[LUCKY] No se pudo asignar etiqueta GAY - auth no disponible para " + winner.name);
+                    }
                 }
                 finishEffect(room);
                 break;
                 
             case 'choose_pass_roulette':
-                // VIOLETA: Escoge a quien le pasa la ruleta
-                room.sendAnnouncement("🔀 " + winner.name + " debe ESCOGER A QUIEN LE PASA LA RULETA", null, 0x7400FF, "bold", 2);
-                startSelection(room, 'choose_pass_roulette');
+                // VIOLETA: Skip - salta al siguiente minijuego
+                room.sendAnnouncement("⏭️ " + winner.name + " cayó en VIOLETA: SKIP!", null, 0x7400FF, "bold", 2);
+                finishEffect(room);
                 break;
                 
             case 'load_luck_hell':
                 // NEGRO: Cargar ruleta de hell
                 room.sendAnnouncement("💀 Cargando RULETA DEL INFIERNO...", null, 0x000000, "bold", 2);
+                // Guardar callbacks ANTES de stop (stop los limpia)
+                var savedOnGameEnd = gameState.onGameEnd;
+                var savedCallbacks = gameState.callbacks;
                 setTimeout(function() {
-                    stop(room); // Detener Lucky normal
+                    stop(room, true); // suppressCallback=true para NO llamar onGameEnd prematuramente
+                    if (typeof stopReplay === 'function') stopReplay(); // Enviar replay del Lucky
                     room.stopGame();
                     room.setCustomStadium(mapLuckHell);
                     room.startGame();
+                    if (typeof startReplay === 'function') startReplay('Lucky Hell - ' + winner.name);
                     room.setPlayerTeam(winner.id, 1);
-                    
-                    // Iniciar Lucky HELL
+
+                    // Iniciar Lucky HELL con el callback guardado
                     if (typeof LUCKY_HELL !== 'undefined') {
-                        LUCKY_HELL.start(room, winner, gameState.onGameEnd, {
-                            onBanTemp: gameState.callbacks.onBanTemp
+                        LUCKY_HELL.start(room, winner, savedOnGameEnd, {
+                            onBanTemp: savedCallbacks ? savedCallbacks.onBanTemp : null,
+                            onLuckyPass: savedCallbacks ? savedCallbacks.onLuckyPass : null
                         });
                     } else {
                         // Si no existe el módulo, terminar después de 30s
                         setTimeout(function() {
-                            if (gameState.onGameEnd) {
-                                gameState.onGameEnd();
+                            if (savedOnGameEnd) {
+                                savedOnGameEnd();
                             }
                         }, 30000);
                     }
@@ -613,9 +675,9 @@ var LUCKY = (function() {
                 break;
                 
             case 'choose_dios_player':
-                // CIAN: Escoge a alguien para que tire ruleta de dios
-                room.sendAnnouncement("⭐ " + winner.name + " debe ESCOGER QUIEN TIRA LA RULETA DE DIOS", null, 0x00FFFF, "bold", 2);
-                startSelection(room, 'choose_dios_player');
+                // CIAN: Skip - salta al siguiente minijuego
+                room.sendAnnouncement("⏭️ " + winner.name + " cayó en CIAN: SKIP!", null, 0x00FFFF, "bold", 2);
+                finishEffect(room);
                 break;
                 
             default:
@@ -735,15 +797,16 @@ var LUCKY = (function() {
     }
 
     function onPlayerLeave(player) {
-        // Si el ganador se desconecta durante una selección, cancelar y finalizar
         try {
-            if (!gameState.active) return;
-            if (gameState.selectionActive && gameState.winner && player && player.id === gameState.winner.id) {
+            if (!gameState.active || !player) return;
+            // Si el ganador se desconecta/kickean, cancelar todo y finalizar Lucky
+            if (gameState.winner && player.id === gameState.winner.id) {
                 if (gameState.room) {
-                    gameState.room.sendAnnouncement('⚠️ El ganador se desconectó durante la selección. Cancelando selección y finalizando Lucky.', null, 0xFF6600, 'bold');
+                    gameState.room.sendAnnouncement('⚠️ El ganador (' + player.name + ') salió. Finalizando Lucky.', null, 0xFF6600, 'bold');
                 }
                 try { cancelSelection(); } catch(e){}
-                try { finishEffect(gameState.room); } catch(e){}
+                stop(gameState.room);
+                return;
             }
             // Si el jugador desconectado estaba en playerList, removerlo para evitar selecciones inválidas
             if (gameState.playerList && player) {
@@ -758,6 +821,10 @@ var LUCKY = (function() {
         mapLuckHell = hell;
     }
     
+    function getCurrentPlayer() {
+        return gameState.winner;
+    }
+
     return {
         config: config,
         colorZones: colorZones,
@@ -766,6 +833,7 @@ var LUCKY = (function() {
         isActive: isActive,
         onPlayerChat: onPlayerChat,
         onPlayerLeave: onPlayerLeave,
+        getCurrentPlayer: getCurrentPlayer,
         setMaps: setMaps
     };
 })();

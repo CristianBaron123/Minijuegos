@@ -20,7 +20,7 @@ var config = {
     minPlayers: 2,
     checkMs: 150,
     explanationMs: 5000,
-    maxGameTime: 180000, // 3 minutos maximo
+    maxGameTime: 1800000, // 30 minutos maximo (practicamente sin limite)
     // Zonas validas del recorrido (rectangulares, con margen generoso)
     // Cada zona cubre una seccion de la pista; si el jugador esta en ALGUNA, esta en pista
     trackZones: [
@@ -53,8 +53,8 @@ var config = {
         // Zona 14: Area de meta
         { minX: 10700, maxX: 11350, minY: -220, maxY: 220 }
     ],
-    // Zona de meta: el cuadrado al final del mapa
-    winZone: { minX: 10780, maxX: 11220, minY: -180, maxY: 180 }
+    // Zona de meta: cuadrado pequeño al final (coordenadas exactas del mapa)
+    winZone: { minX: 10925, maxX: 10970, minY: -25, maxY: 25 }
 };
 
 function isPlayerOnTrack(pos) {
@@ -109,6 +109,8 @@ function start(room, onGameEnd) {
             '\n📋 INSTRUCCIONES:\n' +
             '🏃 Recorre la pista de obstaculos de izquierda a derecha\n' +
             '⚠️ Esquiva las bolas y obstaculos que se mueven\n' +
+            '🔵 NO TOQUES LO AZUL!\n' +
+            '💨 Cuidado: te deslizas muy rapido\n' +
             '🔲 El primero en llegar al cuadrado del final GANA\n' +
             '❌ Si sales de la pista, quedas eliminado\n\n' +
             '⏱️ El juego comenzara en 5 segundos...',

@@ -11,7 +11,8 @@ var gameState = {
     checkInterval: null,
     explanationPhase: false,
     chatBlocked: false,
-    callback: null
+    callback: null,
+    hasBeenInBounds: {}
 };
 
 var config = {
@@ -56,6 +57,7 @@ function start(room, onGameEnd) {
     }
 
     gameState.active = true;
+    gameState.hasBeenInBounds = {};
     gameState.players = players.map(p => ({ id: p.id, name: p.name, alive: true, team: 1 }));
 
     // Determinar cantidad de azules (tiradores)
@@ -127,6 +129,8 @@ function checkPlayers(room) {
         // Fuera del cuadro = eliminado (solo afecta a ROJOS)
         if (pos.x < config.arena.minX || pos.x > config.arena.maxX || pos.y < config.arena.minY || pos.y > config.arena.maxY) {
             if (p.team === 1) {
+                // Protección de spawn: no eliminar si nunca estuvo dentro
+                if (!gameState.hasBeenInBounds[p.id]) return;
                 eliminatePlayer(room, p, 'salió del cuadro');
             } else {
                 // Ignorar azules fuera del cuadro (no afectan al conteo de rojos)
@@ -134,6 +138,8 @@ function checkPlayers(room) {
                 try { room.setPlayerTeam(p.id, 2); } catch(e){}
             }
             return;
+        } else {
+            gameState.hasBeenInBounds[p.id] = true;
         }
 
         // Impacto con bola: solamente se considera si la opción está desactivada

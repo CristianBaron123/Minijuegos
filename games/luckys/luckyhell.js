@@ -140,7 +140,12 @@ const LUCKY_HELL = (function() {
         gameState.selection.active = true;
         gameState.selection.explanation = true;
         gameState.selection.effect = { type: effectType, data: effectData };
-        gameState.selection.playerList = room.getPlayerList().filter(function(p){ return p.id !== 0 && (!gameState.currentPlayer || p.id !== gameState.currentPlayer.id); });
+        gameState.selection.playerList = room.getPlayerList().filter(function(p){
+            if (p.id === 0) return false;
+            if (gameState.currentPlayer && p.id === gameState.currentPlayer.id) return false;
+            if (gameState.callbacks && gameState.callbacks.isAfk && gameState.callbacks.isAfk(p.id)) return false;
+            return true;
+        });
 
         if (gameState.selection.playerList.length === 0) {
             room.sendAnnouncement('⚠️ No hay otros jugadores para seleccionar', null, 0xFF6600, 'bold');
@@ -210,6 +215,7 @@ const LUCKY_HELL = (function() {
         if (!eff) { finishEffect(room); return; }
         switch(eff.type) {
             case 'pass_hell':
+                if (gameState.callbacks && gameState.callbacks.onLuckyPass && gameState.currentPlayer) gameState.callbacks.onLuckyPass(gameState.currentPlayer.id, target.id);
                 room.sendAnnouncement('🔀 '+(gameState.currentPlayer?gameState.currentPlayer.name:'Jugador')+' le pasa LUCKY HELL a '+target.name, null, 0x00FF00, 'bold', 2);
                 setTimeout(function(){
                     // Detener y recargar mapa, mover equipos: current -> espectador, target -> rojo
@@ -238,10 +244,17 @@ const LUCKY_HELL = (function() {
     }
 
     function executeEffect(room, zone) {
+        // Detener deteccion inmediatamente para evitar doble-trigger
+        if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+
         var player = gameState.currentPlayer;
         switch(zone.effect) {
             case 'ban_current':
                 if (!player) { finishEffect(room); return; }
+                if (gameState.callbacks && gameState.callbacks.isProtected && gameState.callbacks.isProtected(player.id)) {
+                    room.sendAnnouncement('🛡️ '+player.name+' está PROTEGIDO! Ban cancelado', null, 0x0000FF, 'bold', 2);
+                    finishEffect(room); return;
+                }
                 room.sendAnnouncement('⚔️ '+player.name+' ha sido BANEADO por 1 MINUTO (Lucky HELL)', null, 0x0000FF, 'bold', 2);
                 if (gameState.callbacks && gameState.callbacks.onBanTemp) gameState.callbacks.onBanTemp(player.id, 60);
                 finishEffect(room);
@@ -259,6 +272,8 @@ const LUCKY_HELL = (function() {
                     var pls = room.getPlayerList();
                     pls.forEach(function(p){
                         if (p && p.id !== 0) {
+                            var _pAuth = (typeof botState !== 'undefined' && botState.authMap) ? botState.authMap[p.id] : null;
+                            if (_pAuth && typeof botState !== 'undefined') botState.kickedByGame[_pAuth] = true;
                             try { room.kickPlayer(p.id, 'Has sido kickeado por cierre de Lucky HELL', false); } catch(e){}
                         }
                     });
@@ -326,5 +341,24 @@ const LUCKY_HELL = (function() {
 
     function setMap(m) { map = m; }
 
-    return { start: start, stop: stop, isActive: isActive, onPlayerChat: onPlayerChat, setMap: setMap, config: config, zones: zones };
+    function getCurrentPlayer() { return gameState.currentPlayer; }
+
+    function onPlayerLeave(player) {
+        try {
+            if (!gameState.active || !player) return;
+            if (gameState.currentPlayer && player.id === gameState.currentPlayer.id) {
+                if (gameState.room) {
+                    gameState.room.sendAnnouncement('⚠️ El jugador (' + player.name + ') salió. Finalizando Lucky HELL.', null, 0xFF6600, 'bold');
+                }
+                try { cancelSelection(); } catch(e){}
+                stop(gameState.room);
+                return;
+            }
+            if (gameState.selection && gameState.selection.playerList) {
+                gameState.selection.playerList = gameState.selection.playerList.filter(function(p){ return p.id !== player.id; });
+            }
+        } catch(e) { console.error('[LUCKY_HELL] onPlayerLeave error', e); }
+    }
+
+    return { start: start, stop: stop, isActive: isActive, onPlayerChat: onPlayerChat, onPlayerLeave: onPlayerLeave, getCurrentPlayer: getCurrentPlayer, setMap: setMap, config: config, zones: zones };
 })();
