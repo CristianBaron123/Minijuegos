@@ -20,12 +20,24 @@ let gameState = {
 // Configuración
 const config = {
     minPlayers: 2,
-    // Rectángulo válido definido por vértices A(-500,500), B(500,500), C(500,-528), D(-500,-528)
-    // Usamos: minX, maxX, minY, maxY
     minX: -500,
     maxX: 500,
     minY: -528,
-    maxY: 500
+    maxY: 500,
+    // Radio reducido para encoger jugadores
+    playerRadius: 8,
+    // Spawn points dentro de la telaraña, lejos de las arañas
+    // Arañas están en (~270,270) y (~-290,-175), centro web en (~5,42)
+    redSpawns: [
+        [-90, -30], [-70, 10], [-50, 50], [-30, 90], [-10, 130],
+        [-100, 20], [-80, 60], [-60, 100], [-40, -10], [-20, 30],
+        [-90, 70], [-70, 110], [-50, -20], [-30, 40], [-10, 80]
+    ],
+    blueSpawns: [
+        [100, -30], [80, 10], [60, 50], [40, 90], [20, 130],
+        [90, 20], [70, 60], [50, 100], [30, -10], [10, 30],
+        [80, 70], [60, 110], [40, -20], [20, 40], [0, 80]
+    ]
 };
 
 // ============================================
@@ -41,8 +53,27 @@ function start(room, onGameEnd) {
             console.error('❌ mapData es null o undefined!');
             return;
         }
-        
-        room.setCustomStadium(mapData);
+
+        // Modificar mapa: encoger jugadores y poner spawns dentro de la telaraña
+        var modifiedMap = mapData;
+        try {
+            var mapObj = (typeof mapData === 'string') ? JSON.parse(mapData) : mapData;
+            // Encoger jugadores
+            if (mapObj.playerPhysics) {
+                mapObj.playerPhysics.radius = config.playerRadius;
+            } else {
+                mapObj.playerPhysics = { radius: config.playerRadius };
+            }
+            // Poner spawns dentro de la telaraña, lejos de las arañas
+            mapObj.redSpawnPoints = config.redSpawns;
+            mapObj.blueSpawnPoints = config.blueSpawns;
+            modifiedMap = JSON.stringify(mapObj);
+            console.log('✅ Mapa modificado: radio=' + config.playerRadius + ', spawns dentro de telaraña');
+        } catch(parseErr) {
+            console.error('⚠️ No se pudo modificar mapa, usando original:', parseErr.message);
+        }
+
+        room.setCustomStadium(modifiedMap);
         console.log('✅ Mapa cargado');
     } catch (e) {
         console.error('❌ Error al cargar mapa:', e.message);

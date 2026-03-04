@@ -10,7 +10,8 @@ var gameState = {
     active: false,
     checkInterval: null,
     players: [],
-    chatBlocked: false
+    chatBlocked: false,
+    hasBeenInBounds: {}
 };
 
 var config = {
@@ -42,6 +43,7 @@ function start(room, onEnd) {
     try { shuffleTeams(room); } catch (e) {}
 
     gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
+    gameState.hasBeenInBounds = {};
 
     room.sendAnnouncement('🎲 Minijuego: SPACE MELEE\n👥 Jugadores: ' + gameState.players.length + '\n⏱️ Iniciando en 3 segundos...', null, 0x00BFFF, 'bold', 2);
 
@@ -81,10 +83,14 @@ function checkPlayers(room, onEnd) {
             if (p.team === 0) return;
 
             if (isOutside(x, y)) {
+                // Protección de spawn: no eliminar si nunca estuvo dentro
+                if (!gameState.hasBeenInBounds[p.id]) return;
                 try {
                     room.setPlayerTeam(p.id, 0);
                     room.sendAnnouncement('❌ ' + p.name + ' eliminado (salió del área)', null, 0xFF0000);
                 } catch(e) {}
+            } else {
+                gameState.hasBeenInBounds[p.id] = true;
             }
         } catch(e) {}
     });
@@ -115,6 +121,7 @@ function stop(room) {
     gameState.active = false;
     gameState.players = [];
     gameState.chatBlocked = false;
+    try { room.stopGame(); } catch(e){}
 }
 
 function shuffleTeams(room) {

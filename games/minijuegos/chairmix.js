@@ -10,12 +10,14 @@ var gameState = {
     players: [],
     eliminated: [],
     checkInterval: null,
-    chatBlocked: false
+    chatBlocked: false,
+    hasBeenInBounds: {}
 };
 
 // Configuración: usar los datos que proporcionaste
 var config = {
     minPlayers: 2,
+    maxPlayersPerTeam: 10, // Máximo 10 por equipo (20 total) para evitar amontonamiento
     // Arena rectangular (usar coordenadas proporcionadas)
     arena: {
         minX: -204,
@@ -38,15 +40,55 @@ function start(room, onGameEnd) {
         if (!mapData) {
             console.error('❌ CHAIRMIX: mapData no disponible');
         } else {
-            room.setCustomStadium(mapData);
+            // Inyectar spawn points dentro del hueco circular (radio ~120)
+            var modifiedMap = mapData;
+            try {
+                var mapObj = (typeof mapData === 'string') ? JSON.parse(mapData) : mapData;
+                // 10 puntos por equipo (max 10 por equipo = 20 total)
+                // 2 columnas x 5 filas, radio 65-100
+                mapObj.redSpawnPoints = [
+                    [-65, -60], [-90, -45],
+                    [-65, -25], [-90, -10],
+                    [-65, 10],  [-90, 10],
+                    [-65, 30],  [-90, 45],
+                    [-65, 60],  [-90, 60]
+                ];
+                mapObj.blueSpawnPoints = [
+                    [65, -60], [90, -45],
+                    [65, -25], [90, -10],
+                    [65, 10],  [90, 10],
+                    [65, 30],  [90, 45],
+                    [65, 60],  [90, 60]
+                ];
+                modifiedMap = JSON.stringify(mapObj);
+            } catch(parseErr) {
+                console.error('⚠️ CHAIRMIX: no se pudo modificar mapa:', parseErr.message);
+            }
+            room.setCustomStadium(modifiedMap);
         }
     } catch (e) { console.error('❌ CHAIRMIX: fallo al cargar mapa', e && e.message); }
 
-    // Mezclar equipos (usa misma lógica que LALALA)
-    try { shuffleTeams(room); } catch(e) {}
+    // Si hay más de 20 jugadores, no cargar este mapa (demasiados para la arena)
+    var allPlayers = room.getPlayerList().filter(function(p){ return p.id !== 0; });
+    var maxTotal = config.maxPlayersPerTeam * 2;
+    if (allPlayers.length > maxTotal) {
+        gameState.active = false;
+        if (onGameEnd) onGameEnd(null);
+        return;
+    }
 
-    gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
+    // Mezclar equipos alternando para colisión
+    for (var si2 = allPlayers.length - 1; si2 > 0; si2--) {
+        var sj2 = Math.floor(Math.random() * (si2 + 1));
+        var stmp2 = allPlayers[si2]; allPlayers[si2] = allPlayers[sj2]; allPlayers[sj2] = stmp2;
+    }
+    for (var k = 0; k < allPlayers.length; k++) {
+        try { room.setPlayerTeam(allPlayers[k].id, (k % 2 === 0) ? 1 : 2); } catch(e){}
+    }
+
+    gameState.players = allPlayers;
     gameState.eliminated = [];
+    gameState.hasBeenInBounds = {};
 
     room.sendAnnouncement('🎲 Minijuego: CHAIRMIX\n👥 Jugadores: ' + gameState.players.length + '\n⏱️ Iniciando en 3 segundos...', null, 0x00BFFF, 'bold', 2);
 
@@ -96,8 +138,15 @@ function checkPlayers(room, onGameEnd) {
         // Rectangular check: if player outside box -> eliminated
         var eliminated = false;
         if (px < minX || px > maxX || py < minY || py > maxY) {
+            // Protección de spawn: no eliminar si nunca estuvo dentro
+            if (!gameState.hasBeenInBounds[p.id]) {
+                alivePlayers.push(p);
+                return;
+            }
             eliminated = true;
             console.log('💀 ' + p.name + ' salió del área rectangular - X:' + px.toFixed(0) + ' Y:' + py.toFixed(0));
+        } else {
+            gameState.hasBeenInBounds[p.id] = true;
         }
 
         if (eliminated && gameState.eliminated.indexOf(p.id) === -1) {
@@ -145,19 +194,6 @@ function onPlayerChat(player) {
 function setMapData(m) { mapData = m; }
 
 function isActive() { return gameState.active; }
-
-// Copiar shuffleTeams (misma lógica que LALALA)
-function shuffleTeams(room) {
-    var players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
-    for (var i = players.length - 1; i > 0; i--) {
-        var j = Math.floor(Math.random() * (i + 1));
-        var tmp = players[i]; players[i] = players[j]; players[j] = tmp;
-    }
-    var half = Math.floor(players.length / 2);
-    for (var k = 0; k < players.length; k++) {
-        try { room.setPlayerTeam(players[k].id, (k < half) ? 1 : 2); } catch(e){}
-    }
-}
 
 module.exports = {
     start: start,

@@ -19,7 +19,7 @@ var gameState = {
 var usedQuestions = [];
 
 var config = {
-    answerTimeMs: 15000, // 15 segundos para responder
+    answerTimeMs: 30000, // 30 segundos para responder
     explanationMs: 15000 // 15 segundos para leer la pregunta (pausado)
 };
 
@@ -159,7 +159,7 @@ function start(room, onGameEnd) {
             'C) ' + q.c + '\n' +
             'D) ' + q.d + '\n\n' +
             '👉 Muevete a la zona de tu respuesta!\n' +
-            '⏱️ Tienes 15 segundos...',
+            '⏱️ Tienes 30 segundos...',
             null, 0xFFFF00, 'bold', 2
         );
 
@@ -173,8 +173,8 @@ function start(room, onGameEnd) {
             // Aviso a mitad de tiempo
             var halfWarn = setTimeout(function() {
                 if (!gameState.active) return;
-                room.sendAnnouncement('⏱️ Quedan 7 segundos...', null, 0xFFA500, 'bold', 2);
-            }, 8000);
+                room.sendAnnouncement('⏱️ Quedan 15 segundos...', null, 0xFFA500, 'bold', 2);
+            }, 15000);
             gameState.revealTimeouts.push(halfWarn);
 
             // Al terminar el tiempo, verificar respuestas

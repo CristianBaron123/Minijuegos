@@ -11,7 +11,8 @@ var gameState = {
     checkInterval: null,
     chatBlocked: false,
     explanationPhase: false,
-    callback: null
+    callback: null,
+    hasBeenInBounds: {}
 };
 
 var config = {
@@ -28,6 +29,7 @@ function start(room, onGameEnd) {
     if (!mapData) { console.error('[SURVIVAL_SQ] mapData no inyectado.'); if (onGameEnd) onGameEnd(null); return; }
     gameState.callback = onGameEnd || null;
     gameState.eliminated = [];
+    gameState.hasBeenInBounds = {};
 
     // Obtener jugadores y asignar equipos ANTES de cargar el mapa
     var players = room.getPlayerList().filter(p => p.id !== 0);
@@ -76,11 +78,14 @@ function checkPlayers(room) {
         if (!pos) continue;
 
         if (pos.x < config.minX || pos.x > config.maxX || pos.y < config.minY || pos.y > config.maxY) {
+            // Protección de spawn: no eliminar si nunca estuvo dentro
+            if (!gameState.hasBeenInBounds[pInfo.id]) continue;
             // Eliminado
             gameState.eliminated.push(pInfo.id);
             try { room.setPlayerTeam(pInfo.id, 0); } catch(e){}
             room.sendAnnouncement('❌ ' + pInfo.name + ' salió del cuadro y fue eliminado', null, 0xFF6600);
         } else {
+            gameState.hasBeenInBounds[pInfo.id] = true;
             alive.push(pInfo);
         }
     }
