@@ -21,8 +21,8 @@ var config = {
     firstExplanationMs: 5000,
     matchTimeMs: 90000,
     checkMs: 100,
-    redZone: { minX: -432, maxX: 0, minY: -180, maxY: 179 },
-    blueZone: { minX: 0, maxX: 432, minY: -180, maxY: 179 }
+    redZone: { minX: -432, maxX: 0, minY: -180, maxY: 180 },
+    blueZone: { minX: 0, maxX: 432, minY: -180, maxY: 180 }
 };
 
 function start(room, onGameEnd) {
@@ -104,7 +104,8 @@ function runTournament(room) {
                 var _finaleGames = [];
                 if (typeof DOMINIC_SURVIVOR !== 'undefined') _finaleGames.push(DOMINIC_SURVIVOR);
                 if (typeof AIR_HOCKEY !== 'undefined') _finaleGames.push(AIR_HOCKEY);
-                if (typeof SURVIVOR_VOL17 !== 'undefined') _finaleGames.push(SURVIVOR_VOL17);
+                if (typeof GOL_A_GOL !== 'undefined') _finaleGames.push(GOL_A_GOL);
+                if (typeof SPACE_VORTEX !== 'undefined') _finaleGames.push(SPACE_VORTEX);
                 if (_finaleGames.length > 0 && Math.random() < 0.50) {
                     var p1 = room.getPlayerList().find(function(x) { return x.id === ids[0]; });
                     var p2 = room.getPlayerList().find(function(x) { return x.id === ids[1]; });

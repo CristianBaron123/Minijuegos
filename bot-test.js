@@ -14,7 +14,7 @@ process.env.TEST_MODE = 'true';
 // Si está vacío [], se cargan TODOS los minijuegos (como en producción)
 // ============================================
 process.env.TEST_GAMES = JSON.stringify([
-    'IMPOSTOR'
+    'ZOMBIE_RUN'
 ]);
 
 require('./bot.js');

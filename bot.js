@@ -4,8 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./db');
 
-// Token de Haxball
-const HAXBALL_TOKEN = "thr1.AAAAAGl_okIBMBkfgD5Nuw._Rjq_nJJiH4";
+// Token de Haxball (puede venir de variable de entorno o hardcoded)
+const HAXBALL_TOKEN = process.env.HAXBALL_TOKEN || "thr1.AAAAAGl_okIBMBkfgD5Nuw._Rjq_nJJiH4";
 
 // ============================================
 // CONFIGURACIÓN DE OWNER (DUEÑO DE LA SALA)
@@ -123,8 +123,19 @@ const mapDodgeballPath = path.join(__dirname, 'Mapas', 'Dodgeball by MC.hbs');
 const mapDodgeballData = fs.readFileSync(mapDodgeballPath, 'utf8');
 const mapDodgeballV2Path = path.join(__dirname, 'Mapas', 'Dodgeball v2 _ Leo.hbs');
 const mapDodgeballV2Data = fs.readFileSync(mapDodgeballV2Path, 'utf8');
-const mapNumberChairsPath = path.join(__dirname, 'Mapas', 'NumberChairs v2 by Şerefli Şeref [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
+const mapNumberChairsPath = path.join(__dirname, 'Numberchair', 'NumberChairs v2 by Şerefli Şeref [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
 const mapNumberChairsData = fs.readFileSync(mapNumberChairsPath, 'utf8');
+
+// Cargar todos los mapas NumberChairs v2-v21
+const numberChairMaps = {};
+numberChairMaps[2] = mapNumberChairsData;
+const numberChairDir = path.join(__dirname, 'Numberchair');
+for (let v = 3; v <= 21; v++) {
+    const files = fs.readdirSync(numberChairDir).filter(f => f.includes('-v' + v + '-'));
+    if (files.length > 0) {
+        numberChairMaps[v] = fs.readFileSync(path.join(numberChairDir, files[0]), 'utf8');
+    }
+}
 
 const mapChairMixPath = path.join(__dirname, 'Mapas', 'ChairMix by Vhagar.hbs');
 const mapChairMixData = fs.readFileSync(mapChairMixPath, 'utf8');
@@ -328,6 +339,94 @@ const mapNamajunasRace2Data = fs.readFileSync(mapNamajunasRace2Path, 'utf8');
 const mapImpostorPath = path.join(__dirname, 'Mapas', 'chair.hbs');
 const mapImpostorData = fs.readFileSync(mapImpostorPath, 'utf8');
 
+// Map: FCT 1
+const mapFCT1Path = path.join(__dirname, 'Mapas', 'FCT 1 - Falafels Collision Team 1.hbs');
+const mapFCT1Data = fs.readFileSync(mapFCT1Path, 'utf8');
+
+// Map: Fit in Graveyard
+const mapGraveyardPath = path.join(__dirname, 'Mapas', 'Fit in (Graveyard) by Galactic Boy [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
+const mapGraveyardData = fs.readFileSync(mapGraveyardPath, 'utf8');
+
+// Map: Futbol Callejero
+const mapFutbolCallejeroPath = path.join(__dirname, 'Mapas', 'Futbol callejero a las piñas.hbs');
+const mapFutbolCallejeroData = fs.readFileSync(mapFutbolCallejeroPath, 'utf8');
+
+// Map: Gol a Gol
+const mapGolAGolPath = path.join(__dirname, 'Mapas', 'Gol a Gol by SalgadoDoce goal from HaxMaps.hbs');
+const mapGolAGolData = fs.readFileSync(mapGolAGolPath, 'utf8');
+
+// Map: Gym 5.3 Colors
+const mapGymColorsPath = path.join(__dirname, 'Mapas', 'Gym 5.3 Colors by Şerefli Şeref [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
+const mapGymColorsData = fs.readFileSync(mapGymColorsPath, 'utf8');
+
+// Map: Gym 9
+const mapGym9Path = path.join(__dirname, 'Mapas', 'Gym 9 from HaxMaps.hbs');
+const mapGym9Data = fs.readFileSync(mapGym9Path, 'utf8');
+
+// Map: Matrix Fit
+const mapMatrixFitPath = path.join(__dirname, 'Mapas', 'Matrix Fit by Vhagar [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
+const mapMatrixFitData = fs.readFileSync(mapMatrixFitPath, 'utf8');
+
+// Map: Race 02
+const mapRace02Path = path.join(__dirname, 'Mapas', 'Race 02 by MC from HaxMaps.hbs');
+const mapRace02Data = fs.readFileSync(mapRace02Path, 'utf8');
+
+// Map: Plum
+const mapPlumPath = path.join(__dirname, 'Mapas', 'Plum from HaxMaps.hbs');
+const mapPlumData = fs.readFileSync(mapPlumPath, 'utf8');
+
+// Map: RUN Rebound 2
+const mapRunRebound2Path = path.join(__dirname, 'Mapas', 'RUN rebound 2 by pagus.hbs');
+const mapRunRebound2Data = fs.readFileSync(mapRunRebound2Path, 'utf8');
+
+// Map: Swing Cannons
+const mapSwingCannonsPath = path.join(__dirname, 'Mapasbeta', 'Swing-3-Cannons-by-kara-aytac-8-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_62636226478f4.hbs');
+const mapSwingCannonsData = fs.readFileSync(mapSwingCannonsPath, 'utf8');
+
+// Map: Survival Insect
+const mapSurvivalInsectPath = path.join(__dirname, 'Mapasbeta', 'Survival-From-Insect-by-FY-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_64c62a1d6140d.hbs');
+const mapSurvivalInsectData = fs.readFileSync(mapSurvivalInsectPath, 'utf8');
+
+// Map: Run Luck
+const mapRunLuckPath = path.join(__dirname, 'Mapasbeta', 'Run-Luck-By-Beru-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_6512efefb172b (1).hbs');
+const mapRunLuckData = fs.readFileSync(mapRunLuckPath, 'utf8');
+
+// Map: Pinball Roulette
+const mapPinballRoulettePath = path.join(__dirname, 'Mapasbeta', 'KOR-P.-CECH-Pinball-Roulette-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_6534bd14f1879.hbs');
+const mapPinballRouletteData = fs.readFileSync(mapPinballRoulettePath, 'utf8');
+
+// Map: Jumping Survival
+const mapJumpingSurvivalPath = path.join(__dirname, 'Mapasbeta', 'Jumping-Survival-by-Serefli-Seref-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae1e1af196f.hbs');
+const mapJumpingSurvivalData = fs.readFileSync(mapJumpingSurvivalPath, 'utf8');
+
+// Map: Shaolin Soccer
+const mapShaolinSoccerPath = path.join(__dirname, 'Mapas', 'Shaolin Soccer [gargus] V2 Edit [\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D].hbs');
+const mapShaolinSoccerData = fs.readFileSync(mapShaolinSoccerPath, 'utf8');
+
+// Map: Space Vortex
+const mapSpaceVortexPath = path.join(__dirname, 'Mapas', 'Space Vortex _Asdman.hbs');
+const mapSpaceVortexData = fs.readFileSync(mapSpaceVortexPath, 'utf8');
+
+// Map: SpaceBounce Power
+const mapSpaceBouncePowerPath = path.join(__dirname, 'Mapas', 'SpaceBounce Power from HaxMaps.hbs');
+const mapSpaceBouncePowerData = fs.readFileSync(mapSpaceBouncePowerPath, 'utf8');
+
+// Map: B.T.L
+const mapBtlPath = path.join(__dirname, 'Mapas', 'B.T.L-by-Serefli-Seref-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae180ad2466.hbs');
+const mapBtlData = fs.readFileSync(mapBtlPath, 'utf8');
+
+// Map: Bonk Summer
+const mapBonkSummerPath = path.join(__dirname, 'Mapas', 'Bonk-Summer-by-Serefli-Seref-20-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae18e96d540.hbs');
+const mapBonkSummerData = fs.readFileSync(mapBonkSummerPath, 'utf8');
+
+// Map: Basketball
+const mapBasketballPath = path.join(__dirname, 'Mapas', '\u0299\u1D00s\u1D0B\u1D07\u1D1B\u0299\u1D00\u029F\u029F \uD83C\uDFC0 By GLH.hbs');
+const mapBasketballData = fs.readFileSync(mapBasketballPath, 'utf8');
+
+// Map: Bonk Winter
+const mapBonkWinterPath = path.join(__dirname, 'Mapas', 'Bonk-Winter-by-Serefli-Seref-20-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae19074320f.hbs');
+const mapBonkWinterData = fs.readFileSync(mapBonkWinterPath, 'utf8');
+
 // Cargar mapas de luckys
 const mapLuckPath = path.join(__dirname, 'Lucks', 'Lucky-Map-2-by-Meeelany-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_667a7e7e87381.hbs');
 const mapLuckData = fs.readFileSync(mapLuckPath, 'utf8');
@@ -528,6 +627,86 @@ const namajunasRaceModuleCode = fs.readFileSync(namajunasRaceModulePath, 'utf8')
 const namajunasRace2ModulePath = path.join(__dirname, 'games', 'minijuegos', 'namajunas_race2.js');
 const namajunasRace2ModuleCode = fs.readFileSync(namajunasRace2ModulePath, 'utf8');
 
+const fct1ModulePath = path.join(__dirname, 'games', 'minijuegos', 'fct1.js');
+const fct1ModuleCode = fs.readFileSync(fct1ModulePath, 'utf8');
+
+const graveyardModulePath = path.join(__dirname, 'games', 'minijuegos', 'fit_in_graveyard.js');
+const graveyardModuleCode = fs.readFileSync(graveyardModulePath, 'utf8');
+
+const futbolCallejeroModulePath = path.join(__dirname, 'games', 'minijuegos', 'futbol_callejero.js');
+const futbolCallejeroModuleCode = fs.readFileSync(futbolCallejeroModulePath, 'utf8');
+
+const golAGolModulePath = path.join(__dirname, 'games', 'minijuegos', 'gol_a_gol.js');
+const golAGolModuleCode = fs.readFileSync(golAGolModulePath, 'utf8');
+
+const gymColorsModulePath = path.join(__dirname, 'games', 'minijuegos', 'gym_colors.js');
+const gymColorsModuleCode = fs.readFileSync(gymColorsModulePath, 'utf8');
+
+const gym9ModulePath = path.join(__dirname, 'games', 'minijuegos', 'gym9.js');
+const gym9ModuleCode = fs.readFileSync(gym9ModulePath, 'utf8');
+
+const matrixFitModulePath = path.join(__dirname, 'games', 'minijuegos', 'matrix_fit.js');
+const matrixFitModuleCode = fs.readFileSync(matrixFitModulePath, 'utf8');
+
+const race02ModulePath = path.join(__dirname, 'games', 'minijuegos', 'race02.js');
+const race02ModuleCode = fs.readFileSync(race02ModulePath, 'utf8');
+
+const plumModulePath = path.join(__dirname, 'games', 'minijuegos', 'plum.js');
+const plumModuleCode = fs.readFileSync(plumModulePath, 'utf8');
+
+const runRebound2ModulePath = path.join(__dirname, 'games', 'minijuegos', 'run_rebound_2.js');
+const runRebound2ModuleCode = fs.readFileSync(runRebound2ModulePath, 'utf8');
+
+const swingCannonsModulePath = path.join(__dirname, 'games', 'minijuegos', 'swing_cannons.js');
+const swingCannonsModuleCode = fs.readFileSync(swingCannonsModulePath, 'utf8');
+
+const survivalInsectModulePath = path.join(__dirname, 'games', 'minijuegos', 'survival_insect.js');
+const survivalInsectModuleCode = fs.readFileSync(survivalInsectModulePath, 'utf8');
+
+const runLuckModulePath = path.join(__dirname, 'games', 'minijuegos', 'run_luck.js');
+const runLuckModuleCode = fs.readFileSync(runLuckModulePath, 'utf8');
+
+const pinballRouletteModulePath = path.join(__dirname, 'games', 'minijuegos', 'pinball_roulette.js');
+const pinballRouletteModuleCode = fs.readFileSync(pinballRouletteModulePath, 'utf8');
+
+const jumpingSurvivalModulePath = path.join(__dirname, 'games', 'minijuegos', 'jumping_survival.js');
+const jumpingSurvivalModuleCode = fs.readFileSync(jumpingSurvivalModulePath, 'utf8');
+
+const shaolinSoccerModulePath = path.join(__dirname, 'games', 'minijuegos', 'shaolin_soccer.js');
+const shaolinSoccerModuleCode = fs.readFileSync(shaolinSoccerModulePath, 'utf8');
+
+const spaceVortexModulePath = path.join(__dirname, 'games', 'minijuegos', 'space_vortex.js');
+const spaceVortexModuleCode = fs.readFileSync(spaceVortexModulePath, 'utf8');
+
+const spaceBouncePowerModulePath = path.join(__dirname, 'games', 'minijuegos', 'spacebounce_power.js');
+const spaceBouncePowerModuleCode = fs.readFileSync(spaceBouncePowerModulePath, 'utf8');
+
+const basketballModulePath = path.join(__dirname, 'games', 'minijuegos', 'basketball.js');
+const basketballModuleCode = fs.readFileSync(basketballModulePath, 'utf8');
+
+const btlModulePath = path.join(__dirname, 'games', 'minijuegos', 'btl.js');
+const btlModuleCode = fs.readFileSync(btlModulePath, 'utf8');
+
+const bonkSummerModulePath = path.join(__dirname, 'games', 'minijuegos', 'bonk_summer.js');
+const bonkSummerModuleCode = fs.readFileSync(bonkSummerModulePath, 'utf8');
+
+const bonkWinterModulePath = path.join(__dirname, 'games', 'minijuegos', 'bonk_winter.js');
+const bonkWinterModuleCode = fs.readFileSync(bonkWinterModulePath, 'utf8');
+
+const zombieRunModulePath = path.join(__dirname, 'games', 'minijuegos', 'zombie_run.js');
+const zombieRunModuleCode = fs.readFileSync(zombieRunModulePath, 'utf8');
+
+const racingGroundModulePath = path.join(__dirname, 'games', 'minijuegos', 'racing_ground.js');
+const racingGroundModuleCode = fs.readFileSync(racingGroundModulePath, 'utf8');
+
+// Map: Zombie Run
+const mapZombieRunPath = path.join(__dirname, 'Mapas', '¡ZOMBIE-RUN-LaboratorioByEmaxM16Ofi-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_67c8ecb1e06b7.hbs');
+const mapZombieRunData = fs.readFileSync(mapZombieRunPath, 'utf8');
+
+// Map: Racing Ground
+const mapRacingGroundPath = path.join(__dirname, 'Mapas', '1.-Racing-Ground-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_66d7c2a6a6359.hbs');
+const mapRacingGroundData = fs.readFileSync(mapRacingGroundPath, 'utf8');
+
 // Cargar código principal de la sala
 const roomMainCodePath = path.join(__dirname, 'room-main.txt');
 const roomMainCode = fs.readFileSync(roomMainCodePath, 'utf8');
@@ -548,10 +727,7 @@ function transformModuleForBrowser(moduleCode, mapData) {
         .replace(/let /g, 'var ')
         .replace(/module\.exports\s*=\s*/g, 'return ')
         .replace(/var mapData = null;.*$/m, 'var mapData = ' + mapJsonString + ';')
-        .replace(
-            /room\.getPlayerList\(\)\.filter\(function\(p\) \{ return p\.id !== 0; \}\)/g,
-            'room.getPlayerList().filter(function(p) { return p.id !== 0 && !(typeof isPlayerAfk === "function" && isPlayerAfk(p.id)); })'
-        );
+;
 
     return '(function() {\n' + code + '\n})()';
 }
@@ -614,6 +790,30 @@ const getBotScript = () => {
         const musicalFitModule = transformModuleForBrowser(musicalFitModuleCode, mapMusicalFitData);
         const namajunasRaceModule = transformModuleForBrowser(namajunasRaceModuleCode, mapNamajunasRaceData);
         const namajunasRace2Module = transformModuleForBrowser(namajunasRace2ModuleCode, mapNamajunasRace2Data);
+        const fct1Module = transformModuleForBrowser(fct1ModuleCode, mapFCT1Data);
+        const graveyardModule = transformModuleForBrowser(graveyardModuleCode, mapGraveyardData);
+        const futbolCallejeroModule = transformModuleForBrowser(futbolCallejeroModuleCode, mapFutbolCallejeroData);
+        const golAGolModule = transformModuleForBrowser(golAGolModuleCode, mapGolAGolData);
+        const gymColorsModule = transformModuleForBrowser(gymColorsModuleCode, mapGymColorsData);
+        const gym9Module = transformModuleForBrowser(gym9ModuleCode, mapGym9Data);
+        const matrixFitModule = transformModuleForBrowser(matrixFitModuleCode, mapMatrixFitData);
+        const race02Module = transformModuleForBrowser(race02ModuleCode, mapRace02Data);
+        const plumModule = transformModuleForBrowser(plumModuleCode, mapPlumData);
+        const runRebound2Module = transformModuleForBrowser(runRebound2ModuleCode, mapRunRebound2Data);
+        const swingCannonsModule = transformModuleForBrowser(swingCannonsModuleCode, mapSwingCannonsData);
+        const survivalInsectModule = transformModuleForBrowser(survivalInsectModuleCode, mapSurvivalInsectData);
+        const runLuckModule = transformModuleForBrowser(runLuckModuleCode, mapRunLuckData);
+        const pinballRouletteModule = transformModuleForBrowser(pinballRouletteModuleCode, mapPinballRouletteData);
+        const jumpingSurvivalModule = transformModuleForBrowser(jumpingSurvivalModuleCode, mapJumpingSurvivalData);
+        const shaolinSoccerModule = transformModuleForBrowser(shaolinSoccerModuleCode, mapShaolinSoccerData);
+        const spaceVortexModule = transformModuleForBrowser(spaceVortexModuleCode, mapSpaceVortexData);
+        const spaceBouncePowerModule = transformModuleForBrowser(spaceBouncePowerModuleCode, mapSpaceBouncePowerData);
+        const basketballModule = transformModuleForBrowser(basketballModuleCode, mapBasketballData);
+        const btlModule = transformModuleForBrowser(btlModuleCode, mapBtlData);
+        const bonkSummerModule = transformModuleForBrowser(bonkSummerModuleCode, mapBonkSummerData);
+        const bonkWinterModule = transformModuleForBrowser(bonkWinterModuleCode, mapBonkWinterData);
+        const zombieRunModule = transformModuleForBrowser(zombieRunModuleCode, mapZombieRunData);
+        const racingGroundModule = transformModuleForBrowser(racingGroundModuleCode, mapRacingGroundData);
     const gymModule = transformModuleForBrowser(gymModuleCode, mapGymData);
     const multiballsModule = transformModuleForBrowser(multiballsModuleCode, mapMultiBallsData);
     const supermanModule = transformModuleForBrowser(supermanModuleCode, mapSupermanData);
@@ -646,6 +846,13 @@ const getBotScript = () => {
         .replace(/##MAP_SPACE_MELEE##/g, JSON.stringify(JSON.stringify(mapSpaceMeleeData)))
         .replace(/##MAP_CHAIRMIX##/g, JSON.stringify(JSON.stringify(mapChairMixData)));
         
+    // Inyectar todos los mapas de NumberChairs (v2-v21)
+    var ncAllMapsObj = {};
+    for (var ncV in numberChairMaps) {
+        ncAllMapsObj[ncV] = numberChairMaps[ncV];
+    }
+    mainCode = mainCode.replace(/##NUMBERCHAIR_ALL_MAPS##/g, JSON.stringify(ncAllMapsObj));
+
     mainCode = mainCode.replace(/##MAP_COVID19##/g, JSON.stringify(JSON.stringify(mapCovid19Data)));
     mainCode = mainCode.replace(/##MAP_GYMMIX##/g, JSON.stringify(JSON.stringify(mapGymmixData)));
     mainCode = mainCode.replace(/##MAP_TRIVIA##/g, JSON.stringify(JSON.stringify(mapTriviaData)));
@@ -1005,6 +1212,126 @@ var NAMAJUNAS_RACE = ` + namajunasRaceModule + `;
 var NAMAJUNAS_RACE_2 = ` + namajunasRace2Module + `;
 
 // ============================================
+// MÓDULO: FCT 1
+// ============================================
+var FCT1 = ` + fct1Module + `;
+
+// ============================================
+// MÓDULO: FIT IN GRAVEYARD
+// ============================================
+var FIT_IN_GRAVEYARD = ` + graveyardModule + `;
+
+// ============================================
+// MÓDULO: FUTBOL CALLEJERO
+// ============================================
+var FUTBOL_CALLEJERO = ` + futbolCallejeroModule + `;
+
+// ============================================
+// MÓDULO: GOL A GOL
+// ============================================
+var GOL_A_GOL = ` + golAGolModule + `;
+
+// ============================================
+// MÓDULO: GYM COLORS
+// ============================================
+var GYM_COLORS = ` + gymColorsModule + `;
+
+// ============================================
+// MÓDULO: GYM 9
+// ============================================
+var GYM9 = ` + gym9Module + `;
+
+// ============================================
+// MÓDULO: MATRIX FIT
+// ============================================
+var MATRIX_FIT = ` + matrixFitModule + `;
+
+// ============================================
+// MÓDULO: RACE 02
+// ============================================
+var RACE02 = ` + race02Module + `;
+
+// ============================================
+// MÓDULO: PLUM
+// ============================================
+var PLUM = ` + plumModule + `;
+
+// ============================================
+// MÓDULO: RUN REBOUND 2
+// ============================================
+var RUN_REBOUND_2 = ` + runRebound2Module + `;
+
+// ============================================
+// MÓDULO: SWING CANNONS
+// ============================================
+var SWING_CANNONS = ` + swingCannonsModule + `;
+
+// ============================================
+// MÓDULO: SURVIVAL INSECT
+// ============================================
+var SURVIVAL_INSECT = ` + survivalInsectModule + `;
+
+// ============================================
+// MÓDULO: RUN LUCK
+// ============================================
+var RUN_LUCK = ` + runLuckModule + `;
+
+// ============================================
+// MÓDULO: PINBALL ROULETTE
+// ============================================
+var PINBALL_ROULETTE = ` + pinballRouletteModule + `;
+
+// ============================================
+// MÓDULO: JUMPING SURVIVAL
+// ============================================
+var JUMPING_SURVIVAL = ` + jumpingSurvivalModule + `;
+
+// ============================================
+// MÓDULO: SHAOLIN SOCCER
+// ============================================
+var SHAOLIN_SOCCER = ` + shaolinSoccerModule + `;
+
+// ============================================
+// MÓDULO: SPACE VORTEX
+// ============================================
+var SPACE_VORTEX = ` + spaceVortexModule + `;
+
+// ============================================
+// MÓDULO: SPACEBOUNCE POWER
+// ============================================
+var SPACEBOUNCE_POWER = ` + spaceBouncePowerModule + `;
+
+// ============================================
+// MÓDULO: BASKETBALL
+// ============================================
+var BASKETBALL = ` + basketballModule + `;
+
+// ============================================
+// MÓDULO: B.T.L
+// ============================================
+var BTL = ` + btlModule + `;
+
+// ============================================
+// MÓDULO: BONK SUMMER
+// ============================================
+var BONK_SUMMER = ` + bonkSummerModule + `;
+
+// ============================================
+// MÓDULO: BONK WINTER
+// ============================================
+var BONK_WINTER = ` + bonkWinterModule + `;
+
+// ============================================
+// MÓDULO: ZOMBIE RUN
+// ============================================
+var ZOMBIE_RUN = ` + zombieRunModule + `;
+
+// ============================================
+// MÓDULO: RACING GROUND
+// ============================================
+var RACING_GROUND = ` + racingGroundModule + `;
+
+// ============================================
 // MÓDULO: LUCKY
 // ============================================
 ` + escapedLuckyCode + `
@@ -1070,6 +1397,84 @@ var NAMAJUNAS_RACE_2 = ` + namajunasRace2Module + `;
                 }
             }
 
+            // Top Ricos
+            const topRich2 = await db.getTopPlayers('balance', 5);
+            msg += '\n## 💰 TOP 5 MAS RICOS\n';
+            if (!topRich2 || topRich2.length === 0) {
+                msg += 'No hay datos.\n';
+            } else {
+                const medals3 = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                for (let i = 0; i < topRich2.length; i++) {
+                    const p = topRich2[i];
+                    msg += medals3[i] + ' **' + (p.name || 'Desconocido') + '** - $' + ((p.balance || 0).toLocaleString()) + '\n';
+                }
+            }
+
+            // Top Rachas
+            const topStreaks = await db.getTopPlayers('bestStreak', 5);
+            msg += '\n## 🔥 TOP 5 MEJORES RACHAS\n';
+            if (!topStreaks || topStreaks.length === 0) {
+                msg += 'No hay datos.\n';
+            } else {
+                const medals4 = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                for (let i = 0; i < topStreaks.length; i++) {
+                    const p = topStreaks[i];
+                    msg += medals4[i] + ' **' + (p.name || 'Desconocido') + '** - ' + (p.bestStreak || 0) + ' victorias seguidas\n';
+                }
+            }
+
+            // Top Clanes
+            const topClans = await db.getTopClans(5);
+            msg += '\n## 🏰 TOP 5 CLANES\n';
+            if (!topClans || topClans.length === 0) {
+                msg += 'No hay clanes.\n';
+            } else {
+                const medals5 = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                for (let i = 0; i < topClans.length; i++) {
+                    const c = topClans[i];
+                    msg += medals5[i] + ' **[' + c.tag + '] ' + c.name + '** - ' + (c.totalWins || 0) + ' victorias (' + c.members.length + ' miembros)\n';
+                }
+            }
+
+            // Top Geis
+            const topGeis = await db.getTopPlayers('gayCount', 5);
+            msg += '\n## 🌈 TOP 5 MAS GEIS\n';
+            if (!topGeis || topGeis.length === 0) {
+                msg += 'No hay datos.\n';
+            } else {
+                const medals6 = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                for (let i = 0; i < topGeis.length; i++) {
+                    const p = topGeis[i];
+                    msg += medals6[i] + ' **' + (p.name || 'Desconocido') + '** - ' + (p.gayCount || 0) + ' veces\n';
+                }
+            }
+
+            // Top Kickeados
+            const topKicks = await db.getTopPlayers('kickCount', 5);
+            msg += '\n## 👢 TOP 5 MAS KICKEADOS\n';
+            if (!topKicks || topKicks.length === 0) {
+                msg += 'No hay datos.\n';
+            } else {
+                const medals7 = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                for (let i = 0; i < topKicks.length; i++) {
+                    const p = topKicks[i];
+                    msg += medals7[i] + ' **' + (p.name || 'Desconocido') + '** - ' + (p.kickCount || 0) + ' kicks\n';
+                }
+            }
+
+            // Top Baneados
+            const topBans = await db.getTopPlayers('banCount', 5);
+            msg += '\n## 🔨 TOP 5 MAS BANEADOS\n';
+            if (!topBans || topBans.length === 0) {
+                msg += 'No hay datos.\n';
+            } else {
+                const medals8 = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                for (let i = 0; i < topBans.length; i++) {
+                    const p = topBans[i];
+                    msg += medals8[i] + ' **' + (p.name || 'Desconocido') + '** - ' + (p.banCount || 0) + ' bans\n';
+                }
+            }
+
             // Enviar a Discord
             const url = DISCORD_WEBHOOKS.stats;
             if (url) {
@@ -1087,7 +1492,8 @@ var NAMAJUNAS_RACE_2 = ` + namajunasRace2Module + `;
 
             // Resetear wins/stats (NO el dinero)
             await db.resetMonthlyWins();
-            console.log('✅ Stats mensuales reseteadas');
+            await db.resetClanWins();
+            console.log('✅ Stats mensuales reseteadas (jugadores + clanes)');
         } catch(e) {
             console.error('❌ Error en sendMonthlyStats:', e.message);
         }
@@ -1095,8 +1501,17 @@ var NAMAJUNAS_RACE_2 = ` + namajunasRace2Module + `;
 
     // Stats mensuales se envian manualmente con !resetstats desde la sala
 
+    // Modo generate-only: genera debug-script.js y sale (para el panel)
+    if (process.argv.includes('--generate-only')) {
+        const generatedScript = getBotScript();
+        fs.writeFileSync(path.join(__dirname, 'debug-script.js'), generatedScript, 'utf8');
+        console.log('SCRIPT_GENERATED');
+        process.exit(0);
+    }
+
+    const useHeadless = process.env.HEADLESS === 'true';
     const browser = await puppeteer.launch({
-        headless: false,
+        headless: useHeadless ? 'new' : false,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     
@@ -1160,6 +1575,61 @@ var NAMAJUNAS_RACE_2 = ` + namajunasRace2Module + `;
             await page.exposeFunction('__discordWebhook', async (type, content) => {
                 return await sendDiscordWebhook(type, content);
             });
+            // Clanes (lectura+escritura en test también)
+            await page.exposeFunction('__dbCreateClan', async (tag, name, leaderAuth, leaderName) => {
+                return await db.createClan(tag, name, leaderAuth, leaderName);
+            });
+            await page.exposeFunction('__dbInviteToClan', async (leaderAuth, targetAuth, targetName) => {
+                return await db.inviteToClan(leaderAuth, targetAuth, targetName);
+            });
+            await page.exposeFunction('__dbAcceptClanInvite', async (playerAuth, playerName) => {
+                return await db.acceptClanInvite(playerAuth, playerName);
+            });
+            await page.exposeFunction('__dbLeaveClan', async (playerAuth) => {
+                return await db.leaveClan(playerAuth);
+            });
+            await page.exposeFunction('__dbGetClanInfo', async (tag) => {
+                return await db.getClanInfo(tag);
+            });
+            await page.exposeFunction('__dbGetClanByAuth', async (auth) => {
+                return await db.getClanByAuth(auth);
+            });
+            await page.exposeFunction('__dbAddClanWin', async (auth) => {
+                return await db.addClanWin(auth);
+            });
+            await page.exposeFunction('__dbGetTopClans', async (limit) => {
+                return await db.getTopClans(limit);
+            });
+            await page.exposeFunction('__dbKickFromClan', async (leaderAuth, targetAuth) => {
+                return await db.kickFromClan(leaderAuth, targetAuth);
+            });
+            // Matrimonios (lectura+escritura en test también)
+            await page.exposeFunction('__dbSaveMarriage', async (auth1, auth2) => {
+                await db.saveMarriage(auth1, auth2);
+            });
+            await page.exposeFunction('__dbRemoveMarriage', async (auth1, auth2) => {
+                await db.removeMarriage(auth1, auth2);
+            });
+            await page.exposeFunction('__dbLoadMarriages', async () => {
+                return await db.loadMarriages();
+            });
+            // Titan
+            await page.exposeFunction('__dbSaveTitan', async (auth, name, value) => {
+                await db.saveTitan(auth, name, value);
+            });
+            await page.exposeFunction('__dbLoadTitanData', async () => {
+                return await db.loadTitanData();
+            });
+            await page.exposeFunction('__dbResetTitanData', async () => {
+                await db.resetTitanData();
+            });
+            // Daily Rewards
+            await page.exposeFunction('__dbSaveDailyReward', async (auth, lastClaim, streak) => {
+                await db.saveDailyReward(auth, lastClaim, streak);
+            });
+            await page.exposeFunction('__dbLoadDailyRewards', async () => {
+                return await db.loadDailyRewards();
+            });
             console.log('🧪 Funciones expuestas en MODO TEST (escrituras desactivadas)');
         } else {
             await page.exposeFunction('__dbSaveWin', async (auth, name, minigame) => {
@@ -1189,9 +1659,73 @@ var NAMAJUNAS_RACE_2 = ` + namajunasRace2Module + `;
             await page.exposeFunction('__sendReplay', async (replayArray, gameName) => {
                 return await sendDiscordReplay(replayArray, gameName);
             });
+            await page.exposeFunction('__dbAddGayCount', async (auth, name) => {
+                await db.addGayCount(auth, name);
+            });
+            await page.exposeFunction('__dbAddKickCount', async (auth, name) => {
+                await db.addKickCount(auth, name);
+            });
+            await page.exposeFunction('__dbAddBanCount', async (auth, name) => {
+                await db.addBanCount(auth, name);
+            });
             await page.exposeFunction('__sendMonthlyStats', async () => {
                 await sendMonthlyStats();
                 return true;
+            });
+            // Clanes
+            await page.exposeFunction('__dbCreateClan', async (tag, name, leaderAuth, leaderName) => {
+                return await db.createClan(tag, name, leaderAuth, leaderName);
+            });
+            await page.exposeFunction('__dbInviteToClan', async (leaderAuth, targetAuth, targetName) => {
+                return await db.inviteToClan(leaderAuth, targetAuth, targetName);
+            });
+            await page.exposeFunction('__dbAcceptClanInvite', async (playerAuth, playerName) => {
+                return await db.acceptClanInvite(playerAuth, playerName);
+            });
+            await page.exposeFunction('__dbLeaveClan', async (playerAuth) => {
+                return await db.leaveClan(playerAuth);
+            });
+            await page.exposeFunction('__dbGetClanInfo', async (tag) => {
+                return await db.getClanInfo(tag);
+            });
+            await page.exposeFunction('__dbGetClanByAuth', async (auth) => {
+                return await db.getClanByAuth(auth);
+            });
+            await page.exposeFunction('__dbAddClanWin', async (auth) => {
+                return await db.addClanWin(auth);
+            });
+            await page.exposeFunction('__dbGetTopClans', async (limit) => {
+                return await db.getTopClans(limit);
+            });
+            await page.exposeFunction('__dbKickFromClan', async (leaderAuth, targetAuth) => {
+                return await db.kickFromClan(leaderAuth, targetAuth);
+            });
+            // Matrimonios
+            await page.exposeFunction('__dbSaveMarriage', async (auth1, auth2) => {
+                await db.saveMarriage(auth1, auth2);
+            });
+            await page.exposeFunction('__dbRemoveMarriage', async (auth1, auth2) => {
+                await db.removeMarriage(auth1, auth2);
+            });
+            await page.exposeFunction('__dbLoadMarriages', async () => {
+                return await db.loadMarriages();
+            });
+            // Titan
+            await page.exposeFunction('__dbSaveTitan', async (auth, name, value) => {
+                await db.saveTitan(auth, name, value);
+            });
+            await page.exposeFunction('__dbLoadTitanData', async () => {
+                return await db.loadTitanData();
+            });
+            await page.exposeFunction('__dbResetTitanData', async () => {
+                await db.resetTitanData();
+            });
+            // Daily Rewards
+            await page.exposeFunction('__dbSaveDailyReward', async (auth, lastClaim, streak) => {
+                await db.saveDailyReward(auth, lastClaim, streak);
+            });
+            await page.exposeFunction('__dbLoadDailyRewards', async () => {
+                return await db.loadDailyRewards();
             });
             console.log('✅ Funciones de DB, Discord y Replays expuestas al navegador');
         }

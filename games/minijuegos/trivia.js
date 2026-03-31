@@ -1,5 +1,8 @@
 // ============================================
-// MINIJUEGO: TRIVIA - Preguntas y Respuestas
+// MINIJUEGO: TRIVIA - Preguntas y Respuestas (3 rondas)
+// Cada ronda elimina a quienes fallen.
+// Si quedan varios al final, ganador aleatorio.
+// Si nadie acierta en la ronda 3, nadie gana.
 // ============================================
 
 var mapData = null;
@@ -7,20 +10,24 @@ var mapData = null;
 var gameState = {
     active: false,
     players: [],
+    alivePlayers: [],
     chatBlocked: false,
     currentQuestion: null,
     answerTimeout: null,
     revealTimeouts: [],
     gameStartTime: null,
-    firstEliminated: null
+    firstEliminated: null,
+    round: 0,
+    onGameEnd: null
 };
 
 // Preguntas usadas en la sesion (evitar repetir)
 var usedQuestions = [];
 
 var config = {
-    answerTimeMs: 30000, // 30 segundos para responder
-    explanationMs: 15000 // 15 segundos para leer la pregunta (pausado)
+    answerTimeMs: 30000,    // 30 segundos para responder
+    explanationMs: 5000,    // 5 segundos para leer la pregunta (pausado)
+    maxRounds: 3
 };
 
 // Detectar zona del jugador segun posicion X
@@ -32,7 +39,7 @@ function getPlayerZone(pos) {
 }
 
 // ============================================
-// 30 PREGUNTAS DE TRIVIA
+// 60 PREGUNTAS DE TRIVIA
 // ============================================
 var questions = [
     // === CULTURA GENERAL (30) ===
@@ -96,7 +103,28 @@ var questions = [
     { q: "Si adelantas al segundo lugar en una carrera, en que posicion quedas?", a: "Primero", b: "Segundo", c: "Tercero", d: "Ultimo", correct: "b" },
     { q: "Un hombre construyo una casa con 4 paredes mirando al sur. Vio un oso. De que color era?", a: "Marron", b: "Negro", c: "Blanco", d: "Gris", correct: "c" },
     { q: "Cuantas veces aparece la letra A en los numeros del 1 al 100?", a: "Ninguna", b: "10 veces", c: "5 veces", d: "1 vez", correct: "a" },
-    { q: "Si 5 gatos cazan 5 ratones en 5 minutos, cuanto tardan 100 gatos en cazar 100 ratones?", a: "100 minutos", b: "50 minutos", c: "5 minutos", d: "1 minuto", correct: "c" }
+    { q: "Si 5 gatos cazan 5 ratones en 5 minutos, cuanto tardan 100 gatos en cazar 100 ratones?", a: "100 minutos", b: "50 minutos", c: "5 minutos", d: "1 minuto", correct: "c" },
+    // === PREGUNTAS DIFICILES (20) ===
+    { q: "Cual es el unico pais del mundo que tiene una bandera no rectangular?", a: "Suiza", b: "Nepal", c: "Vaticano", d: "Japon", correct: "b" },
+    { q: "Cuantos corazones tiene un pulpo?", a: "1", b: "2", c: "3", d: "4", correct: "c" },
+    { q: "Cual es el elemento quimico mas abundante en el universo?", a: "Oxigeno", b: "Carbono", c: "Helio", d: "Hidrogeno", correct: "d" },
+    { q: "En que ano cayo el Muro de Berlin?", a: "1987", b: "1989", c: "1991", d: "1985", correct: "b" },
+    { q: "Cual es el hueso mas pequeno del cuerpo humano?", a: "Estribo", b: "Martillo", c: "Yunque", d: "Rotula", correct: "a" },
+    { q: "Que pais tiene mas islas en el mundo?", a: "Indonesia", b: "Filipinas", c: "Suecia", d: "Noruega", correct: "c" },
+    { q: "Cuantos litros de sangre tiene el cuerpo humano aproximadamente?", a: "3 litros", b: "5 litros", c: "7 litros", d: "10 litros", correct: "b" },
+    { q: "Cual fue el primer animal en orbitar la Tierra?", a: "Un mono", b: "Una perra", c: "Un gato", d: "Una mosca", correct: "b" },
+    { q: "Que porcentaje del cerebro humano es agua?", a: "50%", b: "60%", c: "75%", d: "90%", correct: "c" },
+    { q: "Cuanto tarda la luz del Sol en llegar a la Tierra?", a: "1 segundo", b: "8 minutos", c: "1 minuto", d: "30 segundos", correct: "b" },
+    { q: "Cual es el desierto mas grande del mundo?", a: "Sahara", b: "Gobi", c: "Antartico", d: "Arabigo", correct: "c" },
+    { q: "En que pais se origino el chocolate?", a: "Suiza", b: "Belgica", c: "Mexico", d: "Peru", correct: "c" },
+    { q: "Cuantas veces late el corazon humano por dia aproximadamente?", a: "50.000", b: "100.000", c: "150.000", d: "200.000", correct: "b" },
+    { q: "Cual es el unico mamifero que puede volar?", a: "Ardilla voladora", b: "Murcielago", c: "Colibri", d: "Petirrojo", correct: "b" },
+    { q: "Que pais invento la dinamita?", a: "Alemania", b: "Francia", c: "Suecia", d: "Inglaterra", correct: "c" },
+    { q: "Cuantos pares de cromosomas tiene el ser humano?", a: "21", b: "23", c: "25", d: "46", correct: "b" },
+    { q: "Cual es la unica fruta que tiene las semillas por fuera?", a: "Kiwi", b: "Mora", c: "Fresa", d: "Frambuesa", correct: "c" },
+    { q: "En que organo del cuerpo se produce la insulina?", a: "Higado", b: "Rinon", c: "Pancreas", d: "Estomago", correct: "c" },
+    { q: "Que temperatura alcanza un rayo en grados Celsius?", a: "5.000", b: "10.000", c: "20.000", d: "30.000", correct: "d" },
+    { q: "Cual es el pais mas pequeno del mundo por superficie?", a: "Monaco", b: "San Marino", c: "Vaticano", d: "Liechtenstein", correct: "c" }
 ];
 
 // ============================================
@@ -138,74 +166,98 @@ function start(room, onGameEnd) {
 
     gameState.active = true;
     gameState.players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    gameState.alivePlayers = gameState.players.slice(); // copia
     gameState.firstEliminated = null;
     gameState.gameStartTime = null;
     gameState.revealTimeouts = [];
+    gameState.round = 0;
+    gameState.onGameEnd = onGameEnd;
 
-    // Seleccionar pregunta
+    room.sendAnnouncement(
+        '📝 TRIVIA (3 RONDAS)\n👥 Jugadores: ' + gameState.players.length + '\n🏆 Sobrevive las 3 preguntas para ganar!',
+        null, 0xFFFF00, 'bold', 2
+    );
+
+    var t = setTimeout(function() {
+        if (!gameState.active) return;
+        startRound(room);
+    }, 1500);
+    gameState.revealTimeouts.push(t);
+}
+
+// ============================================
+// INICIAR RONDA
+// ============================================
+function startRound(room) {
+    if (!gameState.active) return;
+    gameState.round++;
+
     var q = selectQuestion();
     gameState.currentQuestion = q;
 
-    setTimeout(function() {
-        room.startGame();
-        try { room.pauseGame(true); } catch(e) {}
-        gameState.chatBlocked = true;
+    room.startGame();
+    try { room.pauseGame(true); } catch(e) {}
+    gameState.chatBlocked = true;
 
-        room.sendAnnouncement(
-            '\n📝 TRIVIA - PREGUNTA:\n\n' +
-            '❓ ' + q.q + '\n\n' +
-            'A) ' + q.a + '\n' +
-            'B) ' + q.b + '\n' +
-            'C) ' + q.c + '\n' +
-            'D) ' + q.d + '\n\n' +
-            '👉 Muevete a la zona de tu respuesta!\n' +
-            '⏱️ Tienes 30 segundos...',
-            null, 0xFFFF00, 'bold', 2
-        );
+    room.sendAnnouncement(
+        '\n📝 RONDA ' + gameState.round + '/' + config.maxRounds + '\n\n' +
+        '❓ ' + q.q + '\n\n' +
+        'A) ' + q.a + '\n' +
+        'B) ' + q.b + '\n' +
+        'C) ' + q.c + '\n' +
+        'D) ' + q.d + '\n\n' +
+        '👉 Muevete a la zona de tu respuesta!\n' +
+        '⏱️ Tienes 15 segundos...',
+        null, 0xFFFF00, 'bold', 2
+    );
 
-        setTimeout(function() {
+    var t1 = setTimeout(function() {
+        if (!gameState.active) return;
+        try { room.pauseGame(false); } catch(e) {}
+        gameState.chatBlocked = false;
+        gameState.gameStartTime = Date.now();
+        room.sendAnnouncement('🟢 ELIGE TU RESPUESTA! (' + (config.answerTimeMs / 1000) + 's)', null, 0x00FF00, 'bold', 2);
+
+        // Aviso a los 10s
+        var halfWarn = setTimeout(function() {
             if (!gameState.active) return;
-            try { room.pauseGame(false); } catch(e) {}
-            gameState.chatBlocked = false;
-            gameState.gameStartTime = Date.now();
-            room.sendAnnouncement('🟢 ELIGE TU RESPUESTA!', null, 0x00FF00, 'bold', 2);
+            room.sendAnnouncement('⏱️ 5 segundos!', null, 0xFF6600, 'bold', 2);
+        }, config.answerTimeMs - 5000);
+        gameState.revealTimeouts.push(halfWarn);
 
-            // Aviso a mitad de tiempo
-            var halfWarn = setTimeout(function() {
-                if (!gameState.active) return;
-                room.sendAnnouncement('⏱️ Quedan 15 segundos...', null, 0xFFA500, 'bold', 2);
-            }, 15000);
-            gameState.revealTimeouts.push(halfWarn);
-
-            // Al terminar el tiempo, verificar respuestas
-            gameState.answerTimeout = setTimeout(function() {
-                if (!gameState.active) return;
-                checkAnswers(room, onGameEnd);
-            }, config.answerTimeMs);
-        }, config.explanationMs);
-    }, 1500);
+        // Al terminar el tiempo, verificar respuestas
+        gameState.answerTimeout = setTimeout(function() {
+            if (!gameState.active) return;
+            checkAnswers(room);
+        }, config.answerTimeMs);
+    }, config.explanationMs);
+    gameState.revealTimeouts.push(t1);
 }
 
 // ============================================
 // VERIFICAR RESPUESTAS
 // ============================================
-function checkAnswers(room, onGameEnd) {
+function checkAnswers(room) {
     if (!gameState.active) return;
     gameState.chatBlocked = true;
 
     var q = gameState.currentQuestion;
     var correct = q.correct;
 
-    room.sendAnnouncement('⏰ TIEMPO! Las respuestas estan bloqueadas!', null, 0xFF6600, 'bold', 2);
+    room.sendAnnouncement('⏰ TIEMPO!', null, 0xFF6600, 'bold', 2);
 
-    // Clasificar jugadores por zona
+    // Clasificar jugadores vivos por zona
     var playerZones = { a: [], b: [], c: [], d: [] };
     var correctPlayers = [];
     var wrongPlayers = [];
 
-    gameState.players.forEach(function(p) {
+    for (var i = 0; i < gameState.alivePlayers.length; i++) {
+        var p = gameState.alivePlayers[i];
         var player = room.getPlayer(p.id);
-        if (!player || !player.position) return;
+        if (!player || !player.position) {
+            wrongPlayers.push(p);
+            continue;
+        }
         var zone = getPlayerZone(player.position);
         playerZones[zone].push(p);
         if (zone === correct) {
@@ -213,7 +265,7 @@ function checkAnswers(room, onGameEnd) {
         } else {
             wrongPlayers.push(p);
         }
-    });
+    }
 
     // Trackear primer eliminado
     if (wrongPlayers.length > 0 && !gameState.firstEliminated && gameState.gameStartTime) {
@@ -221,90 +273,129 @@ function checkAnswers(room, onGameEnd) {
         gameState.firstEliminated = { name: wrongPlayers[0].name, timeS: elapsedS };
     }
 
-    // Fase 1: Revelar respuesta correcta (2s despues)
+    // Fase 1: Revelar respuesta correcta (1.5s despues)
     var t1 = setTimeout(function() {
         if (!gameState.active) return;
         var answerText = correct === 'a' ? q.a : correct === 'b' ? q.b : correct === 'c' ? q.c : q.d;
         room.sendAnnouncement(
-            '✅ La respuesta correcta es... ' + correct.toUpperCase() + ') ' + answerText + '!',
+            '✅ Respuesta correcta: ' + correct.toUpperCase() + ') ' + answerText,
             null, 0x00FF00, 'bold', 2
         );
-    }, 2000);
+    }, 1500);
     gameState.revealTimeouts.push(t1);
 
-    // Fase 2: Mostrar zonas y eliminar (4s despues)
+    // Fase 2: Mostrar zonas y eliminar (3s despues)
     var t2 = setTimeout(function() {
         if (!gameState.active) return;
         var zoneNames = ['a', 'b', 'c', 'd'];
         var zoneLabels = { a: 'A', b: 'B', c: 'C', d: 'D' };
 
-        for (var i = 0; i < zoneNames.length; i++) {
-            var z = zoneNames[i];
-            if (playerZones[z].length > 0) {
+        for (var z = 0; z < zoneNames.length; z++) {
+            var zn = zoneNames[z];
+            if (playerZones[zn].length > 0) {
                 var names = [];
-                for (var j = 0; j < playerZones[z].length; j++) {
-                    names.push(playerZones[z][j].name);
+                for (var j = 0; j < playerZones[zn].length; j++) {
+                    names.push(playerZones[zn][j].name);
                 }
-                var icon = z === correct ? '✅' : '❌';
-                var color = z === correct ? 0x00FF00 : 0xFF0000;
-                room.sendAnnouncement(
-                    icon + ' Zona ' + zoneLabels[z] + ': ' + names.join(', '),
-                    null, color
-                );
+                var icon = zn === correct ? '✅' : '❌';
+                var color = zn === correct ? 0x00FF00 : 0xFF0000;
+                room.sendAnnouncement(icon + ' Zona ' + zoneLabels[zn] + ': ' + names.join(', '), null, color);
             }
         }
 
         // Mover incorrectos a espectador
-        wrongPlayers.forEach(function(p) {
-            try { room.setPlayerTeam(p.id, 0); } catch(e) {}
-        });
-    }, 4000);
+        for (var w = 0; w < wrongPlayers.length; w++) {
+            try { room.setPlayerTeam(wrongPlayers[w].id, 0); } catch(e) {}
+        }
+
+        // Actualizar lista de vivos
+        gameState.alivePlayers = correctPlayers;
+
+        room.sendAnnouncement(
+            '👥 Sobrevivientes: ' + correctPlayers.length + ' | Eliminados: ' + wrongPlayers.length,
+            null, 0x00BFFF, 'bold'
+        );
+    }, 3000);
     gameState.revealTimeouts.push(t2);
 
-    // Fase 3: Resultado final (7s despues)
+    // Fase 3: Decidir si otra ronda o fin (5.5s despues)
     var t3 = setTimeout(function() {
         if (!gameState.active) return;
 
+        try { room.stopGame(); } catch(e) {}
+
+        // Nadie acerto
         if (correctPlayers.length === 0) {
-            room.sendAnnouncement(
-                '😱 Nadie acerto! Mejor suerte la proxima...',
-                null, 0xFF6600, 'bold', 2
-            );
+            room.sendAnnouncement('😱 Nadie acerto! Mejor suerte la proxima...', null, 0xFF6600, 'bold', 2);
+            var cb = gameState.onGameEnd;
+            gameState.onGameEnd = null;
             stop(room);
-            if (onGameEnd) onGameEnd(null);
-        } else if (correctPlayers.length === 1) {
-            declareWinner(room, correctPlayers[0], onGameEnd);
-        } else {
-            // Multiples acertaron: ganador al azar
+            if (cb) cb(null);
+            return;
+        }
+
+        // Solo queda 1: ganador directo
+        if (correctPlayers.length === 1) {
+            declareWinner(room, correctPlayers[0]);
+            return;
+        }
+
+        // Ultima ronda: ganador aleatorio entre sobrevivientes
+        if (gameState.round >= config.maxRounds) {
             room.sendAnnouncement(
-                '🎲 ' + correctPlayers.length + ' acertaron! Eligiendo ganador al azar...',
-                null, 0xFFFF00, 'bold'
+                '🎲 ' + correctPlayers.length + ' sobrevivieron las 3 rondas! Eligiendo ganador al azar...',
+                null, 0xFFFF00, 'bold', 2
             );
             var t4 = setTimeout(function() {
                 if (!gameState.active) return;
                 var winner = correctPlayers[Math.floor(Math.random() * correctPlayers.length)];
-                declareWinner(room, winner, onGameEnd);
+                declareWinner(room, winner);
             }, 2000);
             gameState.revealTimeouts.push(t4);
+            return;
         }
-    }, 7000);
+
+        // Quedan mas de 1 y hay rondas restantes: siguiente ronda
+        room.sendAnnouncement(
+            '➡️ RONDA ' + (gameState.round + 1) + ' en 3 segundos...',
+            null, 0xFFFF00, 'bold'
+        );
+
+        // Reasignar equipos a los sobrevivientes
+        for (var s = 0; s < correctPlayers.length; s++) {
+            var team = (s % 2 === 0) ? 1 : 2;
+            try { room.setPlayerTeam(correctPlayers[s].id, team); } catch(e) {}
+        }
+
+        var t5 = setTimeout(function() {
+            if (!gameState.active) return;
+            startRound(room);
+        }, 3000);
+        gameState.revealTimeouts.push(t5);
+    }, 5500);
     gameState.revealTimeouts.push(t3);
 }
 
 // ============================================
 // DECLARAR GANADOR
 // ============================================
-function declareWinner(room, winner, onGameEnd) {
+function declareWinner(room, winner) {
     if (!gameState.active) return;
-    gameState.active = false;
+
+    var cb = gameState.onGameEnd;
+    gameState.onGameEnd = null;
 
     room.sendAnnouncement(
-        '\n🏆 ' + winner.name.toUpperCase() + ' HA GANADO TRIVIA! 🏆',
+        '\n🏆 ' + winner.name.toUpperCase() + ' HA GANADO TRIVIA! 🏆\n' +
+        '📝 Sobrevivio ' + gameState.round + ' ronda(s)',
         null, 0xFFD700, 'bold', 2
     );
 
+    gameState.active = false;
+
     setTimeout(function() {
-        if (onGameEnd) onGameEnd(winner);
+        stop(room);
+        if (cb) cb(winner);
     }, 3000);
 }
 
@@ -337,8 +428,11 @@ function stop(room) {
     gameState.revealTimeouts = [];
     gameState.active = false;
     gameState.players = [];
+    gameState.alivePlayers = [];
     gameState.chatBlocked = false;
     gameState.currentQuestion = null;
+    gameState.round = 0;
+    gameState.onGameEnd = null;
     try { room.stopGame(); } catch(e) {}
 }
 
@@ -347,8 +441,8 @@ function stop(room) {
 // ============================================
 function onPlayerLeave(room, player) {
     if (gameState.active) {
-        // Remover de la lista de jugadores
         gameState.players = gameState.players.filter(function(p) { return p.id !== player.id; });
+        gameState.alivePlayers = gameState.alivePlayers.filter(function(p) { return p.id !== player.id; });
     }
 }
 

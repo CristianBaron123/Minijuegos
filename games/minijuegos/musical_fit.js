@@ -161,10 +161,7 @@ function shuffleTeams(room) {
         var temp = players[i]; players[i] = players[j]; players[j] = temp;
     }
 
-    var maxPerTeam = 7;
-    var playingCount = Math.min(players.length, maxPerTeam * 2);
-
-    for (var i = 0; i < playingCount; i++) {
+    for (var i = 0; i < players.length; i++) {
         var team = (i % 2 === 0) ? 1 : 2;
         try { room.setPlayerTeam(players[i].id, team); } catch(e){}
     }

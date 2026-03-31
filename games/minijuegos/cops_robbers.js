@@ -100,7 +100,6 @@ function start(room, onGameEnd) {
             '\n📋 INSTRUCCIONES:\n' +
             '🔵 AZUL = POLICIA: Toca a los ladrones para atraparlos!\n' +
             '🔴 ROJO = LADRONES: Sobrevive 3 minutos para ganar!\n' +
-            '⚠️ LADRONES: NO se toquen entre ustedes o AMBOS seran eliminados!\n' +
             (gameState.grayBallPos ? '⚪ Toca la BOLA GRIS para revivir a tus companeros ladrones!\n' : '') +
             '🏆 Si la policia atrapa a todos los ladrones, GANA la policia\n' +
             '🏆 Si quedan ladrones al acabar el tiempo, GANAN los ladrones\n\n' +
@@ -152,13 +151,23 @@ function assignTeams(room, players) {
 
 function getAliveRobbers(room) {
     return gameState.players.filter(function(p) {
-        return p.role === 'robber' && gameState.eliminatedRobbers.indexOf(p.id) === -1 && gameState.outOfBoundsRobbers.indexOf(p.id) === -1;
+        if (p.role !== 'robber') return false;
+        if (gameState.eliminatedRobbers.indexOf(p.id) !== -1) return false;
+        // Si AFK lo movió a espectador, marcarlo como eliminado
+        var current = room.getPlayer(p.id);
+        if (!current || current.team === 0) {
+            if (gameState.eliminatedRobbers.indexOf(p.id) === -1) gameState.eliminatedRobbers.push(p.id);
+            return false;
+        }
+        return true;
     });
 }
 
 function getAliveCops(room) {
     return gameState.players.filter(function(p) {
-        return p.role === 'cop';
+        if (p.role !== 'cop') return false;
+        var current = room.getPlayer(p.id);
+        return current && current.team !== 0;
     });
 }
 
@@ -185,19 +194,6 @@ function checkPlayers(room) {
         room.sendAnnouncement('⏱️ ¡10 SEGUNDOS!', null, 0xFF0000, 'bold', 2);
     }
 
-    // Detectar ladrones que volvieron al area
-    for (var ob = gameState.outOfBoundsRobbers.length - 1; ob >= 0; ob--) {
-        var oobId = gameState.outOfBoundsRobbers[ob];
-        var oobPlayer = room.getPlayer(oobId);
-        if (!oobPlayer || !oobPlayer.position) continue;
-        if (!isOutOfBounds(oobPlayer.position)) {
-            gameState.outOfBoundsRobbers.splice(ob, 1);
-            var oobInfo = gameState.players.find(function(x) { return x.id === oobId; });
-            var aliveAfterReturn = getAliveRobbers(room);
-            room.sendAnnouncement('🔴 ' + (oobInfo ? oobInfo.name : 'Ladron') + ' volvio al area! (Ladrones restantes: ' + aliveAfterReturn.length + ')', null, 0x00FF00);
-        }
-    }
-
     var aliveRobbers = getAliveRobbers(room);
     var cops = getAliveCops(room);
 
@@ -217,66 +213,21 @@ function checkPlayers(room) {
 
     var newlyEliminated = [];
 
-    // Policia atrapa ladron
+    // Policia atrapa ladron: lo teleporta fuera del area (eliminado)
     for (var r = 0; r < robberPositions.length; r++) {
         if (newlyEliminated.indexOf(robberPositions[r].id) !== -1) continue;
         for (var c = 0; c < copPositions.length; c++) {
             if (getDistance(robberPositions[r].pos, copPositions[c].pos) < config.catchDistance) {
                 newlyEliminated.push(robberPositions[r].id);
+                try { room.setPlayerDiscProperties(robberPositions[r].id, { x: 0, y: config.bounds.maxY + 200, xspeed: 0, yspeed: 0 }); } catch(e){}
                 room.sendAnnouncement('🚔 ' + copPositions[c].name + ' ATRAPO a ' + robberPositions[r].name + '!', null, 0x3399FF);
                 break;
             }
         }
     }
 
-    // Ladron toca a otro ladron
-    for (var a = 0; a < robberPositions.length; a++) {
-        if (newlyEliminated.indexOf(robberPositions[a].id) !== -1) continue;
-        for (var b = a + 1; b < robberPositions.length; b++) {
-            if (newlyEliminated.indexOf(robberPositions[b].id) !== -1) continue;
-            if (getDistance(robberPositions[a].pos, robberPositions[b].pos) < config.robberCollisionDistance) {
-                newlyEliminated.push(robberPositions[a].id);
-                newlyEliminated.push(robberPositions[b].id);
-                room.sendAnnouncement('💥 ' + robberPositions[a].name + ' y ' + robberPositions[b].name + ' se tocaron entre ladrones! ELIMINADOS', null, 0xFF0000);
-            }
-        }
-    }
-
-    // Ladron fuera del area (temporal - puede volver)
-    for (var r = 0; r < robberPositions.length; r++) {
-        if (newlyEliminated.indexOf(robberPositions[r].id) !== -1) continue;
-        if (isOutOfBounds(robberPositions[r].pos)) {
-            // Protección de spawn: no marcar fuera si nunca estuvo dentro
-            if (!gameState.hasBeenInBounds[robberPositions[r].id]) continue;
-            if (gameState.outOfBoundsRobbers.indexOf(robberPositions[r].id) === -1) {
-                gameState.outOfBoundsRobbers.push(robberPositions[r].id);
-                var aliveAfterOOB = getAliveRobbers(room);
-                room.sendAnnouncement('❌ ' + robberPositions[r].name + ' salio del area! (Ladrones restantes: ' + aliveAfterOOB.length + ')', null, 0xFF6600);
-            }
-        } else {
-            gameState.hasBeenInBounds[robberPositions[r].id] = true;
-        }
-    }
-
-    // Policia fuera del area: teleportar de vuelta + aviso con cooldown
-    for (var c = 0; c < copPositions.length; c++) {
-        if (isOutOfBounds(copPositions[c].pos)) {
-            // Teleportar al borde mas cercano
-            var cx = copPositions[c].pos.x;
-            var cy = copPositions[c].pos.y;
-            var newX = Math.max(config.bounds.minX + 10, Math.min(config.bounds.maxX - 10, cx));
-            var newY = Math.max(config.bounds.minY + 10, Math.min(config.bounds.maxY - 10, cy));
-            try { room.setPlayerDiscProperties(copPositions[c].id, { x: newX, y: newY, xspeed: 0, yspeed: 0 }); } catch(e){}
-            // Cooldown de aviso: 1 vez cada 3 segundos por policia
-            if (!gameState.copOOBCooldown) gameState.copOOBCooldown = {};
-            var now = Date.now();
-            if (!gameState.copOOBCooldown[copPositions[c].id] || now - gameState.copOOBCooldown[copPositions[c].id] > 3000) {
-                gameState.copOOBCooldown[copPositions[c].id] = now;
-                room.sendAnnouncement('⚠️ Policia ' + copPositions[c].name + ' salio del area! (devuelto)', copPositions[c].id, 0xFF6600);
-            }
-        }
-    }
-
+    // El mapa tiene planes (paredes) que contienen a los jugadores por equipo
+    // No se necesita deteccion de fuera del area
     // Aplicar eliminaciones (solo trackear, NO mover a espectadores)
     for (var i = 0; i < newlyEliminated.length; i++) {
         if (gameState.eliminatedRobbers.indexOf(newlyEliminated[i]) === -1) {
@@ -298,8 +249,8 @@ function checkPlayers(room) {
             for (var r = 0; r < robberPositions.length; r++) {
                 if (newlyEliminated.indexOf(robberPositions[r].id) !== -1) continue;
                 if (getDistance(robberPositions[r].pos, grayDiscPos) < 40) {
-                    if (gameState.eliminatedRobbers.length > 0 || gameState.outOfBoundsRobbers.length > 0) {
-                        var revivedCount = gameState.eliminatedRobbers.length + gameState.outOfBoundsRobbers.length;
+                    if (gameState.eliminatedRobbers.length > 0) {
+                        var revivedCount = gameState.eliminatedRobbers.length;
                         gameState.eliminatedRobbers = [];
                         gameState.outOfBoundsRobbers = [];
                         room.sendAnnouncement('⚪ ' + robberPositions[r].name + ' toco la bola gris! Ladrones REVIVIDOS! (' + revivedCount + ')', null, 0x00FF00, 'bold', 2);

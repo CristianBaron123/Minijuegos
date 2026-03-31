@@ -1,5 +1,5 @@
 var roomConfig = {
-    roomName: "🎮🎮🎮| Minijuegos_Isagi 🎮",
+    roomName: "🎮🎮🎮| Minijuegos_Isagi v1.9 🎮",
     maxPlayers: 30,
     public: true,
     token: "##TOKEN##",
@@ -51,6 +51,7 @@ var botState = {
     knownPlayers: {}, // { auth: { name: "nombre", notified: true } } - para tracking de tokens
     authMap: {}, // { playerId: auth } - mapa de IDs a auths (auth solo disponible en onPlayerJoin)
     winsCache: {}, // { auth: wins } - cache local de victorias para rangos
+    clanTags: {},  // { auth: 'TAG' } - cache de clan tags
     // Anti-spam
     spamMessages: {}, // { auth: [timestamps] } - historial de mensajes recientes
     spamMutes: {},    // { auth: { until: timestamp, count: N } } - jugadores muteados
@@ -59,6 +60,7 @@ var botState = {
     afkProtected: {},   // { auth: true } - espectadores con !afk activo
     gamePaused: false,  // si el juego está pausado (para AFK check)
     afkLastActivity: {},    // { playerId: timestamp } - ultima actividad (tecla presionada)
+    afkWarned: {},      // { playerId: true } - si ya se le envió la advertencia de AFK
     // Anti-dodge: castigos pendientes para jugadores que se salen del Lucky
     luckyDodgers: {},  // { auth: { until: timestamp, reason: string } }
     // Sistema !fix
@@ -71,7 +73,25 @@ var botState = {
     protectionActive: {},    // { auth: true } - jugadores con protección comprada
     robarLucky: null,        // { playerId, auth, name } - robo de lucky pendiente
     rifaActive: null,        // { ownerAuth, ownerName, pot, number, timeout, started: false }
+    inversiones: {},         // { auth: { monto, name, gamesLeft } } - inversiones activas
+    prestamos: {},           // { auth: { monto, name, gamesLeft, intereses, deudaTotal } } - prestamos activos
+    totalPrestado: {},       // { auth: { name, total } } - historial total de prestamos pedidos
+    prestamistas: {'ElsEAjXg19qUkfr5kwGzv-v-N0Mh2cwyiFP1tBFLUbY': { name: 'Prestamista', totalPrestado: 0, totalGanado: 0 }},        // { auth: { name, totalPrestado, totalGanado } } - rol prestamista P2P
+    prestamosP2P: {},        // { deudorAuth: { prestamistaAuth, prestamistaNombre, deudorNombre, monto, montoTotal, cuotaMonto, cuotasPagadas, cuotasTotales, deudaPendiente, impagos } }
+    ofertasPrestamo: {},     // { targetAuth: { fromAuth, fromName, monto, cuotas, montoTotal, cuotaMonto, timestamp } }
+    titanValues: {},         // { auth: { name, value } } - resultado de !titan (se resetea con !resetstats)
+    titanTaken: [],          // [33, 34, 35] - valores únicos ya tomados en este ciclo
+    dailyRewards: {},        // { auth: { lastClaim: timestamp, streak: N } } - recompensa diaria
+    crashActive: null,       // { auth, name, monto, multiplier, interval, crashed } - crash activo
+    marriages: {},           // { auth: partnerAuth } - matrimonios
+    marriageProposals: {},   // { targetAuth: { fromAuth, fromName, fromId } } - propuestas pendientes
     impuestoCooldown: 0,     // timestamp global de cooldown para !impuesto
+    theWorldActive: null,    // { playerId } - quien activo theworld (bloquea chat de los demas)
+    bitesGlobalCooldown: 0,  // timestamp global - solo 1 bites the dust cada 10min
+    bitesUsedThisGame: false, // solo 1 por minijuego
+    powerCooldownGames: {},  // { auth: N } - contador por jugador: cuando > 0 no puede usar poderes
+    elegirCooldownGames: {}, // { auth: N } - cooldown de !elegir por partidas
+    minigameStartTime: 0,   // timestamp de cuando empezo el minijuego actual
     tempBans: {},            // { auth: { until: timestamp, name: string } } - bans temporales por auth
     // Eventos aleatorios
     gamesUntilEvent: 0,      // contador: cuando llega a 0 se activa un evento
@@ -88,6 +108,39 @@ var botState = {
     luckyPassLog: [],       // [{giverAuth, receiverAuth, ts}]
     luckyPassWarned: {}     // { 'authA|authB': true } - pares ya advertidos
 };
+
+// Cargar matrimonios de la DB al iniciar
+try {
+    window.__dbLoadMarriages().then(function(m) {
+        if (m && typeof m === 'object') {
+            for (var k in m) { botState.marriages[k] = m[k]; }
+            var count = Object.keys(m).length / 2;
+            if (count > 0) console.log('💍 ' + count + ' matrimonios cargados de la DB');
+        }
+    }).catch(function(e) { console.log('⚠️ No se pudieron cargar matrimonios'); });
+} catch(e) {}
+
+// Cargar datos titan desde DB
+try {
+    window.__dbLoadTitanData().then(function(data) {
+        if (data) {
+            botState.titanValues = data.values || {};
+            botState.titanTaken = data.taken || [];
+            var count = Object.keys(botState.titanValues).length;
+            if (count > 0) console.log('📏 ' + count + ' titans cargados de la DB');
+        }
+    }).catch(function(e) { console.log('⚠️ No se pudieron cargar titans'); });
+} catch(e) {}
+
+// Cargar recompensas diarias desde la DB
+try {
+    window.__dbLoadDailyRewards().then(function(data) {
+        if (data && Object.keys(data).length > 0) {
+            botState.dailyRewards = data;
+            console.log('📅 ' + Object.keys(data).length + ' recompensas diarias cargadas de la DB');
+        }
+    }).catch(function(e) { console.log('⚠️ No se pudieron cargar recompensas diarias'); });
+} catch(e) {}
 
 // ============================================
 // SISTEMA DE REPLAYS
@@ -200,31 +253,38 @@ function isPlayerAfk(playerId) {
 function getPlayerTag(player) {
     var auth = getAuth(player);
     var protPrefix = (auth && botState.protectionActive[auth]) ? '🛡️' : '';
+    var clanSuffix = (auth && botState.clanTags[auth]) ? ' [' + botState.clanTags[auth] + ']' : '';
     // Prioridad: THE BEST > CREADOR > KING > GAY > MVP > RANGO
     if (auth === '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE') {
-        return { label: protPrefix + '⭐[The best]', color: 0x89CFF0 };
+        return { label: protPrefix + '⭐[The best]' + clanSuffix, color: 0x89CFF0 };
     }
     if (auth && CREATOR_AUTHS.indexOf(auth) !== -1) {
-        return { label: protPrefix + '⚽[CREADOR]', color: 0x0055FF };
+        return { label: protPrefix + '⚽[CREADOR]' + clanSuffix, color: 0x0055FF };
     }
     if (auth === 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic') {
-        return { label: protPrefix + '👑[KING]', color: 0xFFFFFF };
+        return { label: protPrefix + '👑[KING]' + clanSuffix, color: 0xFFFFFF };
+    }
+    if (auth === 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I') {
+        return { label: protPrefix + '🔴[LEO]' + clanSuffix, color: 0xFF0000 };
+    }
+    if (auth === 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4') {
+        return { label: protPrefix + '🍀[JUST TGW]🍀' + clanSuffix, color: 0x228B22 };
     }
     if (auth) {
         var tag = botState.playerTags[auth];
         if (tag && tag.remaining > 0) {
             if (tag.type === 'GAY') {
-                return { label: protPrefix + '[GAY]', color: 0xFFC0CB };
+                return { label: protPrefix + '[GAY]' + clanSuffix, color: 0xFFC0CB };
             }
         }
     }
     if (auth && botState.winStreaks[auth] >= 2) {
-        return { label: protPrefix + '[MVP]', color: 0xFFD700 };
+        return { label: protPrefix + '[MVP]' + clanSuffix, color: 0xFFD700 };
     }
     // Sistema de rangos por victorias
     var wins = (auth && botState.winsCache[auth]) ? botState.winsCache[auth] : 0;
     var rank = getRankByWins(wins);
-    return { label: protPrefix + rank.label, color: rank.color };
+    return { label: protPrefix + rank.label + clanSuffix, color: rank.color };
 }
 
 function decrementTempTags() {
@@ -598,8 +658,11 @@ if (typeof ULTRABALL !== 'undefined' && ULTRABALL.setMapData) {
 if (typeof SURVIVAL_SQ !== 'undefined' && SURVIVAL_SQ.setMapData) {
     SURVIVAL_SQ.setMapData(mapSurvivalSquare);
 }
-// Inyectar mapa en NUMBERCHAIRS
-if (typeof NUMBERCHAIRS !== 'undefined' && NUMBERCHAIRS.setMapData) {
+// Inyectar todos los mapas en NUMBERCHAIRS (v2-v21)
+if (typeof NUMBERCHAIRS !== 'undefined' && NUMBERCHAIRS.setAllMaps) {
+    var _ncMaps = ##NUMBERCHAIR_ALL_MAPS##;
+    NUMBERCHAIRS.setAllMaps(_ncMaps);
+} else if (typeof NUMBERCHAIRS !== 'undefined' && NUMBERCHAIRS.setMapData) {
     NUMBERCHAIRS.setMapData(mapNumberChairs);
 }
 // Inyectar mapa en COLLISION_TEAM_RACING (si existe)
@@ -734,6 +797,16 @@ function unlockTeamChanges() {
 // Firma: onPlayerKicked(kickedPlayer, reason, ban, byPlayer)
 room.onPlayerKicked = function(kickedPlayer, reason, ban, byPlayer) {
     try {
+        // Trackear kicks y bans en DB
+        var kickedAuth = getAuth(kickedPlayer);
+        if (kickedAuth && kickedPlayer.name) {
+            if (ban) {
+                try { window.__dbAddBanCount(kickedAuth, kickedPlayer.name); } catch(e){}
+            } else {
+                try { window.__dbAddKickCount(kickedAuth, kickedPlayer.name); } catch(e){}
+            }
+        }
+
         if (byPlayer && byPlayer.id !== 0) {
             var byAuth = getAuth(byPlayer);
             var isCreator = byAuth && CREATOR_AUTHS.indexOf(byAuth) !== -1;
@@ -1699,6 +1772,226 @@ function startNAMAJUNAS_RACE_2() {
     } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
 }
 
+function startFCT1() {
+    botState.gameActive = true;
+    if (typeof FCT1 !== 'undefined') {
+        FCT1.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startFIT_IN_GRAVEYARD() {
+    botState.gameActive = true;
+    if (typeof FIT_IN_GRAVEYARD !== 'undefined') {
+        FIT_IN_GRAVEYARD.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startFUTBOL_CALLEJERO() {
+    botState.gameActive = true;
+    if (typeof FUTBOL_CALLEJERO !== 'undefined') {
+        FUTBOL_CALLEJERO.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startGYM_COLORS() {
+    botState.gameActive = true;
+    if (typeof GYM_COLORS !== 'undefined') {
+        GYM_COLORS.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startGYM9() {
+    botState.gameActive = true;
+    if (typeof GYM9 !== 'undefined') {
+        GYM9.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startMATRIX_FIT() {
+    botState.gameActive = true;
+    if (typeof MATRIX_FIT !== 'undefined') {
+        MATRIX_FIT.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startRACE02() {
+    botState.gameActive = true;
+    if (typeof RACE02 !== 'undefined') {
+        RACE02.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startPLUM() {
+    botState.gameActive = true;
+    if (typeof PLUM !== 'undefined') {
+        PLUM.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startRUN_REBOUND_2() {
+    botState.gameActive = true;
+    if (typeof RUN_REBOUND_2 !== 'undefined') {
+        RUN_REBOUND_2.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startSWING_CANNONS() {
+    botState.gameActive = true;
+    if (typeof SWING_CANNONS !== 'undefined') {
+        SWING_CANNONS.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startSURVIVAL_INSECT() {
+    botState.gameActive = true;
+    if (typeof SURVIVAL_INSECT !== 'undefined') {
+        SURVIVAL_INSECT.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startRUN_LUCK() {
+    botState.gameActive = true;
+    if (typeof RUN_LUCK !== 'undefined') {
+        RUN_LUCK.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startPINBALL_ROULETTE() {
+    botState.gameActive = true;
+    if (typeof PINBALL_ROULETTE !== 'undefined') {
+        PINBALL_ROULETTE.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startJUMPING_SURVIVAL() {
+    botState.gameActive = true;
+    if (typeof JUMPING_SURVIVAL !== 'undefined') {
+        JUMPING_SURVIVAL.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startZOMBIE_RUN() {
+    botState.gameActive = true;
+    if (typeof ZOMBIE_RUN !== 'undefined') {
+        ZOMBIE_RUN.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startRACING_GROUND() {
+    botState.gameActive = true;
+    if (typeof RACING_GROUND !== 'undefined') {
+        RACING_GROUND.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startSHAOLIN_SOCCER() {
+    botState.gameActive = true;
+    if (typeof SHAOLIN_SOCCER !== 'undefined') {
+        SHAOLIN_SOCCER.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startSPACEBOUNCE_POWER() {
+    botState.gameActive = true;
+    if (typeof SPACEBOUNCE_POWER !== 'undefined') {
+        SPACEBOUNCE_POWER.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startBASKETBALL() {
+    botState.gameActive = true;
+    if (typeof BASKETBALL !== 'undefined') {
+        BASKETBALL.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startBTL() {
+    botState.gameActive = true;
+    if (typeof BTL !== 'undefined') {
+        BTL.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startBONK_SUMMER() {
+    botState.gameActive = true;
+    if (typeof BONK_SUMMER !== 'undefined') {
+        BONK_SUMMER.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startBONK_WINTER() {
+    botState.gameActive = true;
+    if (typeof BONK_WINTER !== 'undefined') {
+        BONK_WINTER.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
 // Ban temporal robusto: trackea por auth con timestamp de expiración
 function applyTempBan(playerId, duration) {
     var auth = botState.authMap[playerId] || null;
@@ -1890,6 +2183,33 @@ function startBanVote(room, data) {
 }
 
 function loadLuckyMap(winner) {
+    // Verificar que el ganador es valido (no desconectado, no AFK, no espectador)
+    if (winner && winner.id) {
+        var winnerCheck = room.getPlayer(winner.id);
+        if (!winnerCheck) {
+            console.log('⚠️ Ganador ' + winner.name + ' ya no esta en la sala');
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+            return;
+        }
+        // Si el ganador esta en espectador (team 0), anular
+        if (winnerCheck.team === 0) {
+            console.log('⚠️ Ganador ' + winner.name + ' esta en espectador, anulando victoria');
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+            return;
+        }
+        // Si el ganador tenia spectatorNext, anular esa regla para que juegue el Lucky
+        var winnerAuthLucky = getAuth(winnerCheck);
+        if (winnerAuthLucky) {
+            if (botState.spectatorNext[winnerAuthLucky]) {
+                delete botState.spectatorNext[winnerAuthLucky];
+            }
+            if (botState.spectatorLocked[winnerAuthLucky]) {
+                delete botState.spectatorLocked[winnerAuthLucky];
+            }
+        }
+    }
     // Check robo de lucky (!robarlucky) - solo roba el Lucky, no la victoria
     var luckyPlayer = winner;
     if (botState.robarLucky) {
@@ -1912,6 +2232,7 @@ function loadLuckyMap(winner) {
     // Guardar victoria en DB y actualizar cache de rangos
     if (winnerAuth && typeof window.__dbSaveWin === 'function') {
         try { window.__dbSaveWin(winnerAuth, winner.name, botState.currentMinigame || 'UNKNOWN'); } catch(e) {}
+        try { if (typeof window.__dbAddClanWin === 'function') window.__dbAddClanWin(winnerAuth); } catch(e) {}
         var oldWins = botState.winsCache[winnerAuth] || 0;
         var newWins = oldWins + 1;
         botState.winsCache[winnerAuth] = newWins;
@@ -1936,7 +2257,9 @@ function loadLuckyMap(winner) {
     botState.winStreaks[winnerAuth] = (botState.winStreaks[winnerAuth] || 0) + 1;
     var streak = botState.winStreaks[winnerAuth];
     if (streak >= 2) {
-        room.sendAnnouncement("🔥 " + winner.name + " lleva " + streak + " VICTORIAS SEGUIDAS!", null, 0xFF4500, "bold", 2);
+        room.sendAnnouncement("🔥 " + winner.name + " lleva " + streak + " VICTORIAS SEGUIDAS! 🔥", null, 0xFF4500, "bold", 2);
+    } else {
+        room.sendAnnouncement("⭐ " + winner.name + " — Racha: 1", null, 0xFFAA00);
     }
 
     // Guardar mejor racha en DB
@@ -1955,6 +2278,16 @@ function loadLuckyMap(winner) {
         dobleUsado = true;
         delete botState.dobleActive[winnerAuth];
     }
+    // Bonus matrimonio: +10% si la pareja esta online
+    var marriageBonus = false;
+    if (winnerAuth && botState.marriages[winnerAuth]) {
+        var spouseAuth = botState.marriages[winnerAuth];
+        var spouseOnline = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === spouseAuth; });
+        if (spouseOnline) {
+            totalReward = Math.floor(totalReward * 1.10);
+            marriageBonus = true;
+        }
+    }
     // Evento: multiplicador de dinero
     var eventoMulti = '';
     if (botState.activeEvent) {
@@ -1969,6 +2302,9 @@ function loadLuckyMap(winner) {
         rewardMsg += " (x2 DOBLE!)";
     }
     if (eventoMulti) rewardMsg += eventoMulti;
+    if (marriageBonus) {
+        rewardMsg += " (💍+10%)";
+    }
     if (streakBonus > 0) {
         rewardMsg += " (+" + formatMoney(streakBonus) + " bonus racha x" + streak + ")";
     }
@@ -2070,9 +2406,13 @@ function loadLuckyMap(winner) {
                         console.log('🔓 Desbloqueo automático de spectatorLocked para auth=' + spAuth);
                     }, 90000);
                 },
-                onGayTag: function(playerAuth) {
+                onGayTag: function(playerAuth, playerName) {
                     // Asignar etiqueta GAY por 4 minijuegos
                     botState.playerTags[playerAuth] = { type: 'GAY', remaining: 4 };
+                    // Guardar contador en DB
+                    if (typeof window.__dbAddGayCount === 'function') {
+                        try { window.__dbAddGayCount(playerAuth, playerName || 'Desconocido'); } catch(e) {}
+                    }
                     console.log("🌈 Etiqueta GAY asignada a auth: " + playerAuth);
                 },
                 onBanTemp: function(playerId, duration) {
@@ -2142,6 +2482,30 @@ function loadLuckyMap(winner) {
             setTimeout(checkAndStart, 5000);
         }
     }, 2000);
+}
+
+// ============================================
+// EXCLUIR JUGADORES AFK DE LOS MINIJUEGOS
+// ============================================
+function excludeAFKFromGame() {
+    // No excluir durante juicio público
+    if (botState.banVoteActive || botState.pendingBanVote) return;
+    var now = Date.now();
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    players.forEach(function(p) {
+        var auth = getAuth(p);
+        // Excluir si uso !afk
+        if (auth && botState.afkProtected[auth]) {
+            try { room.setPlayerTeam(p.id, 0); } catch(e) {}
+            return;
+        }
+        // Excluir si lleva 10+ segundos inactivo
+        var lastAct = botState.afkLastActivity[p.id];
+        if (lastAct && (now - lastAct) >= 10000) {
+            try { room.setPlayerTeam(p.id, 0); } catch(e) {}
+            room.sendAnnouncement('⚠️ ' + p.name + ' excluido del minijuego por inactividad.', null, 0xFF6600);
+        }
+    });
 }
 
 // ============================================
@@ -2226,6 +2590,30 @@ function forceStopAllGames() {
     try { if (MUSICAL_FIT && MUSICAL_FIT.isActive && MUSICAL_FIT.isActive()) MUSICAL_FIT.stop(room); } catch(e){}
     try { if (NAMAJUNAS_RACE && NAMAJUNAS_RACE.isActive && NAMAJUNAS_RACE.isActive()) NAMAJUNAS_RACE.stop(room); } catch(e){}
     try { if (NAMAJUNAS_RACE_2 && NAMAJUNAS_RACE_2.isActive && NAMAJUNAS_RACE_2.isActive()) NAMAJUNAS_RACE_2.stop(room); } catch(e){}
+    try { if (FCT1 && FCT1.isActive && FCT1.isActive()) FCT1.stop(room); } catch(e){}
+    try { if (FIT_IN_GRAVEYARD && FIT_IN_GRAVEYARD.isActive && FIT_IN_GRAVEYARD.isActive()) FIT_IN_GRAVEYARD.stop(room); } catch(e){}
+    try { if (FUTBOL_CALLEJERO && FUTBOL_CALLEJERO.isActive && FUTBOL_CALLEJERO.isActive()) FUTBOL_CALLEJERO.stop(room); } catch(e){}
+    try { if (GOL_A_GOL && GOL_A_GOL.isActive && GOL_A_GOL.isActive()) GOL_A_GOL.stop(room); } catch(e){}
+    try { if (GYM_COLORS && GYM_COLORS.isActive && GYM_COLORS.isActive()) GYM_COLORS.stop(room); } catch(e){}
+    try { if (GYM9 && GYM9.isActive && GYM9.isActive()) GYM9.stop(room); } catch(e){}
+    try { if (MATRIX_FIT && MATRIX_FIT.isActive && MATRIX_FIT.isActive()) MATRIX_FIT.stop(room); } catch(e){}
+    try { if (RACE02 && RACE02.isActive && RACE02.isActive()) RACE02.stop(room); } catch(e){}
+    try { if (PLUM && PLUM.isActive && PLUM.isActive()) PLUM.stop(room); } catch(e){}
+    try { if (RUN_REBOUND_2 && RUN_REBOUND_2.isActive && RUN_REBOUND_2.isActive()) RUN_REBOUND_2.stop(room); } catch(e){}
+    try { if (SWING_CANNONS && SWING_CANNONS.isActive && SWING_CANNONS.isActive()) SWING_CANNONS.stop(room); } catch(e){}
+    try { if (SURVIVAL_INSECT && SURVIVAL_INSECT.isActive && SURVIVAL_INSECT.isActive()) SURVIVAL_INSECT.stop(room); } catch(e){}
+    try { if (RUN_LUCK && RUN_LUCK.isActive && RUN_LUCK.isActive()) RUN_LUCK.stop(room); } catch(e){}
+    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) PINBALL_ROULETTE.stop(room); } catch(e){}
+    try { if (JUMPING_SURVIVAL && JUMPING_SURVIVAL.isActive && JUMPING_SURVIVAL.isActive()) JUMPING_SURVIVAL.stop(room); } catch(e){}
+    try { if (SHAOLIN_SOCCER && SHAOLIN_SOCCER.isActive && SHAOLIN_SOCCER.isActive()) SHAOLIN_SOCCER.stop(room); } catch(e){}
+    try { if (SPACE_VORTEX && SPACE_VORTEX.isActive && SPACE_VORTEX.isActive()) SPACE_VORTEX.stop(room); } catch(e){}
+    try { if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) SPACEBOUNCE_POWER.stop(room); } catch(e){}
+    try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) BASKETBALL.stop(room); } catch(e){}
+    try { if (BTL && BTL.isActive && BTL.isActive()) BTL.stop(room); } catch(e){}
+    try { if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) BONK_SUMMER.stop(room); } catch(e){}
+    try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) BONK_WINTER.stop(room); } catch(e){}
+    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) ZOMBIE_RUN.stop(room); } catch(e){}
+    try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) RACING_GROUND.stop(room); } catch(e){}
     try { room.stopGame(); } catch(e){}
     botState.gameActive = false;
     if (botState.startTimeout) {
@@ -2316,6 +2704,30 @@ function checkAndStart() {
     try { if (MUSICAL_FIT && MUSICAL_FIT.isActive && MUSICAL_FIT.isActive()) anyModuleActive = true; } catch(e){}
     try { if (NAMAJUNAS_RACE && NAMAJUNAS_RACE.isActive && NAMAJUNAS_RACE.isActive()) anyModuleActive = true; } catch(e){}
     try { if (NAMAJUNAS_RACE_2 && NAMAJUNAS_RACE_2.isActive && NAMAJUNAS_RACE_2.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (FCT1 && FCT1.isActive && FCT1.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (FIT_IN_GRAVEYARD && FIT_IN_GRAVEYARD.isActive && FIT_IN_GRAVEYARD.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (FUTBOL_CALLEJERO && FUTBOL_CALLEJERO.isActive && FUTBOL_CALLEJERO.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (GOL_A_GOL && GOL_A_GOL.isActive && GOL_A_GOL.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (GYM_COLORS && GYM_COLORS.isActive && GYM_COLORS.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (GYM9 && GYM9.isActive && GYM9.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (MATRIX_FIT && MATRIX_FIT.isActive && MATRIX_FIT.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (RACE02 && RACE02.isActive && RACE02.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (PLUM && PLUM.isActive && PLUM.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (RUN_REBOUND_2 && RUN_REBOUND_2.isActive && RUN_REBOUND_2.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (SWING_CANNONS && SWING_CANNONS.isActive && SWING_CANNONS.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (SURVIVAL_INSECT && SURVIVAL_INSECT.isActive && SURVIVAL_INSECT.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (RUN_LUCK && RUN_LUCK.isActive && RUN_LUCK.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (JUMPING_SURVIVAL && JUMPING_SURVIVAL.isActive && JUMPING_SURVIVAL.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (SHAOLIN_SOCCER && SHAOLIN_SOCCER.isActive && SHAOLIN_SOCCER.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (SPACE_VORTEX && SPACE_VORTEX.isActive && SPACE_VORTEX.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (BTL && BTL.isActive && BTL.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) anyModuleActive = true; } catch(e){}
     if (anyModuleActive) {
         console.log('⚠️ Safety: módulo de juego aún activo, forzando stop');
         forceStopAllGames();
@@ -2340,8 +2752,142 @@ function checkAndStart() {
         botState.startTimeout = setTimeout(checkAndStart, 10000);
     } else {
         stopSoloEntertainment();
+        // Mover jugadores AFK a espectadores antes de iniciar juego
+        excludeAFKFromGame();
         // Decrementar etiquetas temporales al iniciar nuevo minijuego
         decrementTempTags();
+
+        // Procesar inversiones activas
+        for (var invAuth in botState.inversiones) {
+            var inv = botState.inversiones[invAuth];
+            inv.gamesLeft--;
+            if (inv.gamesLeft <= 0) {
+                // Resolver inversion
+                var roll = Math.random() * 100;
+                var multiplier, resultMsg;
+                if (roll < 10) { multiplier = 0; resultMsg = '💥 QUIEBRA! Perdiste toda tu inversion'; }
+                else if (roll < 35) { multiplier = 0.5; resultMsg = '📉 Mala suerte... recuperas solo la mitad'; }
+                else if (roll < 65) { multiplier = 1.5; resultMsg = '📊 Ganancia moderada! x1.5'; }
+                else if (roll < 85) { multiplier = 2; resultMsg = '📈 Buena inversion! x2'; }
+                else if (roll < 95) { multiplier = 3; resultMsg = '🚀 Gran inversion! x3'; }
+                else { multiplier = 5; resultMsg = '💎 JACKPOT! x5!!'; }
+                var pago = Math.floor(inv.monto * multiplier);
+                if (pago > 0) {
+                    try { window.__dbAddBalance(invAuth, inv.name, pago); } catch(e) {}
+                }
+                var colorRes = multiplier >= 2 ? 0x00FF00 : (multiplier >= 1 ? 0xFFFF00 : 0xFF0000);
+                room.sendAnnouncement('📈 INVERSION de ' + inv.name + ' maduro!\n' + resultMsg + '\nInvirtio: ' + formatMoney(inv.monto) + ' → Recibe: ' + formatMoney(pago), null, colorRes, 'bold', 2);
+                delete botState.inversiones[invAuth];
+            } else {
+                // Buscar jugador online para notificar
+                var invPlayer = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === invAuth; });
+                if (invPlayer) {
+                    room.sendAnnouncement('📈 Tu inversion de ' + formatMoney(inv.monto) + ' madura en ' + inv.gamesLeft + ' juegos', invPlayer.id, 0x00BFFF);
+                }
+            }
+        }
+
+        // Procesar prestamos activos
+        for (var prestAuth in botState.prestamos) {
+            var prest = botState.prestamos[prestAuth];
+            prest.gamesLeft--;
+            var prestPlayer = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === prestAuth; });
+            if (prest.gamesLeft > 0) {
+                // Todavia tiene tiempo
+                if (prestPlayer && prest.gamesLeft <= 5) {
+                    room.sendAnnouncement('🏦 Te quedan ' + prest.gamesLeft + ' juegos para pagar tu prestamo de ' + formatMoney(prest.deudaTotal), prestPlayer.id, 0xFFFF00);
+                }
+            } else {
+                // Se acabo el tiempo, cobrar interes
+                prest.intereses++;
+                prest.deudaTotal += 5000;
+                if (prest.intereses >= 5) {
+                    // 5 intereses sin pagar → saldo a 0 y eliminar prestamo
+                    try { window.__dbGetStats(prestAuth).then(function(stats) {
+                        var bal = (stats && stats.balance) ? stats.balance : 0;
+                        if (bal > 0) { try { window.__dbAddBalance(prestAuth, prest.name, -bal); } catch(e) {} }
+                    }); } catch(e) {}
+                    room.sendAnnouncement('🏦💀 ' + prest.name + ' no pago su prestamo! Saldo confiscado a $0', null, 0xFF0000, 'bold', 2);
+                    delete botState.prestamos[prestAuth];
+                } else {
+                    // Cobrar interes de $5.000
+                    try { window.__dbAddBalance(prestAuth, prest.name, -5000); } catch(e) {}
+                    room.sendAnnouncement('🏦 INTERES #' + prest.intereses + '/5 cobrado a ' + prest.name + ': -' + formatMoney(5000) + ' | Deuda total: ' + formatMoney(prest.deudaTotal) + (prestPlayer ? '' : ' (offline)'), null, 0xFF6600, 'bold');
+                    if (prestPlayer) {
+                        room.sendAnnouncement('⚠️ Paga con !pagar [monto] o perderas todo tu saldo al interes #5', prestPlayer.id, 0xFF0000);
+                    }
+                    // Darle 5 juegos mas para pagar antes del siguiente interes
+                    prest.gamesLeft = 5;
+                }
+            }
+        }
+
+        // Procesar prestamos P2P (cuotas automaticas)
+        (function() {
+            var p2pKeys = Object.keys(botState.prestamosP2P);
+            for (var pi = 0; pi < p2pKeys.length; pi++) {
+                var dAuth = p2pKeys[pi];
+                var p2p = botState.prestamosP2P[dAuth];
+                if (p2p.cuotasPagadas >= p2p.cuotasTotales) {
+                    // Prestamo completado
+                    if (botState.prestamistas[p2p.prestamistaAuth]) {
+                        botState.prestamistas[p2p.prestamistaAuth].totalGanado += (p2p.montoTotal - p2p.monto);
+                    }
+                    room.sendAnnouncement('🤝✅ ' + p2p.deudorNombre + ' termino de pagar su prestamo personal a ' + p2p.prestamistaNombre + '!', null, 0x00FF00, 'bold', 2);
+                    delete botState.prestamosP2P[dAuth];
+                    continue;
+                }
+                // Intentar cobrar cuota
+                var deudorPlayer = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === dAuth; });
+                (function(deudorAuth, prest) {
+                    if (typeof window.__dbGetStats !== 'function') return;
+                    window.__dbGetStats(deudorAuth).then(function(stats) {
+                        var bal = (stats && stats.balance) ? stats.balance : 0;
+                        if (bal >= prest.cuotaMonto) {
+                            // Cobrar cuota
+                            try { window.__dbAddBalance(deudorAuth, prest.deudorNombre, -prest.cuotaMonto); } catch(e) {}
+                            try { window.__dbAddBalance(prest.prestamistaAuth, prest.prestamistaNombre, prest.cuotaMonto); } catch(e) {}
+                            prest.cuotasPagadas++;
+                            prest.impagos = 0;
+                            var restantes = prest.cuotasTotales - prest.cuotasPagadas;
+                            var dp = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === deudorAuth; });
+                            if (dp) {
+                                room.sendAnnouncement('🤝 Cuota #' + prest.cuotasPagadas + '/' + prest.cuotasTotales + ' pagada a ' + prest.prestamistaNombre + ': -' + formatMoney(prest.cuotaMonto) + ' | Restante: ' + (restantes > 0 ? restantes + ' cuotas' : 'COMPLETADO!'), dp.id, 0x00BFFF);
+                            }
+                            if (prest.cuotasPagadas >= prest.cuotasTotales) {
+                                if (botState.prestamistas[prest.prestamistaAuth]) {
+                                    botState.prestamistas[prest.prestamistaAuth].totalGanado += (prest.montoTotal - prest.monto);
+                                }
+                                room.sendAnnouncement('🤝✅ ' + prest.deudorNombre + ' termino de pagar su prestamo personal a ' + prest.prestamistaNombre + '!', null, 0x00FF00, 'bold', 2);
+                                delete botState.prestamosP2P[deudorAuth];
+                            }
+                        } else {
+                            // No tiene saldo
+                            prest.impagos++;
+                            prest.deudaPendiente += prest.cuotaMonto;
+                            var dp2 = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === deudorAuth; });
+                            if (dp2) {
+                                room.sendAnnouncement('⚠️ Impago #' + prest.impagos + '/10 - No tienes saldo para la cuota de ' + formatMoney(prest.cuotaMonto) + '. Paga con !pagarp2p', dp2.id, 0xFF6600);
+                            }
+                            if (prest.impagos >= 10) {
+                                // Confiscar saldo del deudor
+                                if (bal > 0) {
+                                    try { window.__dbAddBalance(deudorAuth, prest.deudorNombre, -bal); } catch(e) {}
+                                    try { window.__dbAddBalance(prest.prestamistaAuth, prest.prestamistaNombre, bal); } catch(e) {}
+                                }
+                                // Devolver monto original del prestamo al prestamista
+                                var montoDevolver = prest.monto - (prest.cuotasPagadas * prest.cuotaMonto);
+                                if (montoDevolver > 0) {
+                                    try { window.__dbAddBalance(prest.prestamistaAuth, prest.prestamistaNombre, montoDevolver); } catch(e) {}
+                                }
+                                room.sendAnnouncement('🤝💀 ' + prest.deudorNombre + ' acumulo 10 impagos! Saldo confiscado + $' + formatMoney(montoDevolver > 0 ? montoDevolver : 0) + ' devueltos a ' + prest.prestamistaNombre + '. Prestamo cerrado.', null, 0xFF0000, 'bold', 2);
+                                delete botState.prestamosP2P[deudorAuth];
+                            }
+                        }
+                    }).catch(function() {});
+                })(dAuth, p2p);
+            }
+        })();
 
         // SISTEMA DE MINIJUEGOS ALEATORIOS (evitar repetir el último)
         // Lista completa de minijuegos disponibles
@@ -2367,7 +2913,6 @@ function checkAndStart() {
             { name: 'COVID19', module: COVID19, displayName: 'COVID-19', starter: startCOVID19 },
             { name: 'GYMMIX', module: GYMMIX, displayName: 'GYMMIX - Carrera de Obstaculos', starter: startGYMMIX },
             { name: 'TRIVIA', module: TRIVIA, displayName: 'TRIVIA', starter: startTRIVIA },
-            { name: 'GOT', module: GOT, displayName: 'GAME OF THRONES', starter: startGOT },
             { name: 'SPACE_CASE', module: SPACE_CASE, displayName: 'SPACE CASE', starter: startSPACE_CASE },
             { name: 'AMERICAN_CARRYBALL', module: AMERICAN_CARRYBALL, displayName: 'AMERICAN SPACE CARRYBALL', starter: startAMERICAN_CARRYBALL },
             { name: 'RING_SURVIVAL', module: RING_SURVIVAL, displayName: 'RING SURVIVAL', starter: startRING_SURVIVAL },
@@ -2383,7 +2928,6 @@ function checkAndStart() {
             { name: 'KAFA_TOPU_SHADOW', module: KAFA_TOPU_SHADOW, displayName: 'KAFA TOPU SHADOW', starter: startKAFA_TOPU_SHADOW },
             { name: 'KURU_KAFA_BONK', module: KURU_KAFA_BONK, displayName: 'KURU KAFA BONK', starter: startKURU_KAFA_BONK },
             { name: 'LASER_RACE', module: LASER_RACE, displayName: 'LASER RACE', starter: startLASER_RACE },
-            { name: 'CAPTURE_THE_FLAG', module: CAPTURE_THE_FLAG, displayName: 'CAPTURE THE FLAG', starter: startCAPTURE_THE_FLAG },
             { name: 'COPS_ROBBERS', module: COPS_ROBBERS, displayName: 'COPS & ROBBERS', starter: startCOPS_ROBBERS },
             { name: 'JUMP_QUA', module: JUMP_QUA, displayName: 'JUMP', starter: startJUMP_QUA },
             { name: 'BOOMERANG_LEAGUE', module: BOOMERANG_LEAGUE, displayName: 'BOOMERANG LEAGUE', starter: startBOOMERANG_LEAGUE },
@@ -2407,7 +2951,29 @@ function checkAndStart() {
             { name: 'ENDURE_BOMBS', module: ENDURE_BOMBS, displayName: 'ENDURE BOMBS', starter: startENDURE_BOMBS },
             { name: 'MUSICAL_FIT', module: MUSICAL_FIT, displayName: 'MUSICAL FIT', starter: startMUSICAL_FIT },
             { name: 'NAMAJUNAS_RACE', module: NAMAJUNAS_RACE, displayName: 'NAMAJUNAS RACE', starter: startNAMAJUNAS_RACE },
-            { name: 'NAMAJUNAS_RACE_2', module: NAMAJUNAS_RACE_2, displayName: 'NAMAJUNAS RACE 2', starter: startNAMAJUNAS_RACE_2 }
+            { name: 'NAMAJUNAS_RACE_2', module: NAMAJUNAS_RACE_2, displayName: 'NAMAJUNAS RACE 2', starter: startNAMAJUNAS_RACE_2 },
+            { name: 'FCT1', module: FCT1, displayName: 'FCT 1', starter: startFCT1 },
+            { name: 'FIT_IN_GRAVEYARD', module: FIT_IN_GRAVEYARD, displayName: 'FIT IN GRAVEYARD', starter: startFIT_IN_GRAVEYARD },
+            { name: 'FUTBOL_CALLEJERO', module: FUTBOL_CALLEJERO, displayName: 'FUTBOL CALLEJERO', starter: startFUTBOL_CALLEJERO },
+            { name: 'GYM_COLORS', module: GYM_COLORS, displayName: 'GYM COLORS', starter: startGYM_COLORS },
+            { name: 'GYM9', module: GYM9, displayName: 'GYM 9', starter: startGYM9 },
+            { name: 'MATRIX_FIT', module: MATRIX_FIT, displayName: 'MATRIX FIT', starter: startMATRIX_FIT },
+            { name: 'RACE02', module: RACE02, displayName: 'RACE 02', starter: startRACE02 },
+            { name: 'PLUM', module: PLUM, displayName: 'PLUM', starter: startPLUM },
+            { name: 'RUN_REBOUND_2', module: RUN_REBOUND_2, displayName: 'RUN REBOUND 2', starter: startRUN_REBOUND_2 },
+            { name: 'SWING_CANNONS', module: SWING_CANNONS, displayName: 'SWING CANNONS', starter: startSWING_CANNONS },
+            { name: 'SURVIVAL_INSECT', module: SURVIVAL_INSECT, displayName: 'SURVIVAL INSECT', starter: startSURVIVAL_INSECT },
+            { name: 'RUN_LUCK', module: RUN_LUCK, displayName: 'RUN LUCK', starter: startRUN_LUCK },
+            { name: 'PINBALL_ROULETTE', module: PINBALL_ROULETTE, displayName: 'PINBALL ROULETTE', starter: startPINBALL_ROULETTE },
+            { name: 'JUMPING_SURVIVAL', module: JUMPING_SURVIVAL, displayName: 'JUMPING SURVIVAL', starter: startJUMPING_SURVIVAL },
+            { name: 'ZOMBIE_RUN', module: ZOMBIE_RUN, displayName: 'ZOMBIE RUN', starter: startZOMBIE_RUN },
+            { name: 'SPACEBOUNCE_POWER', module: SPACEBOUNCE_POWER, displayName: 'SPACEBOUNCE POWER', starter: startSPACEBOUNCE_POWER },
+            { name: 'SHAOLIN_SOCCER', module: SHAOLIN_SOCCER, displayName: 'SHAOLIN SOCCER', starter: startSHAOLIN_SOCCER },
+            { name: 'BASKETBALL', module: BASKETBALL, displayName: 'BASKETBALL', starter: startBASKETBALL },
+            { name: 'BTL', module: BTL, displayName: 'B.T.L', starter: startBTL },
+            // { name: 'BONK_SUMMER', module: BONK_SUMMER, displayName: 'BONK SUMMER', starter: startBONK_SUMMER }, // DESACTIVADO temporalmente
+            { name: 'BONK_WINTER', module: BONK_WINTER, displayName: 'BONK WINTER', starter: startBONK_WINTER },
+            { name: 'RACING_GROUND', module: RACING_GROUND, displayName: 'RACING GROUND', starter: startRACING_GROUND }
         ];
 
         // Modo test: filtrar solo los juegos seleccionados
@@ -2444,7 +3010,11 @@ function checkAndStart() {
             var chosen = minigames.find(function(g) { return g.name === botState.chosenNextGame.name; });
             if (chosen) {
                 selectedGame = chosen;
-                room.sendAnnouncement('🎯 ' + botState.chosenNextGame.playerName + ' eligió el próximo juego: ' + chosen.displayName, null, 0x00BFFF, 'bold', 2);
+                if (botState.chosenNextGame.isBites) {
+                    room.sendAnnouncement('💣 BITES THE DUST — Repitiendo: ' + chosen.displayName, null, 0xFF69B4, 'bold', 2);
+                } else {
+                    room.sendAnnouncement('🎯 ' + botState.chosenNextGame.playerName + ' eligió el próximo juego: ' + chosen.displayName, null, 0x00BFFF, 'bold', 2);
+                }
             }
             botState.chosenNextGame = null;
         }
@@ -2506,6 +3076,18 @@ function checkAndStart() {
         botState.lastMinigame = selectedGame.name;
         botState.currentMinigame = selectedGame.name;
         botState.gameActive = true; // Marcar activo INMEDIATAMENTE para evitar duplicados
+        botState.bitesUsedThisGame = false; // Reset bites the dust para nuevo juego
+        botState.minigameStartTime = Date.now(); // Timestamp de inicio
+        // Decrementar cooldown de poderes por jugador
+        for (var pcAuth in botState.powerCooldownGames) {
+            botState.powerCooldownGames[pcAuth]--;
+            if (botState.powerCooldownGames[pcAuth] <= 0) delete botState.powerCooldownGames[pcAuth];
+        }
+        // Decrementar cooldown de !elegir por jugador
+        for (var ecAuth in botState.elegirCooldownGames) {
+            botState.elegirCooldownGames[ecAuth]--;
+            if (botState.elegirCooldownGames[ecAuth] <= 0) delete botState.elegirCooldownGames[ecAuth];
+        }
 
         // Sistema de eventos aleatorios
         botState.activeEvent = null; // limpiar evento anterior
@@ -2656,11 +3238,14 @@ room.onPlayerJoin = function(player) {
 
         botState.authMap[player.id] = player.auth;
 
-        // Cargar victorias de DB para el sistema de rangos
+        // Cargar victorias de DB para el sistema de rangos + clan tag
         if (typeof window.__dbGetStats === 'function') {
             window.__dbGetStats(player.auth).then(function(stats) {
                 if (stats && stats.wins) {
                     botState.winsCache[player.auth] = stats.wins;
+                }
+                if (stats && stats.clanTag) {
+                    botState.clanTags[player.auth] = stats.clanTag;
                 }
             }).catch(function() {});
         }
@@ -2753,11 +3338,22 @@ room.onPlayerJoin = function(player) {
         room.setPlayerAdmin(player.id, true);
         room.sendAnnouncement('⭐ Bienvenido The Best! Admin activado', player.id, 0x89CFF0, 'bold');
     }
+    // LEO: dar admin automático
+    if (kingAuth === 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I') {
+        room.setPlayerAdmin(player.id, true);
+        room.sendAnnouncement('🔴 Bienvenido LEO! Admin activado', player.id, 0xFF0000, 'bold');
+    }
+    // JUST TGW: dar admin automático
+    if (kingAuth === 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4') {
+        room.setPlayerAdmin(player.id, true);
+        room.sendAnnouncement('🍀 Bienvenido JUST TGW! Admin activado', player.id, 0x228B22, 'bold');
+    }
 
     room.sendAnnouncement(
         "👋 Bienvenido " + player.name + "!\n" +
-        "🎮 Sala de Minijuegos - Los juegos inician automaticamente\n" +
+        "🎮 Sala de Minijuegos v1.9 - Los juegos inician automaticamente\n" +
         "💰 Gana dinero jugando minijuegos\n" +
+        "🛡️ Crea o unete a un clan con !clan\n" +
         "📋 Escribe !ayuda para ver comandos\n" +
         "🏆 Escribe !top para ver el ranking",
         player.id,
@@ -2780,6 +3376,9 @@ room.onPlayerJoin = function(player) {
     if (typeof LUCKY_DIOS !== 'undefined' && LUCKY_DIOS.onPlayerJoin) {
         LUCKY_DIOS.onPlayerJoin(room, player);
     }
+
+    // Si Zombie Run está activo, meter al nuevo como zombie
+    try { if (typeof ZOMBIE_RUN !== 'undefined' && ZOMBIE_RUN.onPlayerJoin) ZOMBIE_RUN.onPlayerJoin(room, player); } catch(e){}
 
     if (botState.gameActive) {
         room.sendAnnouncement(
@@ -3053,9 +3652,87 @@ room.onPlayerLeave = function(player) {
     if (NAMAJUNAS_RACE_2 && NAMAJUNAS_RACE_2.isActive && NAMAJUNAS_RACE_2.isActive()) {
         try { NAMAJUNAS_RACE_2.onPlayerLeave(player); } catch(e){}
     }
+    if (FCT1 && FCT1.isActive && FCT1.isActive()) {
+        try { FCT1.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (FIT_IN_GRAVEYARD && FIT_IN_GRAVEYARD.isActive && FIT_IN_GRAVEYARD.isActive()) {
+        try { FIT_IN_GRAVEYARD.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (FUTBOL_CALLEJERO && FUTBOL_CALLEJERO.isActive && FUTBOL_CALLEJERO.isActive()) {
+        try { FUTBOL_CALLEJERO.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (GOL_A_GOL && GOL_A_GOL.isActive && GOL_A_GOL.isActive()) {
+        try { GOL_A_GOL.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (GYM_COLORS && GYM_COLORS.isActive && GYM_COLORS.isActive()) {
+        try { GYM_COLORS.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (GYM9 && GYM9.isActive && GYM9.isActive()) {
+        try { GYM9.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (MATRIX_FIT && MATRIX_FIT.isActive && MATRIX_FIT.isActive()) {
+        try { MATRIX_FIT.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (RACE02 && RACE02.isActive && RACE02.isActive()) {
+        try { RACE02.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (PLUM && PLUM.isActive && PLUM.isActive()) {
+        try { PLUM.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (RUN_REBOUND_2 && RUN_REBOUND_2.isActive && RUN_REBOUND_2.isActive()) {
+        try { RUN_REBOUND_2.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (SWING_CANNONS && SWING_CANNONS.isActive && SWING_CANNONS.isActive()) {
+        try { SWING_CANNONS.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (SURVIVAL_INSECT && SURVIVAL_INSECT.isActive && SURVIVAL_INSECT.isActive()) {
+        try { SURVIVAL_INSECT.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (RUN_LUCK && RUN_LUCK.isActive && RUN_LUCK.isActive()) {
+        try { RUN_LUCK.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) {
+        try { PINBALL_ROULETTE.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (JUMPING_SURVIVAL && JUMPING_SURVIVAL.isActive && JUMPING_SURVIVAL.isActive()) {
+        try { JUMPING_SURVIVAL.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (SHAOLIN_SOCCER && SHAOLIN_SOCCER.isActive && SHAOLIN_SOCCER.isActive()) {
+        try { SHAOLIN_SOCCER.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (SPACE_VORTEX && SPACE_VORTEX.isActive && SPACE_VORTEX.isActive()) {
+        try { SPACE_VORTEX.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) {
+        try { SPACEBOUNCE_POWER.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) {
+        try { BASKETBALL.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (BTL && BTL.isActive && BTL.isActive()) {
+        try { BTL.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) {
+        try { BONK_SUMMER.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) {
+        try { BONK_WINTER.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) {
+        try { ZOMBIE_RUN.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) {
+        try { RACING_GROUND.onPlayerLeave(room, player); } catch(e){}
+    }
 
     // Limpiar actividad AFK del jugador que sale
     delete botState.afkLastActivity[player.id];
+
+    // Limpiar inversion activa del jugador que sale
+    var leaveAuth = botState.authMap[player.id];
+    if (leaveAuth && botState.inversiones[leaveAuth]) {
+        delete botState.inversiones[leaveAuth];
+    }
 
     var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
     if (playerCount < 2 && botState.gameActive) {
@@ -3228,6 +3905,8 @@ room.onPlayerAdminChange = function(changedPlayer, byPlayer) {
             if (changedAuth === 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic') return;
             // Permitir THE BEST
             if (changedAuth === '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE') return;
+            // Permitir LEO
+            if (changedAuth === 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I') return;
             // No es creador ni temp admin ni KING → quitar admin
             try { room.setPlayerAdmin(changedPlayer.id, false); } catch(e){}
             room.sendAnnouncement(
@@ -3265,7 +3944,8 @@ room.onPlayerTeamChange = function(changedPlayer, byPlayer) {
             // Notificar a todos los módulos activos para que quiten al jugador de su lista interna
             var _mods = [LALALA, SURVIVAL, METEORS, JUMPING, WEBSURVIVAL, GALACTIC, GYM, MULTIBALLS,
                 DODGEBALL, SUPERMAN, ULTRABALL, NUMBERCHAIRS, SURVIVAL_SQ, COLLISION_TEAM_RACING,
-                SPOT_BONK, CHAIRMIX, COVID19, GYMMIX, TRIVIA, GOT, SPACE_CASE, SPACE_MELEE,
+                SPOT_BONK, CHAIRMIX, COVID19, GYMMIX, TRIVIA, SPACE_CASE, SPACE_MELEE,
+                FCT1, FIT_IN_GRAVEYARD, FUTBOL_CALLEJERO, GYM_COLORS, GYM9, MATRIX_FIT, RACE02, ZOMBIE_RUN,
                 AMERICAN_CARRYBALL, RING_SURVIVAL, BONK_ARENA, BONK_BERU,
                 ANIMALCHAIRS_WHALE, BONK_BERU_HAX, COVID2, DOMINIC_SURVIVOR, AIR_HOCKEY,
                 FIT_IN_TREN, FITANIC, FORTUNATE_RACE, KAFA_TOPU, KAFA_TOPU_SHADOW,
@@ -3316,6 +3996,11 @@ room.onPlayerChat = function(player, message) {
 
     // Bloqueo de chat durante anuncios automáticos
     if (botState.chatBlocked) {
+        return false;
+    }
+
+    // Bloqueo durante The World (solo el activador puede hablar)
+    if (botState.theWorldActive && player.id !== botState.theWorldActive.playerId) {
         return false;
     }
 
@@ -3862,6 +4547,78 @@ room.onPlayerChat = function(player, message) {
             if (nr2Result === false) return false;
         } catch(e){}
     }
+    if (FCT1 && FCT1.isActive && FCT1.isActive()) {
+        try { var fct1R = FCT1.onPlayerChat(player, message); if (fct1R === false) return false; } catch(e){}
+    }
+    if (FIT_IN_GRAVEYARD && FIT_IN_GRAVEYARD.isActive && FIT_IN_GRAVEYARD.isActive()) {
+        try { var figR = FIT_IN_GRAVEYARD.onPlayerChat(player, message); if (figR === false) return false; } catch(e){}
+    }
+    if (FUTBOL_CALLEJERO && FUTBOL_CALLEJERO.isActive && FUTBOL_CALLEJERO.isActive()) {
+        try { var fcR = FUTBOL_CALLEJERO.onPlayerChat(room, player, message); if (fcR === false) return false; } catch(e){}
+    }
+    if (GOL_A_GOL && GOL_A_GOL.isActive && GOL_A_GOL.isActive()) {
+        try { var gagR = GOL_A_GOL.onPlayerChat(player, message); if (gagR === false) return false; } catch(e){}
+    }
+    if (GYM_COLORS && GYM_COLORS.isActive && GYM_COLORS.isActive()) {
+        try { var gcR = GYM_COLORS.onPlayerChat(player, message); if (gcR === false) return false; } catch(e){}
+    }
+    if (GYM9 && GYM9.isActive && GYM9.isActive()) {
+        try { var g9R = GYM9.onPlayerChat(player, message); if (g9R === false) return false; } catch(e){}
+    }
+    if (MATRIX_FIT && MATRIX_FIT.isActive && MATRIX_FIT.isActive()) {
+        try { var mfitR = MATRIX_FIT.onPlayerChat(player, message); if (mfitR === false) return false; } catch(e){}
+    }
+    if (RACE02 && RACE02.isActive && RACE02.isActive()) {
+        try { var r02R = RACE02.onPlayerChat(player, message); if (r02R === false) return false; } catch(e){}
+    }
+    if (PLUM && PLUM.isActive && PLUM.isActive()) {
+        try { var plmR = PLUM.onPlayerChat(player, message); if (plmR === false) return false; } catch(e){}
+    }
+    if (RUN_REBOUND_2 && RUN_REBOUND_2.isActive && RUN_REBOUND_2.isActive()) {
+        try { var rr2R = RUN_REBOUND_2.onPlayerChat(player, message); if (rr2R === false) return false; } catch(e){}
+    }
+    if (SWING_CANNONS && SWING_CANNONS.isActive && SWING_CANNONS.isActive()) {
+        try { var scR = SWING_CANNONS.onPlayerChat(player, message); if (scR === false) return false; } catch(e){}
+    }
+    if (SURVIVAL_INSECT && SURVIVAL_INSECT.isActive && SURVIVAL_INSECT.isActive()) {
+        try { var siR = SURVIVAL_INSECT.onPlayerChat(player, message); if (siR === false) return false; } catch(e){}
+    }
+    if (RUN_LUCK && RUN_LUCK.isActive && RUN_LUCK.isActive()) {
+        try { var rlR = RUN_LUCK.onPlayerChat(player, message); if (rlR === false) return false; } catch(e){}
+    }
+    if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) {
+        try { var prR = PINBALL_ROULETTE.onPlayerChat(player, message); if (prR === false) return false; } catch(e){}
+    }
+    if (JUMPING_SURVIVAL && JUMPING_SURVIVAL.isActive && JUMPING_SURVIVAL.isActive()) {
+        try { var jsR = JUMPING_SURVIVAL.onPlayerChat(player, message); if (jsR === false) return false; } catch(e){}
+    }
+    if (SHAOLIN_SOCCER && SHAOLIN_SOCCER.isActive && SHAOLIN_SOCCER.isActive()) {
+        try { var ssR = SHAOLIN_SOCCER.onPlayerChat(player, message); if (ssR === false) return false; } catch(e){}
+    }
+    if (SPACE_VORTEX && SPACE_VORTEX.isActive && SPACE_VORTEX.isActive()) {
+        try { var svR = SPACE_VORTEX.onPlayerChat(player, message); if (svR === false) return false; } catch(e){}
+    }
+    if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) {
+        try { var sbpR = SPACEBOUNCE_POWER.onPlayerChat(room, player, message); if (sbpR === false) return false; } catch(e){}
+    }
+    if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) {
+        try { var bballR = BASKETBALL.onPlayerChat(room, player, message); if (bballR === false) return false; } catch(e){}
+    }
+    if (BTL && BTL.isActive && BTL.isActive()) {
+        try { var btlR = BTL.onPlayerChat(player, message); if (btlR === false) return false; } catch(e){}
+    }
+    if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) {
+        try { var bsR = BONK_SUMMER.onPlayerChat(player, message); if (bsR === false) return false; } catch(e){}
+    }
+    if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) {
+        try { var bwR = BONK_WINTER.onPlayerChat(player, message); if (bwR === false) return false; } catch(e){}
+    }
+    if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) {
+        try { var zrR = ZOMBIE_RUN.onPlayerChat(player, message); if (zrR === false) return false; } catch(e){}
+    }
+    if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) {
+        try { var rgR = RACING_GROUND.onPlayerChat(player, message); if (rgR === false) return false; } catch(e){}
+    }
 
     // Sistema de etiquetas: mostrar tag antes del nombre
     // Solo para mensajes normales (no comandos)
@@ -4384,19 +5141,246 @@ room.onPlayerChat = function(player, message) {
             "!trabajar - Trabajar para ganar dinero (CD: 10min)\n" +
             "!pasar #ID MONTO - Transferir dinero\n" +
             "!top - Ver top 5 jugadores\n" +
+            "!toprich - Top 5 mas ricos\n" +
+            "!topracha - Top 5 mejores rachas\n" +
+            "!topgeis - Top 5 mas geis\n" +
+            "!topkick - Top 5 mas kickeados\n" +
+            "!topban - Top 5 mas baneados\n" +
+            "!diario - Recompensa diaria (racha 7 dias)\n" +
             "!tienda - Ver la tienda\n" +
-            "!ruleta / !rifa - Apostar dinero\n" +
+            "!ruleta / !rifa / !crash / !dados / !slots - Apostar\n" +
+            "!casarse #ID - Proponer matrimonio ($25k, +10% bonus)\n" +
+            "!divorcio / !pareja - Divorciarse o ver tu pareja\n" +
             "!afk - Activar/desactivar modo AFK (en espectador)\n" +
             "!calladmin [razón] - Llamar admin por Discord\n" +
             "!report #ID [razón] - Reportar jugador\n" +
             "!bug [descripcion] - Reportar un bug\n" +
             "!miauth - Ver tu token\n" +
             "!discord - Link de Discord\n" +
+            "!clan - Sistema de clanes\n" +
+            "!topclanes - Ranking de clanes\n" +
             "!fix - Votar para reiniciar si hay bug\n" +
             "!reiniciar - Reiniciar bot (solo admin)",
             player.id,
             0x00FF00
         );
+        return false;
+    }
+
+    // ============================================
+    // CLANES
+    // ============================================
+    if (message.startsWith('!clan')) {
+        var clanParts = message.substring(5).trim().split(' ');
+        var clanCmd = clanParts[0] ? clanParts[0].toLowerCase() : '';
+
+        if (!clanCmd || clanCmd === 'ayuda') {
+            room.sendAnnouncement(
+                '\n🛡️━━━ CLANES ━━━🛡️\n' +
+                '!clan crear [TAG] [NOMBRE] - Crear clan ($50.000)\n' +
+                '!clan invitar #ID - Invitar jugador (solo lider)\n' +
+                '!clan aceptar - Aceptar invitacion\n' +
+                '!clan salir - Salir del clan\n' +
+                '!clan info - Ver info de tu clan\n' +
+                '!clan kick #ID - Expulsar miembro (solo lider)\n' +
+                '!topclanes - Ranking de clanes',
+                player.id, 0x00BFFF
+            );
+            return false;
+        }
+
+        if (clanCmd === 'crear') {
+            var clanTag = clanParts[1];
+            var clanName = clanParts.slice(2).join(' ');
+            if (!clanTag || !clanName) {
+                room.sendAnnouncement('⚠️ Uso: !clan crear [TAG] [NOMBRE]\nEjemplo: !clan crear PRO ProTeam', player.id, 0xFF6600);
+                return false;
+            }
+            (function(pid, pname, pauth, ctag, cname) {
+                __dbGetStats(pauth).then(function(stats) {
+                    var bal = (stats && stats.balance) || 0;
+                    if (bal < 50000) {
+                        room.sendAnnouncement('⚠️ Necesitas $50.000 para crear un clan. Tienes: $' + bal.toLocaleString(), pid, 0xFF6600);
+                        return;
+                    }
+                    __dbCreateClan(ctag, cname, pauth, pname).then(function(result) {
+                        if (result.error) {
+                            room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600);
+                            return;
+                        }
+                        __dbAddBalance(pauth, pname, -50000).then(function() {
+                            botState.clanTags[pauth] = result.tag;
+                            room.sendAnnouncement('🛡️ Clan [' + result.tag + '] ' + result.name + ' creado! (-$50.000)', pid, 0x00FF00, 'bold');
+                            room.sendAnnouncement('🛡️ ' + pname + ' ha creado el clan [' + result.tag + ']!', null, 0x00BFFF);
+                        });
+                    });
+                });
+            })(player.id, player.name, playerAuth, clanTag, clanName);
+            return false;
+        }
+
+        if (clanCmd === 'invitar') {
+            var invTargetStr = clanParts[1] ? clanParts[1].replace('#', '') : '';
+            var invTargetId = parseInt(invTargetStr);
+            if (isNaN(invTargetId)) {
+                room.sendAnnouncement('⚠️ Uso: !clan invitar #ID', player.id, 0xFF6600);
+                return false;
+            }
+            var invTarget = room.getPlayer(invTargetId);
+            if (!invTarget || invTarget.id === 0) {
+                room.sendAnnouncement('⚠️ Jugador no encontrado.', player.id, 0xFF6600);
+                return false;
+            }
+            var invTargetAuth = getAuth(invTarget);
+            if (!invTargetAuth) {
+                room.sendAnnouncement('⚠️ No se pudo obtener auth del jugador.', player.id, 0xFF6600);
+                return false;
+            }
+            (function(pid, pauth, tauth, tname, tid) {
+                __dbInviteToClan(pauth, tauth, tname).then(function(result) {
+                    if (result.error) {
+                        room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600);
+                        return;
+                    }
+                    room.sendAnnouncement('📨 Invitacion enviada a ' + tname + ' para unirse a [' + result.clanTag + ']', pid, 0x00FF00);
+                    room.sendAnnouncement('📨 ' + player.name + ' te invita al clan [' + result.clanTag + '] ' + result.clanName + '!\nEscribe !clan aceptar para unirte.', tid, 0x00BFFF, 'bold');
+                });
+            })(player.id, playerAuth, invTargetAuth, invTarget.name, invTarget.id);
+            return false;
+        }
+
+        if (clanCmd === 'aceptar') {
+            (function(pid, pauth, pname) {
+                __dbAcceptClanInvite(pauth, pname).then(function(result) {
+                    if (result.error) {
+                        room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600);
+                        return;
+                    }
+                    botState.clanTags[pauth] = result.tag;
+                    room.sendAnnouncement('🛡️ Te uniste al clan [' + result.tag + '] ' + result.name + '!', pid, 0x00FF00, 'bold');
+                    room.sendAnnouncement('🛡️ ' + pname + ' se unio al clan [' + result.tag + ']!', null, 0x00BFFF);
+                });
+            })(player.id, playerAuth, player.name);
+            return false;
+        }
+
+        if (clanCmd === 'salir') {
+            (function(pid, pauth, pname) {
+                __dbLeaveClan(pauth).then(function(result) {
+                    if (result.error) {
+                        room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600);
+                        return;
+                    }
+                    delete botState.clanTags[pauth];
+                    room.sendAnnouncement('🚪 Saliste del clan [' + result.tag + ']', pid, 0xFF6600);
+                });
+            })(player.id, playerAuth, player.name);
+            return false;
+        }
+
+        if (clanCmd === 'info') {
+            (function(pid, pauth) {
+                __dbGetClanByAuth(pauth).then(function(clan) {
+                    if (!clan) {
+                        room.sendAnnouncement('⚠️ No perteneces a ningun clan. Usa !clan crear [TAG] [NOMBRE]', pid, 0xFF6600);
+                        return;
+                    }
+                    var memberList = '';
+                    for (var mi = 0; mi < clan.members.length; mi++) {
+                        var m = clan.members[mi];
+                        var isLeader = m.auth === clan.leaderAuth;
+                        var isOnline = room.getPlayerList().some(function(p) { return p.id !== 0 && botState.authMap[p.id] === m.auth; });
+                        memberList += (isLeader ? '👑' : '  ') + (mi + 1) + '. ' + m.name + (isOnline ? ' 🟢' : ' 🔴') + '\n';
+                    }
+                    room.sendAnnouncement(
+                        '\n🛡️ [' + clan.tag + '] ' + clan.name + '\n' +
+                        '👑 Lider: ' + clan.leaderName + '\n' +
+                        '👥 Miembros: ' + clan.members.length + '/10\n' +
+                        '🏆 Victorias: ' + (clan.totalWins || 0) + '\n' +
+                        '━━━━━━━━━━━━\n' + memberList +
+                        '\n💡 Para expulsar: !clan kick [nombre]',
+                        pid, 0x00BFFF
+                    );
+                });
+            })(player.id, playerAuth);
+            return false;
+        }
+
+        if (clanCmd === 'kick') {
+            var kickArg = clanParts.slice(1).join(' ').trim();
+            if (!kickArg) {
+                room.sendAnnouncement('⚠️ Uso: !clan kick [nombre o #ID]\nPuedes expulsar por nombre aunque el jugador no este en la sala.\nEscribe !clan info para ver los miembros.', player.id, 0xFF6600);
+                return false;
+            }
+
+            // Intentar por ID (si esta en la sala)
+            var kickTargetId = parseInt(kickArg.replace('#', ''));
+            var kickTargetAuth = null;
+            var kickTargetName = null;
+
+            if (!isNaN(kickTargetId)) {
+                var kickTarget = room.getPlayer(kickTargetId);
+                if (kickTarget && kickTarget.id !== 0) {
+                    kickTargetAuth = getAuth(kickTarget);
+                    kickTargetName = kickTarget.name;
+                }
+            }
+
+            // Si no se encontro por ID, buscar por nombre en el clan
+            if (!kickTargetAuth) {
+                (function(pid, pauth, searchName) {
+                    __dbGetClanByAuth(pauth).then(function(clan) {
+                        if (!clan) { room.sendAnnouncement('⚠️ No perteneces a un clan.', pid, 0xFF6600); return; }
+                        var found = null;
+                        for (var mi = 0; mi < clan.members.length; mi++) {
+                            if (clan.members[mi].name && clan.members[mi].name.toLowerCase().indexOf(searchName.toLowerCase()) !== -1) {
+                                found = clan.members[mi];
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            room.sendAnnouncement('⚠️ No se encontro un miembro con ese nombre. Escribe !clan info para ver la lista.', pid, 0xFF6600);
+                            return;
+                        }
+                        __dbKickFromClan(pauth, found.auth).then(function(result) {
+                            if (result.error) { room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600); return; }
+                            room.sendAnnouncement('🚫 ' + (result.name || found.name) + ' fue expulsado del clan.', pid, 0xFF6600);
+                        });
+                    });
+                })(player.id, playerAuth, kickArg);
+                return false;
+            }
+
+            (function(pid, pauth, tauth, tname) {
+                __dbKickFromClan(pauth, tauth).then(function(result) {
+                    if (result.error) {
+                        room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600);
+                        return;
+                    }
+                    room.sendAnnouncement('🚫 ' + (result.name || tname) + ' fue expulsado del clan.', pid, 0xFF6600);
+                });
+            })(player.id, playerAuth, kickTargetAuth, kickTarget.name);
+            return false;
+        }
+
+        return false;
+    }
+
+    if (message === '!topclanes' || message === '!topclan') {
+        (function(pid) {
+            __dbGetTopClans(5).then(function(clans) {
+                if (!clans || clans.length === 0) {
+                    room.sendAnnouncement('⚠️ No hay clanes registrados aun.', pid, 0xFF6600);
+                    return;
+                }
+                var msg = '\n🏆━━━ TOP CLANES ━━━🏆\n';
+                for (var ci = 0; ci < clans.length; ci++) {
+                    var medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                    msg += medals[ci] + ' [' + clans[ci].tag + '] ' + clans[ci].name + ' - ' + (clans[ci].totalWins || 0) + ' victorias (' + clans[ci].members.length + ' miembros)\n';
+                }
+                room.sendAnnouncement(msg, pid, 0xFFD700);
+            });
+        })(player.id);
         return false;
     }
 
@@ -4412,21 +5396,67 @@ room.onPlayerChat = function(player, message) {
             '🛡️ LUCKY:\n' +
             '  !proteccion ··· $15.000 - Inmunidad en Lucky\n' +
             '  !robarlucky ··· $30.000 - Robar Lucky del ganador\n' +
-            '  !forzarhell #ID ··· $20.000 - Forzar Lucky Hell\n\n' +
+            '  !forzarhell #ID ··· $30.000 - Forzar Lucky Hell\n\n' +
             '👊 CONTRA JUGADORES:\n' +
             '  !espectador #ID ··· $8.000 - Forzar espectador\n' +
             '  !silenciar #ID ··· $5.000 - Mutear 2 min\n' +
-            '  !quitaradmin #ID ··· $5.000 - Quitar admin\n' +
-            '  !cambio #ID ··· $50.000 - Cambiar posición\n\n' +
+            '  !cambio #ID ··· $20.000 - Cambiar posicion (10min cd)\n' +
+            '  !invertir #ID ··· $18.000 - Invertir controles 10s\n' +
+            '  !theworld ··· $30.000 - Congelar a todos 4s\n' +
+            '  !bitesthedust ··· $35.000 - Reiniciar ronda actual\n' +
+            '  !forzarhell #ID ··· $30.000 - Forzar Lucky Hell (30min cd global)\n\n' +
             '🎰 APUESTAS:\n' +
             '  !ruleta [monto] [rojo/negro/0] - Casino\n' +
-            '  !rifa [monto] - Adivina 1-10\n\n' +
+            '  !rifa [monto] - Adivina 1-10\n' +
+            '  !inversion [monto] - Invertir (madura en 5 juegos)\n' +
+            '  !crash [monto] - Multiplicador (retira a tiempo!)\n' +
+            '  !dados [monto] - 7+ x2, doble x3, doble 6 x5\n' +
+            '  !slots [monto] - Tragamonedas (777 = x50!)\n\n' +
+            '🏦 PRESTAMOS BANCO:\n' +
+            '  !prestamo [monto] [juegos] - Pedir prestamo ($1k-$100k)\n' +
+            '  !pagar [monto/todo] - Pagar prestamo banco\n' +
+            '  !topprestamos - Ranking de prestamos\n\n' +
+            '🤝 PRESTAMOS PERSONALES:\n' +
+            '  !prestar #ID [monto] [cuotas] - Prestar tu dinero\n' +
+            '  !aceptarprestamo / !rechazarprestamo\n' +
+            '  !pagarp2p [monto/todo] - Pagar anticipado\n' +
+            '  !misdeudores - Ver quién te debe\n' +
+            '  !topprestamistas - Ranking\n\n' +
+            '📋 !deuda - Ver todas tus deudas (banco + personales)\n\n' +
             '🔧 OTROS:\n' +
             '  !quitargay ··· $3.000\n' +
             '  !anon [msg] ··· $2.000 - Mensaje anónimo\n' +
             '  !impuesto ··· $12.000 - Cobrar $500 a todos',
             player.id, 0x00BFFF, 'bold'
         );
+        return false;
+    }
+
+    // !dineroset [monto] - CREADORES: establecer tu dinero
+    if (message.startsWith('!dineroset')) {
+        var playerAuth = getAuth(player);
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            return false; // Silencioso para que nadie sepa que existe
+        }
+        var dsParts = message.split(' ');
+        if (dsParts.length < 2) {
+            room.sendAnnouncement('⚙️ Usa: !dineroset [monto]\nEjemplo: !dineroset 999999', player.id, 0xFFD700);
+            return false;
+        }
+        var dsMonto = parseInt(dsParts[1].replace(/\./g, ''));
+        if (isNaN(dsMonto)) { room.sendAnnouncement('⚠️ Monto invalido', player.id, 0xFF6600); return false; }
+        // Primero poner balance a 0, luego agregar el monto deseado
+        if (typeof window.__dbGetStats === 'function') {
+            window.__dbGetStats(playerAuth).then(function(stats) {
+                var currentBalance = (stats && stats.balance) ? stats.balance : 0;
+                var diff = dsMonto - currentBalance;
+                try { window.__dbAddBalance(playerAuth, player.name, diff); } catch(e) {}
+                room.sendAnnouncement('⚙️ Dinero establecido a ' + formatMoney(dsMonto), player.id, 0x00FF00, 'bold');
+            }).catch(function() {
+                try { window.__dbAddBalance(playerAuth, player.name, dsMonto); } catch(e) {}
+                room.sendAnnouncement('⚙️ Dinero agregado: ' + formatMoney(dsMonto), player.id, 0x00FF00, 'bold');
+            });
+        }
         return false;
     }
 
@@ -4438,6 +5468,23 @@ room.onPlayerChat = function(player, message) {
             return false;
         }
         room.sendAnnouncement('📊 Enviando stats mensuales a Discord y reseteando...', player.id, 0xFFFF00, 'bold');
+        // Enviar ranking titan a Discord antes de resetear
+        var titanListReset = [];
+        for (var trAuth in botState.titanValues) { titanListReset.push(botState.titanValues[trAuth]); }
+        if (titanListReset.length > 0 && typeof window.__discordWebhook === 'function') {
+            titanListReset.sort(function(a, b) { return b.value - a.value; });
+            var titanDcMsg = '📏 **TOP TITAN DEL CICLO:**\n';
+            var trMedals = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+            var trShow = Math.min(titanListReset.length, 10);
+            for (var tri = 0; tri < trShow; tri++) {
+                titanDcMsg += (trMedals[tri] || (tri+1+'.')) + ' **' + titanListReset[tri].name + '** — ' + titanListReset[tri].value + 'cm\n';
+            }
+            try { window.__discordWebhook('stats', titanDcMsg); } catch(e) {}
+        }
+        // Resetear datos titan
+        botState.titanValues = {};
+        botState.titanTaken = [];
+        try { window.__dbResetTitanData(); } catch(e) {}
         if (typeof window.__sendMonthlyStats === 'function') {
             window.__sendMonthlyStats().then(function() {
                 room.sendAnnouncement('✅ Stats enviadas a Discord y reseteadas!', player.id, 0x00FF00, 'bold');
@@ -4447,6 +5494,36 @@ room.onPlayerChat = function(player, message) {
         } else {
             room.sendAnnouncement('❌ Funcion no disponible', player.id, 0xFF0000);
         }
+        return false;
+    }
+
+    // !darprestamista [auth] - CREADORES: dar rol prestamista P2P
+    if (message.startsWith('!darprestamista')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !darprestamista', player.id, 0xFF0000);
+            return false;
+        }
+        var dpAuth = message.substring(15).trim();
+        if (!dpAuth) { room.sendAnnouncement('⚠️ Usa: !darprestamista [auth]', player.id, 0xFF6600); return false; }
+        if (botState.prestamistas[dpAuth]) { room.sendAnnouncement('⚠️ Ese auth ya es prestamista', player.id, 0xFF6600); return false; }
+        var dpPlayer = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === dpAuth; });
+        var dpName = dpPlayer ? dpPlayer.name : 'Offline';
+        botState.prestamistas[dpAuth] = { name: dpName, totalPrestado: 0, totalGanado: 0 };
+        room.sendAnnouncement('💼 ' + dpName + ' ahora es PRESTAMISTA!', null, 0x00FF00, 'bold', 2);
+        return false;
+    }
+
+    // !quitarprestamista [auth] - CREADORES: quitar rol prestamista P2P
+    if (message.startsWith('!quitarprestamista')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !quitarprestamista', player.id, 0xFF0000);
+            return false;
+        }
+        var qpAuth = message.substring(19).trim();
+        if (!qpAuth) { room.sendAnnouncement('⚠️ Usa: !quitarprestamista [auth]', player.id, 0xFF6600); return false; }
+        if (!botState.prestamistas[qpAuth]) { room.sendAnnouncement('⚠️ Ese auth no es prestamista', player.id, 0xFF6600); return false; }
+        delete botState.prestamistas[qpAuth];
+        room.sendAnnouncement('💼 Prestamista removido', player.id, 0xFF6600);
         return false;
     }
 
@@ -4469,7 +5546,7 @@ room.onPlayerChat = function(player, message) {
             {n:'SURVIVAL_SQ', d:'Survival Square', s:startSURVIVAL_SQ}, {n:'COLLISION', d:'Collision Racing', s:startCOLLISION},
             {n:'SPOT_BONK', d:'Spot Bonk', s:startSPOT_BONK}, {n:'CHAIRMIX', d:'ChairMix', s:startCHAIRMIX},
             {n:'COVID19', d:'COVID-19', s:startCOVID19}, {n:'GYMMIX', d:'GymMix', s:startGYMMIX},
-            {n:'TRIVIA', d:'Trivia', s:startTRIVIA}, {n:'GOT', d:'Game of Thrones', s:startGOT},
+            {n:'TRIVIA', d:'Trivia', s:startTRIVIA},
             {n:'SPACE_CASE', d:'Space Case', s:startSPACE_CASE}, {n:'AMERICAN_CARRYBALL', d:'American Carryball', s:startAMERICAN_CARRYBALL},
             {n:'RING_SURVIVAL', d:'Ring Survival', s:startRING_SURVIVAL}, {n:'BONK_ARENA', d:'Bonk Arena', s:startBONK_ARENA},
             {n:'BONK_BERU', d:'Bonk Beru', s:startBONK_BERU}, {n:'ANIMALCHAIRS_WHALE', d:'AnimalChairs Whale', s:startANIMALCHAIRS_WHALE},
@@ -4477,7 +5554,7 @@ room.onPlayerChat = function(player, message) {
             {n:'FIT_IN_TREN', d:'Fit in Tren', s:startFIT_IN_TREN}, {n:'FITANIC', d:'Fitanic', s:startFITANIC},
             {n:'FORTUNATE_RACE', d:'Fortunate Race', s:startFORTUNATE_RACE}, {n:'KAFA_TOPU', d:'Kafa Topu', s:startKAFA_TOPU},
             {n:'KAFA_TOPU_SHADOW', d:'Kafa Topu Shadow', s:startKAFA_TOPU_SHADOW}, {n:'KURU_KAFA_BONK', d:'Kuru Kafa Bonk', s:startKURU_KAFA_BONK},
-            {n:'LASER_RACE', d:'Laser Race', s:startLASER_RACE}, {n:'CAPTURE_THE_FLAG', d:'Capture the Flag', s:startCAPTURE_THE_FLAG},
+            {n:'LASER_RACE', d:'Laser Race', s:startLASER_RACE},
             {n:'COPS_ROBBERS', d:'Cops & Robbers', s:startCOPS_ROBBERS}, {n:'JUMP_QUA', d:'Jump', s:startJUMP_QUA},
             {n:'BOOMERANG_LEAGUE', d:'Boomerang League', s:startBOOMERANG_LEAGUE}, {n:'XD_GOALS', d:'XD', s:startXD_GOALS},
             {n:'WWECROSS', d:'WWECross', s:startWWECROSS}, {n:'WEB_SURVIVAL_3', d:'Web Survival III', s:startWEB_SURVIVAL_3},
@@ -4487,18 +5564,42 @@ room.onPlayerChat = function(player, message) {
             {n:'IMPOSTOR', d:'Impostor', s:startIMPOSTOR}, {n:'PISTOLERO', d:'Pistolero', s:startPISTOLERO},
             {n:'BONK_MOVABLE', d:'Bonk Movable', s:startBONK_MOVABLE}, {n:'ENDURE_BOMBS', d:'Endure Bombs', s:startENDURE_BOMBS},
             {n:'MUSICAL_FIT', d:'Musical Fit', s:startMUSICAL_FIT},
-            {n:'NAMAJUNAS_RACE', d:'Namajunas Race', s:startNAMAJUNAS_RACE}, {n:'NAMAJUNAS_RACE_2', d:'Namajunas Race 2', s:startNAMAJUNAS_RACE_2}
+            {n:'NAMAJUNAS_RACE', d:'Namajunas Race', s:startNAMAJUNAS_RACE}, {n:'NAMAJUNAS_RACE_2', d:'Namajunas Race 2', s:startNAMAJUNAS_RACE_2},
+            {n:'FCT1', d:'FCT 1', s:startFCT1}, {n:'FIT_IN_GRAVEYARD', d:'Fit in Graveyard', s:startFIT_IN_GRAVEYARD},
+            {n:'FUTBOL_CALLEJERO', d:'Futbol Callejero', s:startFUTBOL_CALLEJERO}, {n:'GYM_COLORS', d:'Gym Colors', s:startGYM_COLORS},
+            {n:'GYM9', d:'Gym 9', s:startGYM9}, {n:'MATRIX_FIT', d:'Matrix Fit', s:startMATRIX_FIT},
+            {n:'RACE02', d:'Race 02', s:startRACE02}, {n:'ZOMBIE_RUN', d:'Zombie Run', s:startZOMBIE_RUN},
+            {n:'PLUM', d:'Plum', s:startPLUM}, {n:'RUN_REBOUND_2', d:'Run Rebound 2', s:startRUN_REBOUND_2},
+            {n:'GOT', d:'Game of Thrones', s:startGOT}, {n:'CAPTURE_THE_FLAG', d:'Capture the Flag', s:startCAPTURE_THE_FLAG},
+            {n:'LUCKY_RACE', d:'Lucky Race', s:startLUCKY_RACE}, {n:'STREET_RACE', d:'Street Race', s:startSTREET_RACE},
+            {n:'SHOOTING_SURVIVAL', d:'Shooting Survival', s:startSHOOTING_SURVIVAL}, {n:'SPACEBOUNCE_RACE', d:'Spacebounce Race', s:startSPACEBOUNCE_RACE},
+            {n:'RUN_REBOUND', d:'Run Rebound', s:startRUN_REBOUND}, {n:'MEADOWLANDS', d:'Meadowlands', s:startMEADOWLANDS},
+            {n:'SPACEBOUNCE_POWER', d:'Spacebounce Power', s:startSPACEBOUNCE_POWER},
+            {n:'SHAOLIN_SOCCER', d:'Shaolin Soccer', s:startSHAOLIN_SOCCER},
+            {n:'BASKETBALL', d:'Basketball', s:startBASKETBALL}, {n:'BTL', d:'B.T.L', s:startBTL},
+            {n:'BONK_SUMMER', d:'Bonk Summer', s:startBONK_SUMMER}, {n:'BONK_WINTER', d:'Bonk Winter', s:startBONK_WINTER},
+            {n:'SWING_CANNONS', d:'Swing Cannons', s:startSWING_CANNONS}, {n:'SURVIVAL_INSECT', d:'Survival Insect', s:startSURVIVAL_INSECT},
+            {n:'RUN_LUCK', d:'Run Luck', s:startRUN_LUCK}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette', s:startPINBALL_ROULETTE},
+            {n:'JUMPING_SURVIVAL', d:'Jumping Survival', s:startJUMPING_SURVIVAL},
+            {n:'RACING_GROUND', d:'Racing Ground', s:startRACING_GROUND}
         ];
         if (!escogerArg || escogerArg.toLowerCase() === 'lista') {
-            var ecol1 = []; var ecol2 = [];
+            var eThird = Math.ceil(escogerGames.length / 3);
+            var ecol1 = []; var ecol2 = []; var ecol3 = [];
             for (var ei = 0; ei < escogerGames.length; ei++) {
-                if (ei < Math.ceil(escogerGames.length / 2)) ecol1.push(escogerGames[ei].d);
-                else ecol2.push(escogerGames[ei].d);
+                if (ei < eThird) ecol1.push(escogerGames[ei].d);
+                else if (ei < eThird * 2) ecol2.push(escogerGames[ei].d);
+                else ecol3.push(escogerGames[ei].d);
             }
             room.sendAnnouncement(
-                '\n🔧━━━ ESCOGER MINIJUEGO (CREADOR) ━━━🔧\n\n' +
+                '\n🔧━━━ ESCOGER MINIJUEGO (1/2) ━━━🔧\n\n' +
                 ecol1.join(' | ') + '\n' +
-                ecol2.join(' | ') + '\n\n' +
+                ecol2.join(' | '),
+                player.id, 0xFFD700, 'bold'
+            );
+            room.sendAnnouncement(
+                '\n🔧━━━ ESCOGER MINIJUEGO (2/2) ━━━🔧\n\n' +
+                ecol3.join(' | ') + '\n\n' +
                 '💡 Escribe: !escoger [nombre]\n' +
                 '📝 Ejemplo: !escoger pistolero',
                 player.id, 0xFFD700, 'bold'
@@ -4531,6 +5632,46 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
+    // !win [id] - CREADORES/THE_BEST: declarar ganador manualmente cuando queda 1 jugador
+    if (message.startsWith('!win')) {
+        var winAuth = getAuth(player);
+        var THE_BEST_AUTH = '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE';
+        var canUseWin = winAuth && (CREATOR_AUTHS.indexOf(winAuth) !== -1 || winAuth === THE_BEST_AUTH);
+        if (!canUseWin) { return false; }
+        var winParts = message.trim().split(' ');
+        if (winParts.length < 2) {
+            room.sendAnnouncement('⚙️ Uso: !win [id]\nEjemplo: !win 5', player.id, 0xFFD700);
+            return false;
+        }
+        var winTargetId = parseInt(winParts[1]);
+        if (isNaN(winTargetId)) {
+            room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600);
+            return false;
+        }
+        var winTarget = room.getPlayer(winTargetId);
+        if (!winTarget) {
+            room.sendAnnouncement('⚠️ Jugador no encontrado', player.id, 0xFF6600);
+            return false;
+        }
+        // Verificar que solo quede 1 jugador en equipos (team 1 o 2)
+        var winActivePlayers = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+        if (winActivePlayers.length !== 1) {
+            room.sendAnnouncement('⚠️ !win solo funciona cuando hay exactamente 1 jugador en juego (hay ' + winActivePlayers.length + ')', player.id, 0xFF6600);
+            return false;
+        }
+        if (winTarget.team === 0) {
+            room.sendAnnouncement('⚠️ El jugador está en espectadores, no en juego', player.id, 0xFF6600);
+            return false;
+        }
+        room.sendAnnouncement('🏆 CREADOR declaró ganador a ' + winTarget.name + '!', null, 0xFFD700, 'bold', 2);
+        forceStopAllGames();
+        botState.gameActive = false;
+        setTimeout(function() {
+            loadLuckyMap({ id: winTarget.id, name: winTarget.name });
+        }, 1500);
+        return false;
+    }
+
     // !elegir [juego] - $12,000 - Elegir próximo minijuego (cooldown 5min)
     if (message.startsWith('!elegir')) {
         var elegirArg = message.substring(7).trim();
@@ -4543,7 +5684,7 @@ room.onPlayerChat = function(player, message) {
             {n:'NUMBERCHAIRS', d:'Number Chairs'}, {n:'SURVIVAL_SQ', d:'Survival Square'},
             {n:'COLLISION', d:'Collision Racing'}, {n:'SPOT_BONK', d:'Spot Bonk'},
             {n:'CHAIRMIX', d:'ChairMix'}, {n:'COVID19', d:'COVID-19'}, {n:'GYMMIX', d:'GymMix'},
-            {n:'TRIVIA', d:'Trivia'}, {n:'GOT', d:'Game of Thrones'}, {n:'SPACE_CASE', d:'Space Case'},
+            {n:'TRIVIA', d:'Trivia'}, {n:'SPACE_CASE', d:'Space Case'},
             {n:'AMERICAN_CARRYBALL', d:'American Carryball'}, {n:'RING_SURVIVAL', d:'Ring Survival'},
             {n:'BONK_ARENA', d:'Bonk Arena'}, {n:'BONK_BERU', d:'Bonk Beru'},
             {n:'ANIMALCHAIRS_WHALE', d:'AnimalChairs Whale'}, {n:'BONK_BERU_HAX', d:'Bonk Beru Hax'},
@@ -4551,32 +5692,55 @@ room.onPlayerChat = function(player, message) {
             {n:'FITANIC', d:'Fitanic'}, {n:'FORTUNATE_RACE', d:'Fortunate Race'},
             {n:'KAFA_TOPU', d:'Kafa Topu'}, {n:'KAFA_TOPU_SHADOW', d:'Kafa Topu Shadow'},
             {n:'KURU_KAFA_BONK', d:'Kuru Kafa Bonk'}, {n:'LASER_RACE', d:'Laser Race'},
-            {n:'CAPTURE_THE_FLAG', d:'Capture the Flag'}, {n:'COPS_ROBBERS', d:'Cops & Robbers'},
+            {n:'COPS_ROBBERS', d:'Cops & Robbers'},
             {n:'JUMP_QUA', d:'Jump'}, {n:'BOOMERANG_LEAGUE', d:'Boomerang League'},
             {n:'XD_GOALS', d:'XD'}, {n:'WWECROSS', d:'WWECross'},
             {n:'WEB_SURVIVAL_3', d:'Web Survival III'}, {n:'TRAMPOLIN', d:'Trampolin'},
             {n:'SWING_TRAMPOLIN', d:'Swing Trampolin'}, {n:'SUPER_GRAVEDAD', d:'Super Gravedad x4'},
             {n:'ENDURE_SURVIVAL', d:'Endure Survival 2'},
-            {n:'SURVIVOR_VOL17', d:'Survivor Vol 17'}, {n:'WIND', d:'Wind'},
+            {n:'WIND', d:'Wind'},
             {n:'IMPOSTOR', d:'Impostor'},
             {n:'PISTOLERO', d:'Pistolero'},
             {n:'BONK_MOVABLE', d:'Bonk Movable'},
             {n:'ENDURE_BOMBS', d:'Endure Bombs'},
             {n:'MUSICAL_FIT', d:'Musical Fit'},
             {n:'NAMAJUNAS_RACE', d:'Namajunas Race'},
-            {n:'NAMAJUNAS_RACE_2', d:'Namajunas Race 2'}
+            {n:'NAMAJUNAS_RACE_2', d:'Namajunas Race 2'},
+            {n:'FCT1', d:'FCT 1'}, {n:'FIT_IN_GRAVEYARD', d:'Fit in Graveyard'},
+            {n:'FUTBOL_CALLEJERO', d:'Futbol Callejero'}, {n:'GYM_COLORS', d:'Gym Colors'},
+            {n:'GYM9', d:'Gym 9'}, {n:'MATRIX_FIT', d:'Matrix Fit'},
+            {n:'RACE02', d:'Race 02'}, {n:'ZOMBIE_RUN', d:'Zombie Run'},
+            {n:'PLUM', d:'Plum'}, {n:'RUN_REBOUND_2', d:'Run Rebound 2'},
+            {n:'GOT', d:'Game of Thrones'}, {n:'CAPTURE_THE_FLAG', d:'Capture the Flag'},
+            {n:'LUCKY_RACE', d:'Lucky Race'}, {n:'STREET_RACE', d:'Street Race'},
+            {n:'SHOOTING_SURVIVAL', d:'Shooting Survival'}, {n:'SPACEBOUNCE_RACE', d:'Spacebounce Race'},
+            {n:'RUN_REBOUND', d:'Run Rebound'}, {n:'MEADOWLANDS', d:'Meadowlands'},
+            {n:'SPACEBOUNCE_POWER', d:'Spacebounce Power'},
+            {n:'SHAOLIN_SOCCER', d:'Shaolin Soccer'},
+            {n:'BASKETBALL', d:'Basketball'}, {n:'BTL', d:'B.T.L'},
+            {n:'BONK_SUMMER', d:'Bonk Summer'}, {n:'BONK_WINTER', d:'Bonk Winter'},
+            {n:'SWING_CANNONS', d:'Swing Cannons'}, {n:'SURVIVAL_INSECT', d:'Survival Insect'},
+            {n:'RUN_LUCK', d:'Run Luck'}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette'},
+            {n:'JUMPING_SURVIVAL', d:'Jumping Survival'},
+            {n:'RACING_GROUND', d:'Racing Ground'}
         ];
         if (!elegirArg || elegirArg.toLowerCase() === 'lista') {
-            // Mostrar lista organizada
-            var col1 = []; var col2 = [];
+            var third = Math.ceil(elegirGames.length / 3);
+            var col1 = []; var col2 = []; var col3 = [];
             for (var ei = 0; ei < elegirGames.length; ei++) {
-                if (ei < Math.ceil(elegirGames.length / 2)) col1.push(elegirGames[ei].d);
-                else col2.push(elegirGames[ei].d);
+                if (ei < third) col1.push(elegirGames[ei].d);
+                else if (ei < third * 2) col2.push(elegirGames[ei].d);
+                else col3.push(elegirGames[ei].d);
             }
             room.sendAnnouncement(
-                '\n🎮━━━ MINIJUEGOS DISPONIBLES ━━━🎮\n\n' +
+                '\n🎮━━━ MINIJUEGOS DISPONIBLES (1/2) ━━━🎮\n\n' +
                 col1.join(' | ') + '\n' +
-                col2.join(' | ') + '\n\n' +
+                col2.join(' | '),
+                player.id, 0x00BFFF, 'bold'
+            );
+            room.sendAnnouncement(
+                '\n🎮━━━ MINIJUEGOS DISPONIBLES (2/2) ━━━🎮\n\n' +
+                col3.join(' | ') + '\n\n' +
                 '💡 Escribe: !elegir [nombre]\n' +
                 '📝 Ejemplo: !elegir survival',
                 player.id, 0x00BFFF, 'bold'
@@ -4600,7 +5764,13 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ Ya hay un juego elegido: ' + botState.chosenNextGame.displayName, player.id, 0xFF6600);
             return false;
         }
-        shopBuy(playerAuth, player.name, player.id, 12000, '!elegir', 300000, function() {
+        // Cooldown por partidas (5 juegos)
+        if (playerAuth && botState.elegirCooldownGames[playerAuth] > 0) {
+            room.sendAnnouncement('⚠️ !elegir en cooldown. Faltan ' + botState.elegirCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600);
+            return false;
+        }
+        shopBuy(playerAuth, player.name, player.id, 12000, '!elegir', 0, function() {
+            if (playerAuth) botState.elegirCooldownGames[playerAuth] = 5;
             botState.chosenNextGame = { name: foundGame.n, displayName: foundGame.d, playerName: player.name };
             room.sendAnnouncement('🎯 ' + player.name + ' eligió el próximo minijuego: ' + foundGame.d + ' (-' + formatMoney(12000) + ')', null, 0x00BFFF, 'bold', 2);
         });
@@ -4663,7 +5833,9 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ No puedes forzar espectador a un creador', player.id, 0xFF6600);
             return false;
         }
+        if (playerAuth && botState.powerCooldownGames[playerAuth] > 0) { room.sendAnnouncement('⚠️ Poderes en cooldown. Faltan ' + botState.powerCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600); return false; }
         shopBuy(playerAuth, player.name, player.id, 8000, '!espectador', 120000, function() {
+            if (playerAuth) botState.powerCooldownGames[playerAuth] = 5;
             if (!espTargetAuth) return;
             botState.spectatorNext[espTargetAuth] = true;
             botState.spectatorLocked[espTargetAuth] = true;
@@ -4677,11 +5849,18 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
-    // !forzarhell #ID - $20,000 - Forzar Lucky Hell a alguien (cooldown 5min)
+    // !forzarhell #ID - $30,000 - Forzar Lucky Hell a alguien (cooldown 30min GLOBAL)
     if (message.startsWith('!forzarhell')) {
         var fhParts = message.split(' ');
         if (fhParts.length < 2) {
             room.sendAnnouncement('⚠️ Usa: !forzarhell #ID\nEjemplo: !forzarhell #3', player.id, 0xFFFF00);
+            return false;
+        }
+        // Cooldown global de 30 minutos
+        var fhNow = Date.now();
+        if (fhNow < (botState.forzarHellGlobalCd || 0)) {
+            var fhWait = Math.ceil(((botState.forzarHellGlobalCd || 0) - fhNow) / 60000);
+            room.sendAnnouncement('⚠️ Forzar Hell en cooldown global. Espera ' + fhWait + ' min', player.id, 0xFF6600);
             return false;
         }
         var fhTargetId = parseInt(fhParts[1].replace('#', ''));
@@ -4693,8 +5872,20 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ No puedes forzar Lucky Hell a un creador', player.id, 0xFF6600);
             return false;
         }
-        shopBuy(playerAuth, player.name, player.id, 20000, '!forzarhell', 300000, function() {
-            room.sendAnnouncement('💀 ' + player.name + ' forzó LUCKY HELL para ' + fhTarget.name + '! (-' + formatMoney(20000) + ')', null, 0x000000, 'bold', 2);
+        // No permitir forzar hell a un AFK
+        if (fhTargetAuth && botState.afkProtected[fhTargetAuth]) {
+            room.sendAnnouncement('⚠️ No puedes forzar Lucky Hell a un jugador en modo AFK', player.id, 0xFF6600);
+            return false;
+        }
+        if (fhTarget.team === 0) {
+            room.sendAnnouncement('⚠️ No puedes forzar Lucky Hell a un espectador', player.id, 0xFF6600);
+            return false;
+        }
+        if (playerAuth && botState.powerCooldownGames[playerAuth] > 0) { room.sendAnnouncement('⚠️ Poderes en cooldown. Faltan ' + botState.powerCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, 30000, '!forzarhell', 0, function() {
+            if (playerAuth) botState.powerCooldownGames[playerAuth] = 5;
+            botState.forzarHellGlobalCd = Date.now() + 1800000; // 30 min global
+            room.sendAnnouncement('💀 ' + player.name + ' forzó LUCKY HELL para ' + fhTarget.name + '! (-' + formatMoney(30000) + ')', null, 0x000000, 'bold', 2);
             forceStopAllGames();
             setTimeout(function() {
                 try { room.stopGame(); } catch(e) {}
@@ -4720,20 +5911,9 @@ room.onPlayerChat = function(player, message) {
                             setTimeout(checkAndStart, 3000);
                         }
                     }, {
+                        isProtected: function() { return false; },
                         onBanTemp: function(pid, dur) {
-                            var pBanAuth2 = botState.authMap[pid] || null;
-                            if (pBanAuth2 && botState.protectionActive[pBanAuth2]) {
-                                delete botState.protectionActive[pBanAuth2];
-                                room.sendAnnouncement('🛡️ PROTECCIÓN ACTIVADA! Ban cancelado', null, 0x0000FF, 'bold', 2);
-                                return;
-                            }
-                            // 10% probabilidad de juicio público
-                            if (Math.random() < 0.10) {
-                                var pName2 = (room.getPlayer(pid) || {name: '?'}).name;
-                                botState.pendingBanVote = { playerId: pid, playerName: pName2, auth: pBanAuth2, duration: dur };
-                                room.sendAnnouncement('⚖️ ¡Se activó un JUICIO PÚBLICO para ' + pName2 + '!', null, 0xFFFF00, 'bold', 2);
-                                return;
-                            }
+                            // En Lucky Hell: ban directo, sin escudo ni juicio
                             applyTempBan(pid, dur);
                         },
                         onLuckyPass: function(giverId, receiverId) {
@@ -4793,7 +5973,9 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ No puedes silenciar a un creador', player.id, 0xFF6600);
             return false;
         }
+        if (playerAuth && botState.powerCooldownGames[playerAuth] > 0) { room.sendAnnouncement('⚠️ Poderes en cooldown. Faltan ' + botState.powerCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600); return false; }
         shopBuy(playerAuth, player.name, player.id, 5000, '!silenciar', 300000, function() {
+            if (playerAuth) botState.powerCooldownGames[playerAuth] = 5;
             var now = Date.now();
             botState.spamMutes[silTargetAuth] = { until: now + 120000, count: (botState.spamMutes[silTargetAuth] ? botState.spamMutes[silTargetAuth].count : 0) + 1 };
             if (botState.spamMuteTimers[silTargetAuth]) clearTimeout(botState.spamMuteTimers[silTargetAuth]);
@@ -4809,35 +5991,6 @@ room.onPlayerChat = function(player, message) {
                 }
             }, 120000);
             room.sendAnnouncement('🔇 ' + player.name + ' silenció a ' + silTarget.name + ' por 2 minutos (-' + formatMoney(5000) + ')', null, 0xFF6600, 'bold');
-        });
-        return false;
-    }
-
-    // !quitaradmin #ID - $5,000 - Quitar admin temporal (cooldown 60s)
-    if (message.startsWith('!quitaradmin')) {
-        var qaParts = message.split(' ');
-        if (qaParts.length < 2) {
-            room.sendAnnouncement('⚠️ Usa: !quitaradmin #ID\nEjemplo: !quitaradmin #3', player.id, 0xFFFF00);
-            return false;
-        }
-        var qaTargetId = parseInt(qaParts[1].replace('#', ''));
-        if (isNaN(qaTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
-        var qaTarget = room.getPlayer(qaTargetId);
-        if (!qaTarget) { room.sendAnnouncement('⚠️ Jugador #' + qaTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
-        var qaTargetAuth = getAuth(qaTarget);
-        if (qaTargetAuth && CREATOR_AUTHS.indexOf(qaTargetAuth) !== -1) {
-            room.sendAnnouncement('⚠️ No puedes quitar admin a un creador', player.id, 0xFF6600);
-            return false;
-        }
-        if (botState.tempAdmins.indexOf(qaTargetId) === -1) {
-            room.sendAnnouncement('⚠️ ' + qaTarget.name + ' no tiene admin temporal', player.id, 0xFF6600);
-            return false;
-        }
-        shopBuy(playerAuth, player.name, player.id, 5000, '!quitaradmin', 60000, function() {
-            var qaIdx = botState.tempAdmins.indexOf(qaTargetId);
-            if (qaIdx !== -1) botState.tempAdmins.splice(qaIdx, 1);
-            try { room.setPlayerAdmin(qaTargetId, false); } catch(e) {}
-            room.sendAnnouncement('👑 ' + player.name + ' le quitó el ADMIN temporal a ' + qaTarget.name + ' (-' + formatMoney(5000) + ')', null, 0xFF6600, 'bold');
         });
         return false;
     }
@@ -4892,8 +6045,15 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
+    // Helper: verificar si apuestas estan bloqueadas (explicacion o noche de Impostor/Pistolero)
+    var _apuestasBloqueadas = false;
+    if (botState.gamePaused) _apuestasBloqueadas = true;
+    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) _apuestasBloqueadas = true; } catch(e){}
+    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) _apuestasBloqueadas = true; } catch(e){}
+
     // !ruleta [monto] [rojo/negro/0] - Ruleta de casino (cooldown 30s)
-    if (message.startsWith('!ruleta')) {
+    if (message.startsWith('!ruleta') && !message.startsWith('!ruletarusa')) {
+        if (_apuestasBloqueadas) { room.sendAnnouncement('⚠️ Espera a que termine la ronda actual', player.id, 0xFF6600); return false; }
         var rulParts = message.split(' ');
         if (rulParts.length < 3) {
             room.sendAnnouncement('⚠️ Usa: !ruleta [monto] [rojo/negro/0]\nEjemplo: !ruleta 5000 rojo', player.id, 0xFFFF00);
@@ -4902,12 +6062,13 @@ room.onPlayerChat = function(player, message) {
         var rulMonto = parseInt(rulParts[1].replace(/\./g, ''));
         var rulApuesta = rulParts[2].toLowerCase();
         if (isNaN(rulMonto) || rulMonto < 100) { room.sendAnnouncement('⚠️ Monto mínimo: $100', player.id, 0xFF6600); return false; }
-        if (rulMonto > 50000) { room.sendAnnouncement('⚠️ Monto máximo: $50.000', player.id, 0xFF6600); return false; }
+        if (rulMonto > 20000) { room.sendAnnouncement('⚠️ Monto maximo: $20.000', player.id, 0xFF6600); return false; }
         if (rulApuesta !== 'rojo' && rulApuesta !== 'negro' && rulApuesta !== '0') {
             room.sendAnnouncement('⚠️ Apuesta inválida. Usa: rojo, negro o 0', player.id, 0xFF6600);
             return false;
         }
         shopBuy(playerAuth, player.name, player.id, rulMonto, '!ruleta', 60000, function() {
+
             var rojos = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
             // Resultado aleatorio con multiples seeds para evitar patrones
             var seed1 = Math.floor(Math.random() * 37);
@@ -4958,6 +6119,19 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ Solo puedes usar !cambio durante un minijuego activo', player.id, 0xFF6600);
             return false;
         }
+        // Bloquear en juegos donde cambiarse arruina la jugabilidad
+        try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Zombie Run', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Policias y Ladrones', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Impostor', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (SURVIVAL && SURVIVAL.isActive && SURVIVAL.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Survival', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (WEBSURVIVAL && WEBSURVIVAL.isActive && WEBSURVIVAL.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Web Survival', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Number Chairs', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (KAFA_TOPU && KAFA_TOPU.isActive && KAFA_TOPU.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Kafa Topu', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (KAFA_TOPU_SHADOW && KAFA_TOPU_SHADOW.isActive && KAFA_TOPU_SHADOW.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Kafa Topu Shadow', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (CAPTURE_THE_FLAG && CAPTURE_THE_FLAG.isActive && CAPTURE_THE_FLAG.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Capture the Flag', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Trivia', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (GOT && GOT.isActive && GOT.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Game of Thrones', player.id, 0xFF6600); return false; } } catch(e){}
         var cambioTargetId = parseInt(cambioParts[1].replace('#', ''));
         if (isNaN(cambioTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
         if (cambioTargetId === player.id) { room.sendAnnouncement('⚠️ No puedes cambiarte contigo mismo', player.id, 0xFF6600); return false; }
@@ -4970,24 +6144,30 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ Ambos jugadores deben estar en el campo de juego', player.id, 0xFF6600);
             return false;
         }
-        shopBuy(playerAuth, player.name, player.id, 50000, '!cambio', 180000, function() {
+        if (playerAuth && botState.powerCooldownGames[playerAuth] > 0) { room.sendAnnouncement('⚠️ Poderes en cooldown. Faltan ' + botState.powerCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600); return false; }
+        if (botState.minigameStartTime && (Date.now() - botState.minigameStartTime) > 20000) {
+            room.sendAnnouncement('⚠️ Solo puedes usar !cambio en los primeros 20 segundos del minijuego', player.id, 0xFF6600);
+            return false;
+        }
+        shopBuy(playerAuth, player.name, player.id, 20000, '!cambio', 600000, function() {
+            if (playerAuth) botState.powerCooldownGames[playerAuth] = 5;
             // Re-verificar posiciones después del cobro
             var p1 = room.getPlayer(player.id);
             var p2 = room.getPlayer(cambioTargetId);
             if (!p1 || !p2 || !p1.position || !p2.position) {
                 room.sendAnnouncement('⚠️ Error: jugadores ya no están en el campo. Dinero devuelto.', player.id, 0xFF6600);
-                try { window.__dbAddBalance(playerAuth, player.name, 50000); } catch(e) {}
+                try { window.__dbAddBalance(playerAuth, player.name, 20000); } catch(e) {}
                 return;
             }
             var pos1 = p1.position;
             var pos2 = p2.position;
             // Pausar, anunciar, intercambiar, reanudar
             try { room.pauseGame(true); } catch(e) {}
-            room.sendAnnouncement('🔄 ' + player.name + ' CAMBIA POSICIÓN con ' + cambioTarget.name + '! (-' + formatMoney(50000) + ')', null, 0xFF00FF, 'bold', 2);
+            room.sendAnnouncement('🔄 ' + player.name + ' CAMBIA POSICION con ' + cambioTarget.name + '! (-' + formatMoney(20000) + ')', null, 0xFF00FF, 'bold', 2);
             setTimeout(function() {
                 try {
-                    room.setDiscProperties(player.id, { x: pos2.x, y: pos2.y, xspeed: 0, yspeed: 0 });
-                    room.setDiscProperties(cambioTargetId, { x: pos1.x, y: pos1.y, xspeed: 0, yspeed: 0 });
+                    room.setPlayerDiscProperties(player.id, { x: pos2.x, y: pos2.y, xspeed: 0, yspeed: 0 });
+                    room.setPlayerDiscProperties(cambioTargetId, { x: pos1.x, y: pos1.y, xspeed: 0, yspeed: 0 });
                 } catch(e) {
                     room.sendAnnouncement('⚠️ Error al cambiar posiciones', null, 0xFF6600);
                 }
@@ -5036,6 +6216,1021 @@ room.onPlayerChat = function(player, message) {
                 }
             }, 2000);
         });
+        return false;
+    }
+
+    // !inversion [monto] - Invertir plata, madura en 5 juegos (cooldown 5min)
+    if (message.startsWith('!inversion')) {
+        var invParts = message.split(' ');
+        if (invParts.length < 2) {
+            room.sendAnnouncement('📈 Usa: !inversion [monto]\nEjemplo: !inversion 10000\nTu plata se invierte y madura en 5 juegos.\nResultados posibles: perder todo, x0.5, x1.5, x2, x3 o x5 JACKPOT!', player.id, 0xFFFF00);
+            return false;
+        }
+        var invMonto = parseInt(invParts[1].replace(/\./g, ''));
+        if (isNaN(invMonto) || invMonto < 1000) { room.sendAnnouncement('⚠️ Monto minimo: $1.000', player.id, 0xFF6600); return false; }
+        if (invMonto > 100000) { room.sendAnnouncement('⚠️ Monto maximo: $100.000', player.id, 0xFF6600); return false; }
+        if (botState.inversiones[playerAuth]) {
+            var inv = botState.inversiones[playerAuth];
+            room.sendAnnouncement('⚠️ Ya tienes una inversion activa de ' + formatMoney(inv.monto) + ' (madura en ' + inv.gamesLeft + ' juegos)', player.id, 0xFF6600);
+            return false;
+        }
+        shopBuy(playerAuth, player.name, player.id, invMonto, '!inversion', 300000, function() {
+            botState.inversiones[playerAuth] = { monto: invMonto, name: player.name, gamesLeft: 5 };
+            room.sendAnnouncement('📈 ' + player.name + ' invirtio ' + formatMoney(invMonto) + '! Madura en 5 juegos', null, 0x00BFFF, 'bold', 2);
+        });
+        return false;
+    }
+
+    // !prestamo [monto] [juegos] - Pedir un préstamo al banco
+    if (message.startsWith('!prestamo')) {
+        var prestParts = message.split(' ');
+        if (prestParts.length < 3) {
+            room.sendAnnouncement(
+                '🏦 BANCO DE PRESTAMOS\n' +
+                'Usa: !prestamo [monto] [juegos]\n' +
+                'Ejemplo: !prestamo 50000 20\n' +
+                'Monto: $1.000 - $100.000 | Plazo: 10-50 juegos\n' +
+                'Si no pagas a tiempo, se cobra interes de $5.000 cada 5 juegos\n' +
+                'Despues de 5 intereses sin pagar, pierdes todo tu saldo!\n' +
+                'Comandos: !deuda (ver deuda) | !pagar [monto] (pagar) | !topprestamos',
+                player.id, 0xFFFF00
+            );
+            return false;
+        }
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        if (botState.prestamos[playerAuth]) {
+            var miPrest = botState.prestamos[playerAuth];
+            room.sendAnnouncement('⚠️ Ya tienes un prestamo activo de ' + formatMoney(miPrest.deudaTotal) + ' (' + miPrest.gamesLeft + ' juegos restantes, intereses: ' + miPrest.intereses + '/5)', player.id, 0xFF6600);
+            return false;
+        }
+        var prestMonto = parseInt(prestParts[1].replace(/\./g, ''));
+        var prestJuegos = parseInt(prestParts[2]);
+        if (isNaN(prestMonto) || prestMonto < 1000) { room.sendAnnouncement('⚠️ Monto minimo: $1.000', player.id, 0xFF6600); return false; }
+        if (prestMonto > 100000) { room.sendAnnouncement('⚠️ Monto maximo: $100.000', player.id, 0xFF6600); return false; }
+        if (isNaN(prestJuegos) || prestJuegos < 10) { room.sendAnnouncement('⚠️ Plazo minimo: 10 juegos', player.id, 0xFF6600); return false; }
+        if (prestJuegos > 50) { room.sendAnnouncement('⚠️ Plazo maximo: 50 juegos', player.id, 0xFF6600); return false; }
+        // Dar el dinero al jugador
+        try { window.__dbAddBalance(playerAuth, player.name, prestMonto); } catch(e) {}
+        botState.prestamos[playerAuth] = { monto: prestMonto, name: player.name, gamesLeft: prestJuegos, intereses: 0, deudaTotal: prestMonto };
+        if (!botState.totalPrestado[playerAuth]) botState.totalPrestado[playerAuth] = { name: player.name, total: 0 };
+        botState.totalPrestado[playerAuth].total += prestMonto;
+        botState.totalPrestado[playerAuth].name = player.name;
+        room.sendAnnouncement(
+            '🏦 ' + player.name + ' pidio un prestamo de ' + formatMoney(prestMonto) + '!\n' +
+            '⏰ Tiene ' + prestJuegos + ' juegos para pagarlo con !pagar',
+            null, 0x00BFFF, 'bold', 2
+        );
+        return false;
+    }
+
+    // !deuda - Ver todas tus deudas (banco + P2P)
+    if (message === '!deuda') {
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        var miDeuda = botState.prestamos[playerAuth];
+        var miP2PDeuda = botState.prestamosP2P[playerAuth];
+        if (!miDeuda && !miP2PDeuda) {
+            room.sendAnnouncement('✅ No tienes ninguna deuda activa (ni banco ni P2P)', player.id, 0x00FF00);
+            return false;
+        }
+        var deudaMsg = '📋 TUS DEUDAS:\n';
+        if (miDeuda) {
+            deudaMsg += '\n🏦 BANCO:\n' +
+                '  💵 Prestamo: ' + formatMoney(miDeuda.monto) + '\n' +
+                '  💰 Deuda actual: ' + formatMoney(miDeuda.deudaTotal) + '\n' +
+                '  ⏰ Juegos restantes: ' + miDeuda.gamesLeft + '\n' +
+                '  📊 Intereses: ' + miDeuda.intereses + '/5' + (miDeuda.intereses > 0 ? ' ⚠️' : '') + '\n' +
+                '  Pagar con: !pagar [monto]\n';
+        }
+        if (miP2PDeuda) {
+            var p2pRest = miP2PDeuda.montoTotal - (miP2PDeuda.cuotasPagadas * miP2PDeuda.cuotaMonto);
+            deudaMsg += '\n🤝 PRESTAMO PERSONAL (de ' + miP2PDeuda.prestamistaNombre + '):\n' +
+                '  💵 Prestamo: ' + formatMoney(miP2PDeuda.monto) + ' | Total: ' + formatMoney(miP2PDeuda.montoTotal) + '\n' +
+                '  📊 Cuotas: ' + miP2PDeuda.cuotasPagadas + '/' + miP2PDeuda.cuotasTotales + ' (' + formatMoney(miP2PDeuda.cuotaMonto) + '/cuota)\n' +
+                '  💰 Restante: ' + formatMoney(p2pRest) +
+                (miP2PDeuda.impagos > 0 ? '\n  🚨 Impagos: ' + miP2PDeuda.impagos + '/10' : '') + '\n' +
+                '  Pagar con: !pagarp2p [monto]\n';
+        }
+        var deudaColor = (miDeuda && miDeuda.intereses > 0) || (miP2PDeuda && miP2PDeuda.impagos > 0) ? 0xFF6600 : 0x00BFFF;
+        room.sendAnnouncement(deudaMsg, player.id, deudaColor, 'bold');
+        return false;
+    }
+
+    // !pagar [monto] - Pagar parte o todo tu prestamo
+    if (message.startsWith('!pagar')) {
+        var pagarParts = message.split(' ');
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        var miPrestPagar = botState.prestamos[playerAuth];
+        if (!miPrestPagar) {
+            room.sendAnnouncement('🏦 No tienes ningún prestamo que pagar', player.id, 0x00FF00);
+            return false;
+        }
+        var montoPagar = 0;
+        if (pagarParts.length < 2 || pagarParts[1].toLowerCase() === 'todo') {
+            montoPagar = miPrestPagar.deudaTotal;
+        } else {
+            montoPagar = parseInt(pagarParts[1].replace(/\./g, ''));
+        }
+        if (isNaN(montoPagar) || montoPagar <= 0) { room.sendAnnouncement('⚠️ Monto invalido. Usa: !pagar [monto] o !pagar todo', player.id, 0xFF6600); return false; }
+        if (montoPagar > miPrestPagar.deudaTotal) montoPagar = miPrestPagar.deudaTotal;
+        // Verificar que tiene saldo
+        if (typeof window.__dbGetStats !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', player.id, 0xFF6600); return false; }
+        (function(pAuth, pName, pId, monto, prestRef) {
+            window.__dbGetStats(pAuth).then(function(stats) {
+                var balance = (stats && stats.balance) ? stats.balance : 0;
+                if (balance < monto) {
+                    room.sendAnnouncement('⚠️ Saldo insuficiente. Necesitas ' + formatMoney(monto) + ' (tienes ' + formatMoney(balance) + ')', pId, 0xFF6600);
+                    return;
+                }
+                try { window.__dbAddBalance(pAuth, pName, -monto); } catch(e) {}
+                prestRef.deudaTotal -= monto;
+                if (prestRef.deudaTotal <= 0) {
+                    // Prestamo pagado completamente
+                    delete botState.prestamos[pAuth];
+                    room.sendAnnouncement('🏦✅ ' + pName + ' pago su prestamo completamente! (-' + formatMoney(monto) + ')', null, 0x00FF00, 'bold', 2);
+                } else {
+                    room.sendAnnouncement('🏦 ' + pName + ' pago ' + formatMoney(monto) + ' de su prestamo. Deuda restante: ' + formatMoney(prestRef.deudaTotal), null, 0x00BFFF);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al verificar saldo', pId, 0xFF0000); });
+        })(playerAuth, player.name, player.id, montoPagar, miPrestPagar);
+        return false;
+    }
+
+    // !topprestamos - Ranking de quienes mas han pedido prestado
+    if (message === '!topprestamos') {
+        var prestEntries = [];
+        for (var tpAuth in botState.totalPrestado) {
+            prestEntries.push(botState.totalPrestado[tpAuth]);
+        }
+        if (prestEntries.length === 0) {
+            room.sendAnnouncement('🏦 Nadie ha pedido prestamos aun', player.id, 0xFFFF00);
+            return false;
+        }
+        prestEntries.sort(function(a, b) { return b.total - a.total; });
+        var topMsg = '🏦 TOP PRESTAMOS:\n';
+        var medals = ['🥇', '🥈', '🥉'];
+        for (var tp = 0; tp < Math.min(10, prestEntries.length); tp++) {
+            var prefix = tp < 3 ? medals[tp] : (tp + 1) + '.';
+            topMsg += prefix + ' ' + prestEntries[tp].name + ' - ' + formatMoney(prestEntries[tp].total) + '\n';
+        }
+        room.sendAnnouncement(topMsg, player.id, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // ============================================
+    // SISTEMA PRESTAMISTA P2P
+    // ============================================
+
+    // Tabla de interes por cuotas
+    var p2pInteresTabla = { 5: 0.10, 10: 0.15, 15: 0.20, 20: 0.25, 25: 0.28, 30: 0.30 };
+    var p2pCuotasValidas = [5, 10, 15, 20, 25, 30];
+
+    // !prestamista - Ver comandos de prestamista
+    if (message === '!prestamista') {
+        if (!playerAuth || !botState.prestamistas[playerAuth]) {
+            room.sendAnnouncement('⚠️ No eres prestamista. Solo los prestamistas pueden usar este comando.', player.id, 0xFF6600);
+            return false;
+        }
+        var pInfo = botState.prestamistas[playerAuth];
+        var pActivos = 0;
+        for (var dk in botState.prestamosP2P) { if (botState.prestamosP2P[dk].prestamistaAuth === playerAuth) pActivos++; }
+        room.sendAnnouncement(
+            '\n💼━━━ PANEL PRESTAMISTA ━━━💼\n\n' +
+            '📊 Total prestado: $' + formatMoney(pInfo.totalPrestado) + '\n' +
+            '💰 Total ganado (intereses): $' + formatMoney(pInfo.totalGanado) + '\n' +
+            '📋 Préstamos activos: ' + pActivos + '/5\n\n' +
+            '📌 COMANDOS:\n' +
+            '  !prestar #ID [monto] [cuotas] - Prestar tu dinero\n' +
+            '  !misdeudores - Ver quién te debe\n' +
+            '  !topprestamistas - Ranking\n\n' +
+            '📌 CUOTAS E INTERESES:\n' +
+            '  5 cuotas → 10% | 10 cuotas → 15%\n' +
+            '  15 cuotas → 20% | 20 cuotas → 25%\n' +
+            '  25 cuotas → 28% | 30 cuotas → 30%\n' +
+            '  Monto: $1.000 - $200.000',
+            player.id, 0xFFD700, 'bold'
+        );
+        return false;
+    }
+
+    // !prestar #ID [monto] [cuotas] - Prestamista ofrece préstamo
+    if (message.startsWith('!prestar')) {
+        var prestarParts = message.split(' ');
+        if (prestarParts.length < 4) {
+            room.sendAnnouncement(
+                '💼 PRESTAMISTA P2P\n' +
+                'Usa: !prestar #ID [monto] [cuotas]\n' +
+                'Ejemplo: !prestar #5 50000 15\n' +
+                'Cuotas validas: 5, 10, 15, 20, 25, 30\n' +
+                'Interes: 5c=10% | 10c=15% | 15c=20% | 20c=25% | 25c=28% | 30c=30%\n' +
+                'Monto: $1.000 - $200.000',
+                player.id, 0xFFFF00
+            );
+            return false;
+        }
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        if (!botState.prestamistas[playerAuth]) { room.sendAnnouncement('⚠️ No eres prestamista. El creador debe darte el rol.', player.id, 0xFF6600); return false; }
+        var prestarTargetId = parseInt(prestarParts[1].replace('#', ''));
+        var prestarMonto = parseInt(prestarParts[2].replace(/\./g, ''));
+        var prestarCuotas = parseInt(prestarParts[3]);
+        if (isNaN(prestarTargetId)) { room.sendAnnouncement('⚠️ ID invalido', player.id, 0xFF6600); return false; }
+        if (prestarTargetId === player.id) { room.sendAnnouncement('⚠️ No puedes prestarte a ti mismo', player.id, 0xFF6600); return false; }
+        if (isNaN(prestarMonto) || prestarMonto < 1000) { room.sendAnnouncement('⚠️ Monto minimo: $1.000', player.id, 0xFF6600); return false; }
+        if (prestarMonto > 200000) { room.sendAnnouncement('⚠️ Monto maximo: $200.000', player.id, 0xFF6600); return false; }
+        if (p2pCuotasValidas.indexOf(prestarCuotas) === -1) { room.sendAnnouncement('⚠️ Cuotas validas: 5, 10, 15, 20, 25, 30', player.id, 0xFF6600); return false; }
+        // Verificar limite de 5 prestamos activos
+        var prestamosActivos = 0;
+        for (var paKey in botState.prestamosP2P) {
+            if (botState.prestamosP2P[paKey].prestamistaAuth === playerAuth) prestamosActivos++;
+        }
+        if (prestamosActivos >= 5) { room.sendAnnouncement('⚠️ Ya tienes 5 prestamos activos (maximo)', player.id, 0xFF6600); return false; }
+        var prestarTarget = room.getPlayer(prestarTargetId);
+        if (!prestarTarget) { room.sendAnnouncement('⚠️ Jugador no encontrado', player.id, 0xFF6600); return false; }
+        var prestarTargetAuth = getAuth(prestarTarget);
+        if (!prestarTargetAuth) { room.sendAnnouncement('⚠️ Error con ese jugador', player.id, 0xFF6600); return false; }
+        if (botState.prestamosP2P[prestarTargetAuth]) { room.sendAnnouncement('⚠️ ' + prestarTarget.name + ' ya tiene una deuda P2P activa', player.id, 0xFF6600); return false; }
+        if (botState.ofertasPrestamo[prestarTargetAuth]) { room.sendAnnouncement('⚠️ ' + prestarTarget.name + ' ya tiene una oferta pendiente', player.id, 0xFF6600); return false; }
+        // Verificar saldo del prestamista
+        (function(pAuth, pName, pId, tAuth, tName, tId, monto, cuotas) {
+            if (typeof window.__dbGetStats !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', pId, 0xFF6600); return; }
+            window.__dbGetStats(pAuth).then(function(stats) {
+                var bal = (stats && stats.balance) ? stats.balance : 0;
+                if (bal < monto) {
+                    room.sendAnnouncement('⚠️ Saldo insuficiente. Necesitas ' + formatMoney(monto) + ' (tienes ' + formatMoney(bal) + ')', pId, 0xFF6600);
+                    return;
+                }
+                var interes = p2pInteresTabla[cuotas];
+                var montoTotal = Math.floor(monto * (1 + interes));
+                var cuotaMonto = Math.floor(montoTotal / cuotas);
+                // Descontar del prestamista
+                try { window.__dbAddBalance(pAuth, pName, -monto); } catch(e) {}
+                // Crear oferta
+                botState.ofertasPrestamo[tAuth] = { fromAuth: pAuth, fromName: pName, monto: monto, cuotas: cuotas, montoTotal: montoTotal, cuotaMonto: cuotaMonto, timestamp: Date.now() };
+                room.sendAnnouncement(
+                    '💼 ' + pName + ' te ofrece un prestamo de ' + formatMoney(monto) + '!\n' +
+                    '💰 Pagas: ' + formatMoney(montoTotal) + ' en ' + cuotas + ' cuotas de ' + formatMoney(cuotaMonto) + '\n' +
+                    '📊 Interes: ' + (interes * 100) + '%\n' +
+                    'Escribe !aceptarprestamo o !rechazarprestamo',
+                    tId, 0xFFFF00, 'bold'
+                );
+                room.sendAnnouncement('💼 Oferta enviada a ' + tName + '. Esperando respuesta... (60s)', pId, 0x00BFFF);
+                // Timeout 60s
+                setTimeout(function() {
+                    if (botState.ofertasPrestamo[tAuth] && botState.ofertasPrestamo[tAuth].fromAuth === pAuth) {
+                        delete botState.ofertasPrestamo[tAuth];
+                        // Devolver dinero al prestamista
+                        try { window.__dbAddBalance(pAuth, pName, monto); } catch(e) {}
+                        room.sendAnnouncement('💼 La oferta de prestamo a ' + tName + ' expiro. Dinero devuelto.', null, 0xFF6600);
+                    }
+                }, 60000);
+            }).catch(function() { room.sendAnnouncement('❌ Error al verificar saldo', pId, 0xFF0000); });
+        })(playerAuth, player.name, player.id, prestarTargetAuth, prestarTarget.name, prestarTarget.id, prestarMonto, prestarCuotas);
+        return false;
+    }
+
+    // !aceptarprestamo - Aceptar oferta de préstamo P2P
+    if (message === '!aceptarprestamo') {
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        var oferta = botState.ofertasPrestamo[playerAuth];
+        if (!oferta) { room.sendAnnouncement('⚠️ No tienes ninguna oferta de prestamo pendiente', player.id, 0xFF6600); return false; }
+        // Dar dinero al deudor
+        try { window.__dbAddBalance(playerAuth, player.name, oferta.monto); } catch(e) {}
+        // Crear prestamo P2P
+        botState.prestamosP2P[playerAuth] = {
+            prestamistaAuth: oferta.fromAuth,
+            prestamistaNombre: oferta.fromName,
+            deudorNombre: player.name,
+            monto: oferta.monto,
+            montoTotal: oferta.montoTotal,
+            cuotaMonto: oferta.cuotaMonto,
+            cuotasPagadas: 0,
+            cuotasTotales: oferta.cuotas,
+            deudaPendiente: 0,
+            impagos: 0
+        };
+        // Actualizar stats del prestamista
+        if (botState.prestamistas[oferta.fromAuth]) {
+            botState.prestamistas[oferta.fromAuth].totalPrestado += oferta.monto;
+        }
+        delete botState.ofertasPrestamo[playerAuth];
+        room.sendAnnouncement(
+            '💼✅ ' + player.name + ' acepto el prestamo de ' + oferta.fromName + '!\n' +
+            '💰 Recibe: ' + formatMoney(oferta.monto) + ' | Paga: ' + formatMoney(oferta.montoTotal) + ' en ' + oferta.cuotas + ' cuotas',
+            null, 0x00FF00, 'bold', 2
+        );
+        return false;
+    }
+
+    // !rechazarprestamo - Rechazar oferta de préstamo P2P
+    if (message === '!rechazarprestamo') {
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        var ofertaRech = botState.ofertasPrestamo[playerAuth];
+        if (!ofertaRech) { room.sendAnnouncement('⚠️ No tienes ninguna oferta de prestamo pendiente', player.id, 0xFF6600); return false; }
+        // Devolver dinero al prestamista
+        try { window.__dbAddBalance(ofertaRech.fromAuth, ofertaRech.fromName, ofertaRech.monto); } catch(e) {}
+        delete botState.ofertasPrestamo[playerAuth];
+        room.sendAnnouncement('💼❌ ' + player.name + ' rechazo el prestamo de ' + ofertaRech.fromName + '. Dinero devuelto.', null, 0xFF6600);
+        return false;
+    }
+
+    // !misdeudores - Ver quién te debe (solo prestamistas)
+    if (message === '!misdeudores') {
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        if (!botState.prestamistas[playerAuth]) { room.sendAnnouncement('⚠️ No eres prestamista', player.id, 0xFF6600); return false; }
+        var misDeudores = [];
+        for (var mdKey in botState.prestamosP2P) {
+            var mdP = botState.prestamosP2P[mdKey];
+            if (mdP.prestamistaAuth === playerAuth) {
+                misDeudores.push(mdP);
+            }
+        }
+        if (misDeudores.length === 0) {
+            room.sendAnnouncement('💼 No tienes deudores activos', player.id, 0x00BFFF);
+            return false;
+        }
+        var mdMsg = '💼 TUS DEUDORES (' + misDeudores.length + '/5):\n';
+        for (var mdi = 0; mdi < misDeudores.length; mdi++) {
+            var md = misDeudores[mdi];
+            var mdRestante = md.montoTotal - (md.cuotasPagadas * md.cuotaMonto);
+            mdMsg += '• ' + md.deudorNombre + ': ' + md.cuotasPagadas + '/' + md.cuotasTotales + ' cuotas | Resta: ' + formatMoney(mdRestante) + (md.impagos > 0 ? ' ⚠️' + md.impagos + ' impagos' : '') + '\n';
+        }
+        room.sendAnnouncement(mdMsg, player.id, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !mideudap2p - Ver tu deuda P2P actual
+    if (message === '!mideudap2p') {
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        var miP2P = botState.prestamosP2P[playerAuth];
+        if (!miP2P) {
+            room.sendAnnouncement('💼 No tienes deuda P2P activa', player.id, 0x00FF00);
+            return false;
+        }
+        var p2pRestante = miP2P.montoTotal - (miP2P.cuotasPagadas * miP2P.cuotaMonto);
+        room.sendAnnouncement(
+            '💼 TU DEUDA P2P:\n' +
+            '👤 Prestamista: ' + miP2P.prestamistaNombre + '\n' +
+            '💵 Prestamo: ' + formatMoney(miP2P.monto) + ' | Total a pagar: ' + formatMoney(miP2P.montoTotal) + '\n' +
+            '📊 Cuotas: ' + miP2P.cuotasPagadas + '/' + miP2P.cuotasTotales + ' (' + formatMoney(miP2P.cuotaMonto) + '/cuota)\n' +
+            '💰 Restante: ' + formatMoney(p2pRestante) + (miP2P.deudaPendiente > 0 ? '\n⚠️ Deuda pendiente: ' + formatMoney(miP2P.deudaPendiente) : '') +
+            (miP2P.impagos > 0 ? '\n🚨 Impagos: ' + miP2P.impagos + '/10' : ''),
+            player.id, miP2P.impagos > 0 ? 0xFF6600 : 0x00BFFF
+        );
+        return false;
+    }
+
+    // !pagarp2p [monto/todo] - Pago anticipado de préstamo P2P
+    if (message.startsWith('!pagarp2p')) {
+        var pagarP2PParts = message.split(' ');
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        var miP2PPagar = botState.prestamosP2P[playerAuth];
+        if (!miP2PPagar) { room.sendAnnouncement('💼 No tienes deuda P2P que pagar', player.id, 0x00FF00); return false; }
+        var p2pRestantePagar = miP2PPagar.montoTotal - (miP2PPagar.cuotasPagadas * miP2PPagar.cuotaMonto);
+        var montoP2PPagar = 0;
+        if (pagarP2PParts.length < 2 || pagarP2PParts[1].toLowerCase() === 'todo') {
+            montoP2PPagar = p2pRestantePagar;
+        } else {
+            montoP2PPagar = parseInt(pagarP2PParts[1].replace(/\./g, ''));
+        }
+        if (isNaN(montoP2PPagar) || montoP2PPagar <= 0) { room.sendAnnouncement('⚠️ Monto invalido. Usa: !pagarp2p [monto] o !pagarp2p todo', player.id, 0xFF6600); return false; }
+        if (montoP2PPagar > p2pRestantePagar) montoP2PPagar = p2pRestantePagar;
+        (function(dAuth, dName, dId, monto, prestRef) {
+            if (typeof window.__dbGetStats !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', dId, 0xFF6600); return; }
+            window.__dbGetStats(dAuth).then(function(stats) {
+                var bal = (stats && stats.balance) ? stats.balance : 0;
+                if (bal < monto) {
+                    room.sendAnnouncement('⚠️ Saldo insuficiente. Necesitas ' + formatMoney(monto) + ' (tienes ' + formatMoney(bal) + ')', dId, 0xFF6600);
+                    return;
+                }
+                try { window.__dbAddBalance(dAuth, dName, -monto); } catch(e) {}
+                try { window.__dbAddBalance(prestRef.prestamistaAuth, prestRef.prestamistaNombre, monto); } catch(e) {}
+                // Calcular cuotas cubiertas
+                var cuotasCubiertas = Math.floor(monto / prestRef.cuotaMonto);
+                prestRef.cuotasPagadas += cuotasCubiertas;
+                prestRef.impagos = 0;
+                prestRef.deudaPendiente = 0;
+                if (prestRef.cuotasPagadas >= prestRef.cuotasTotales) {
+                    if (botState.prestamistas[prestRef.prestamistaAuth]) {
+                        botState.prestamistas[prestRef.prestamistaAuth].totalGanado += (prestRef.montoTotal - prestRef.monto);
+                    }
+                    delete botState.prestamosP2P[dAuth];
+                    room.sendAnnouncement('💼✅ ' + dName + ' pago su prestamo P2P completamente a ' + prestRef.prestamistaNombre + '! (-' + formatMoney(monto) + ')', null, 0x00FF00, 'bold', 2);
+                } else {
+                    var nuevoRestante = prestRef.montoTotal - (prestRef.cuotasPagadas * prestRef.cuotaMonto);
+                    room.sendAnnouncement('💼 ' + dName + ' pago ' + formatMoney(monto) + ' de su prestamo P2P. Restante: ' + formatMoney(nuevoRestante) + ' (' + (prestRef.cuotasTotales - prestRef.cuotasPagadas) + ' cuotas)', null, 0x00BFFF);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al verificar saldo', dId, 0xFF0000); });
+        })(playerAuth, player.name, player.id, montoP2PPagar, miP2PPagar);
+        return false;
+    }
+
+    // !topprestamistas - Ranking de prestamistas
+    if (message === '!topprestamistas') {
+        var tpEntries = [];
+        for (var tpKey in botState.prestamistas) {
+            tpEntries.push(botState.prestamistas[tpKey]);
+        }
+        if (tpEntries.length === 0) {
+            room.sendAnnouncement('💼 No hay prestamistas registrados', player.id, 0xFFFF00);
+            return false;
+        }
+        tpEntries.sort(function(a, b) { return b.totalGanado - a.totalGanado; });
+        var tpMsg = '💼 TOP PRESTAMISTAS:\n';
+        var tpMedals = ['🥇', '🥈', '🥉'];
+        for (var tpi = 0; tpi < Math.min(10, tpEntries.length); tpi++) {
+            var tpPrefix = tpi < 3 ? tpMedals[tpi] : (tpi + 1) + '.';
+            tpMsg += tpPrefix + ' ' + tpEntries[tpi].name + ' | Prestado: ' + formatMoney(tpEntries[tpi].totalPrestado) + ' | Ganado: ' + formatMoney(tpEntries[tpi].totalGanado) + '\n';
+        }
+        room.sendAnnouncement(tpMsg, player.id, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !titan - Descubrir tu medida (1-35cm). Una vez por reseteo. 33/34/35 son únicos.
+    if (message === '!titan') {
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        if (botState.titanValues[playerAuth]) {
+            var myTitan = botState.titanValues[playerAuth];
+            room.sendAnnouncement('📏 Ya usaste !titan este ciclo. Tu medida es: ' + myTitan.value + 'cm', player.id, 0x00BFFF);
+            return false;
+        }
+        // Construir pool: 1-32 siempre disponibles + 33/34/35 si no están tomados
+        var titanPool = [];
+        for (var ti = 1; ti <= 32; ti++) titanPool.push(ti);
+        if (botState.titanTaken.indexOf(33) === -1) titanPool.push(33);
+        if (botState.titanTaken.indexOf(34) === -1) titanPool.push(34);
+        if (botState.titanTaken.indexOf(35) === -1) titanPool.push(35);
+        // Elegir valor aleatorio del pool
+        var titanVal = titanPool[Math.floor(Math.random() * titanPool.length)];
+        if (titanVal >= 33) botState.titanTaken.push(titanVal);
+        botState.titanValues[playerAuth] = { name: player.name, value: titanVal };
+        try { window.__dbSaveTitan(playerAuth, player.name, titanVal); } catch(e) {}
+        var titanEmoji = titanVal >= 33 ? '🏆' : titanVal >= 25 ? '😏' : titanVal >= 15 ? '😐' : '😅';
+        room.sendAnnouncement('📏 ' + player.name + ' midio... ' + titanVal + 'cm ' + titanEmoji, null, titanVal >= 33 ? 0xFFD700 : titanVal >= 25 ? 0x00BFFF : 0xAAAAAA, titanVal >= 33 ? 'bold' : 'normal', titanVal >= 33 ? 2 : 1);
+        return false;
+    }
+
+    // !toptitan - Ver el ranking de medidas
+    if (message === '!toptitan') {
+        var titanList = [];
+        for (var tAuth in botState.titanValues) {
+            titanList.push(botState.titanValues[tAuth]);
+        }
+        if (titanList.length === 0) {
+            room.sendAnnouncement('📏 Nadie ha usado !titan todavía este ciclo', player.id, 0xAAAAAA);
+            return false;
+        }
+        titanList.sort(function(a, b) { return b.value - a.value; });
+        var titanMedals = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+        var titanMsg = '📏 TOP TITAN DEL CICLO:\n';
+        var titanShow = Math.min(titanList.length, 10);
+        for (var ti2 = 0; ti2 < titanShow; ti2++) {
+            var tm = titanMedals[ti2] || (ti2 + 1 + '.');
+            titanMsg += tm + ' ' + titanList[ti2].name + ' — ' + titanList[ti2].value + 'cm\n';
+        }
+        room.sendAnnouncement(titanMsg, null, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !casarse #ID - Proponer matrimonio a otro jugador ($25k)
+    if (message.startsWith('!casarse')) {
+        var casParts = message.split(' ');
+        if (casParts.length < 2) {
+            room.sendAnnouncement('💍 Usa: !casarse #ID\nProponer matrimonio a otro jugador ($25.000)\nBeneficios: +10% bonus de plata cuando ambos estan online\n!divorcio - Separarse', player.id, 0xFFFF00);
+            return false;
+        }
+        if (botState.marriages[playerAuth]) {
+            var partnerAuth = botState.marriages[playerAuth];
+            var partnerOnline = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === partnerAuth; });
+            room.sendAnnouncement('💍 Ya estas casado/a con ' + (partnerOnline ? partnerOnline.name : 'alguien offline'), player.id, 0xFF6600);
+            return false;
+        }
+        var casTargetId = parseInt(casParts[1].replace('#', ''));
+        if (isNaN(casTargetId)) { room.sendAnnouncement('⚠️ ID invalido', player.id, 0xFF6600); return false; }
+        if (casTargetId === player.id) { room.sendAnnouncement('⚠️ No puedes casarte contigo mismo', player.id, 0xFF6600); return false; }
+        var casTarget = room.getPlayer(casTargetId);
+        if (!casTarget) { room.sendAnnouncement('⚠️ Jugador no encontrado', player.id, 0xFF6600); return false; }
+        var casTargetAuth = getAuth(casTarget);
+        if (!casTargetAuth) { room.sendAnnouncement('⚠️ Error con ese jugador', player.id, 0xFF6600); return false; }
+        if (botState.marriages[casTargetAuth]) {
+            room.sendAnnouncement('⚠️ ' + casTarget.name + ' ya esta casado/a', player.id, 0xFF6600);
+            return false;
+        }
+        shopBuy(playerAuth, player.name, player.id, 25000, '!casarse', 60000, function() {
+            botState.marriageProposals[casTargetAuth] = { fromAuth: playerAuth, fromName: player.name, fromId: player.id };
+            room.sendAnnouncement(
+                '\n💍━━━━━━━━━━━━━━━━━━━━━━━━💍\n' +
+                '   ' + player.name + ' le propuso matrimonio a ' + casTarget.name + '!\n' +
+                '💍━━━━━━━━━━━━━━━━━━━━━━━━💍\n',
+                null, 0xFF69B4, 'bold', 2
+            );
+            room.sendAnnouncement('💍 ' + player.name + ' quiere casarse contigo!\nEscribe !aceptar para aceptar o !rechazar para rechazar', casTarget.id, 0xFF69B4, 'bold');
+            // Timeout 60s
+            setTimeout(function() {
+                if (botState.marriageProposals[casTargetAuth] && botState.marriageProposals[casTargetAuth].fromAuth === playerAuth) {
+                    delete botState.marriageProposals[casTargetAuth];
+                    room.sendAnnouncement('💔 La propuesta de ' + player.name + ' expiro', null, 0xFF6600);
+                    try { window.__dbAddBalance(playerAuth, player.name, 25000); } catch(e) {}
+                }
+            }, 60000);
+        });
+        return false;
+    }
+
+    // !aceptar - Aceptar propuesta de matrimonio
+    if (message === '!aceptar') {
+        var proposal = botState.marriageProposals[playerAuth];
+        if (!proposal) { room.sendAnnouncement('⚠️ No tienes ninguna propuesta de matrimonio', player.id, 0xFF6600); return false; }
+        botState.marriages[playerAuth] = proposal.fromAuth;
+        botState.marriages[proposal.fromAuth] = playerAuth;
+        delete botState.marriageProposals[playerAuth];
+        try { window.__dbSaveMarriage(playerAuth, proposal.fromAuth); } catch(e) {}
+        room.sendAnnouncement(
+            '\n💒━━━━━━━━━━━━━━━━━━━━━━━━💒\n' +
+            '   ' + proposal.fromName + ' y ' + player.name + '\n' +
+            '   se han casado! 💍💕\n' +
+            '   +10% bonus de plata juntos!\n' +
+            '💒━━━━━━━━━━━━━━━━━━━━━━━━💒\n',
+            null, 0xFF69B4, 'bold', 2
+        );
+        return false;
+    }
+
+    // !rechazar - Rechazar propuesta de matrimonio
+    if (message === '!rechazar') {
+        var rejProposal = botState.marriageProposals[playerAuth];
+        if (!rejProposal) { room.sendAnnouncement('⚠️ No tienes ninguna propuesta', player.id, 0xFF6600); return false; }
+        delete botState.marriageProposals[playerAuth];
+        room.sendAnnouncement('💔 ' + player.name + ' rechazo la propuesta de ' + rejProposal.fromName, null, 0xFF0000);
+        try { window.__dbAddBalance(rejProposal.fromAuth, rejProposal.fromName, 25000); } catch(e) {}
+        return false;
+    }
+
+    // !divorcio - Divorciarse
+    if (message === '!divorcio') {
+        if (!botState.marriages[playerAuth]) {
+            room.sendAnnouncement('⚠️ No estas casado/a', player.id, 0xFF6600);
+            return false;
+        }
+        var exAuth = botState.marriages[playerAuth];
+        var exOnline = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === exAuth; });
+        delete botState.marriages[playerAuth];
+        delete botState.marriages[exAuth];
+        try { window.__dbRemoveMarriage(playerAuth, exAuth); } catch(e) {}
+        room.sendAnnouncement('💔 ' + player.name + ' se divorcio de ' + (exOnline ? exOnline.name : 'su pareja') + '!', null, 0xFF0000, 'bold', 2);
+        return false;
+    }
+
+    // !pareja - Ver tu pareja
+    if (message === '!pareja') {
+        if (!botState.marriages[playerAuth]) {
+            room.sendAnnouncement('💔 No estas casado/a. Usa !casarse #ID para proponer!', player.id, 0xFF6600);
+            return false;
+        }
+        var parejaAuth = botState.marriages[playerAuth];
+        var parejaOnline = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === parejaAuth; });
+        room.sendAnnouncement('💍 Tu pareja: ' + (parejaOnline ? parejaOnline.name + ' (online 💚)' : 'offline 🔴'), player.id, 0xFF69B4, 'bold');
+        return false;
+    }
+
+    // !invertir #ID - Invertir controles de un jugador por 10s (cooldown 3min)
+    if (message.startsWith('!invertir')) {
+        var invCtrlParts = message.split(' ');
+        if (invCtrlParts.length < 2) {
+            room.sendAnnouncement('🔄 Usa: !invertir #ID\nInvierte los controles de un jugador por 10 segundos!', player.id, 0xFFFF00);
+            return false;
+        }
+        if (!botState.gameActive) {
+            room.sendAnnouncement('⚠️ Solo puedes usar !invertir durante un minijuego activo', player.id, 0xFF6600);
+            return false;
+        }
+        try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Impostor', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Zombie Run', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Policias y Ladrones', player.id, 0xFF6600); return false; } } catch(e){}
+        var invCtrlTargetId = parseInt(invCtrlParts[1].replace('#', ''));
+        if (isNaN(invCtrlTargetId)) { room.sendAnnouncement('⚠️ ID invalido', player.id, 0xFF6600); return false; }
+        if (invCtrlTargetId === player.id) { room.sendAnnouncement('⚠️ No puedes invertirte a ti mismo', player.id, 0xFF6600); return false; }
+        var invCtrlTarget = room.getPlayer(invCtrlTargetId);
+        if (!invCtrlTarget || invCtrlTarget.team === 0) { room.sendAnnouncement('⚠️ Jugador no encontrado o en espectador', player.id, 0xFF6600); return false; }
+        if (playerAuth && botState.powerCooldownGames[playerAuth] > 0) { room.sendAnnouncement('⚠️ Poderes en cooldown. Faltan ' + botState.powerCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, 18000, '!invertir', 300000, function() {
+            if (playerAuth) botState.powerCooldownGames[playerAuth] = 5;
+            room.sendAnnouncement('🔄 ' + player.name + ' invirtio los controles de ' + invCtrlTarget.name + ' por 10 segundos!', null, 0xFF00FF, 'bold', 2);
+            var invCtrlInt = setInterval(function() {
+                try {
+                    var p = room.getPlayer(invCtrlTargetId);
+                    if (!p || p.team === 0) { clearInterval(invCtrlInt); return; }
+                    var props = room.getPlayerDiscProperties(invCtrlTargetId);
+                    if (props) {
+                        room.setPlayerDiscProperties(invCtrlTargetId, { xspeed: -props.xspeed, yspeed: -props.yspeed });
+                    }
+                } catch(e) { clearInterval(invCtrlInt); }
+            }, 100);
+            setTimeout(function() {
+                clearInterval(invCtrlInt);
+                room.sendAnnouncement('🔄 Los controles de ' + invCtrlTarget.name + ' volvieron a la normalidad', null, 0x00BFFF);
+            }, 10000);
+        });
+        return false;
+    }
+
+    // !theworld - Congelar a todos los jugadores excepto a ti (cooldown 5min)
+    if (message === '!theworld') {
+        if (!botState.gameActive) {
+            room.sendAnnouncement('⚠️ Solo puedes usar !theworld durante un minijuego activo', player.id, 0xFF6600);
+            return false;
+        }
+        // No permitir en juegos de rol/supervivencia
+        try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Impostor', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Zombie Run', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Policias y Ladrones', player.id, 0xFF6600); return false; } } catch(e){}
+        if (player.team === 0) { room.sendAnnouncement('⚠️ Debes estar en el campo de juego', player.id, 0xFF6600); return false; }
+        if (playerAuth && botState.powerCooldownGames[playerAuth] > 0) { room.sendAnnouncement('⚠️ Poderes en cooldown. Faltan ' + botState.powerCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, 30000, '!theworld', 600000, function() {
+            if (playerAuth) botState.powerCooldownGames[playerAuth] = 5;
+            room.sendAnnouncement(
+                '\n' +
+                '███████╗ █████╗     ██╗    ██╗ █████╗ ██████╗ ██╗   ██╗██████╗  ██████╗ \n' +
+                '╚══███╔╝██╔══██╗    ██║    ██║██╔══██╗██╔══██╗██║   ██║██╔══██╗██╔═══██╗\n' +
+                '  ███╔╝ ███████║    ██║ █╗ ██║███████║██████╔╝██║   ██║██║  ██║██║   ██║\n' +
+                ' ███╔╝  ██╔══██║    ██║███╗██║██╔══██║██╔══██╗██║   ██║██║  ██║██║   ██║\n' +
+                '███████╗██║  ██║    ╚███╔███╔╝██║  ██║██║  ██║╚██████╔╝██████╔╝╚██████╔╝\n' +
+                '╚══════╝╚═╝  ╚═╝     ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝  ╚═════╝ \n\n' +
+                '  ' + player.name + ' ha detenido el tiempo!\n' +
+                '  TOKI WO TOMARE!',
+                null, 0xFFD700, 'bold', 2
+            );
+            // Bloquear chat de todos excepto el activador
+            botState.theWorldActive = { playerId: player.id };
+            // Congelar a todos menos al activador
+            var twPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.id !== player.id && p.team !== 0; });
+            var twSavedProps = {};
+            for (var tw = 0; tw < twPlayers.length; tw++) {
+                var twP = twPlayers[tw];
+                try {
+                    var disc = twP.position;
+                    if (disc) twSavedProps[twP.id] = { x: disc.x, y: disc.y };
+                } catch(e){}
+            }
+            var twInterval = setInterval(function() {
+                for (var twId in twSavedProps) {
+                    try {
+                        room.setPlayerDiscProperties(parseInt(twId), { x: twSavedProps[twId].x, y: twSavedProps[twId].y, xspeed: 0, yspeed: 0 });
+                    } catch(e){}
+                }
+            }, 50);
+            setTimeout(function() {
+                clearInterval(twInterval);
+                botState.theWorldActive = null;
+                room.sendAnnouncement('⏱️ El tiempo vuelve a fluir...', null, 0x00BFFF, 'bold', 2);
+            }, 4000);
+        });
+        return false;
+    }
+
+    // !bitesthedust - Reiniciar la ronda actual del minijuego ($25k, cooldown 10min global, 1 por juego)
+    if (message === '!bitesthedust') {
+        if (!botState.gameActive) {
+            room.sendAnnouncement('⚠️ Solo puedes usar !bitesthedust durante un minijuego activo', player.id, 0xFF6600);
+            return false;
+        }
+        try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !bitesthedust en Impostor', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !bitesthedust en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !bitesthedust en Number Chairs', player.id, 0xFF6600); return false; } } catch(e){}
+        // Bloquear en juegos de gol (torneo por rondas)
+        var _btdGoalGames = [
+            typeof KAFA_TOPU !== 'undefined' && KAFA_TOPU,
+            typeof KAFA_TOPU_SHADOW !== 'undefined' && KAFA_TOPU_SHADOW,
+            typeof ULTRABALL !== 'undefined' && ULTRABALL,
+            typeof BOOMERANG_LEAGUE !== 'undefined' && BOOMERANG_LEAGUE,
+            typeof SHAOLIN_SOCCER !== 'undefined' && SHAOLIN_SOCCER,
+            typeof SPACEBOUNCE_POWER !== 'undefined' && SPACEBOUNCE_POWER,
+            typeof BASKETBALL !== 'undefined' && BASKETBALL,
+            typeof SUPER_GRAVEDAD !== 'undefined' && SUPER_GRAVEDAD,
+            typeof XD_GOALS !== 'undefined' && XD_GOALS,
+            typeof AMERICAN_CARRYBALL !== 'undefined' && AMERICAN_CARRYBALL,
+            typeof CAPTURE_THE_FLAG !== 'undefined' && CAPTURE_THE_FLAG,
+            typeof FUTBOL_CALLEJERO !== 'undefined' && FUTBOL_CALLEJERO,
+            typeof PLUM !== 'undefined' && PLUM,
+            typeof GOL_A_GOL !== 'undefined' && GOL_A_GOL
+        ];
+        for (var _bg = 0; _bg < _btdGoalGames.length; _bg++) {
+            try { if (_btdGoalGames[_bg] && _btdGoalGames[_bg].isActive && _btdGoalGames[_bg].isActive()) { room.sendAnnouncement('⚠️ No puedes usar !bitesthedust en juegos de gol', player.id, 0xFF6600); return false; } } catch(e){}
+        }
+        if (botState.bitesUsedThisGame) {
+            room.sendAnnouncement('⚠️ Ya se uso Bites the Dust en este minijuego', player.id, 0xFF6600);
+            return false;
+        }
+        var btdNow = Date.now();
+        if (btdNow < botState.bitesGlobalCooldown) {
+            var btdWait = Math.ceil((botState.bitesGlobalCooldown - btdNow) / 1000);
+            room.sendAnnouncement('⚠️ Bites the Dust en cooldown global. Espera ' + btdWait + 's', player.id, 0xFF6600);
+            return false;
+        }
+        if (playerAuth && botState.powerCooldownGames[playerAuth] > 0) { room.sendAnnouncement('⚠️ Poderes en cooldown. Faltan ' + botState.powerCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, 35000, '!bitesthedust', 0, function() {
+            if (playerAuth) botState.powerCooldownGames[playerAuth] = 5;
+            botState.bitesUsedThisGame = true;
+            botState.bitesGlobalCooldown = Date.now() + 600000; // 10 min global
+            room.sendAnnouncement(
+                '\n' +
+                '[ KILLER QUEEN: BITES THE DUST ]\n' +
+                player.name + ' ha activado Bites the Dust!\n' +
+                'El tiempo se rebobina... La ronda se reinicia!\n',
+                null, 0xFF69B4, 'bold', 2
+            );
+            // Reiniciar: parar el juego y volver a iniciar
+            var currentGame = botState.currentMinigame;
+            setTimeout(function() {
+                forceStopAllGames();
+                botState.gameActive = false;
+                botState.bitesUsedThisGame = true; // mantener el flag
+                setTimeout(function() {
+                    // Re-seleccionar el mismo juego
+                    botState.chosenNextGame = { name: currentGame, playerName: 'Bites the Dust', isBites: true };
+                    checkAndStart();
+                }, 2000);
+            }, 2000);
+        });
+        return false;
+    }
+
+    // !diario - Recompensa diaria por conectarse (racha 7 dias)
+    if (message === '!diario') {
+        var diarioNow = Date.now();
+        if (!botState.dailyRewards[playerAuth]) {
+            botState.dailyRewards[playerAuth] = { lastClaim: 0, streak: 0 };
+        }
+        var dr = botState.dailyRewards[playerAuth];
+        var msSinceLast = diarioNow - dr.lastClaim;
+        var hours24 = 86400000;
+        var hours48 = 172800000;
+        if (msSinceLast < hours24) {
+            var horasRestantes = Math.ceil((hours24 - msSinceLast) / 3600000);
+            room.sendAnnouncement('⏳ Ya reclamaste tu recompensa diaria. Vuelve en ' + horasRestantes + ' hora(s)', player.id, 0xFF6600);
+            return false;
+        }
+        // Si pasaron mas de 48h, se pierde la racha
+        if (msSinceLast > hours48) dr.streak = 0;
+        dr.streak = Math.min(dr.streak + 1, 7);
+        dr.lastClaim = diarioNow;
+        // Guardar en DB para persistencia
+        try { window.__dbSaveDailyReward(playerAuth, dr.lastClaim, dr.streak); } catch(e) {}
+        var premiosDiarios = [1000, 2000, 3000, 4000, 5000, 7000, 10000];
+        var premioDiario = premiosDiarios[dr.streak - 1];
+        try { window.__dbAddBalance(playerAuth, player.name, premioDiario); } catch(e) {}
+        var streakMsg = '';
+        for (var sd = 1; sd <= 7; sd++) {
+            streakMsg += (sd <= dr.streak ? '🟢' : '⚫');
+        }
+        room.sendAnnouncement('📅 RECOMPENSA DIARIA - Dia ' + dr.streak + '/7\n' + streakMsg + '\n💰 +' + formatMoney(premioDiario) + (dr.streak === 7 ? ' RACHA COMPLETA!' : ''), player.id, 0x00FF00, 'bold', 2);
+        return false;
+    }
+
+    // !crash [monto] - Multiplicador que sube, retiras cuando quieras (cooldown 60s)
+    if (message.startsWith('!crash') && !botState.crashActive) {
+        if (_apuestasBloqueadas) { room.sendAnnouncement('⚠️ Espera a que termine la ronda actual', player.id, 0xFF6600); return false; }
+    }
+    if (message.startsWith('!crash')) {
+        var crashParts = message.split(' ');
+        // Si hay crash activo y escribe !crash, retirar
+        if (botState.crashActive && botState.crashActive.auth === playerAuth && !botState.crashActive.crashed) {
+            var cashout = Math.floor(botState.crashActive.monto * botState.crashActive.multiplier);
+            clearInterval(botState.crashActive.interval);
+            try { window.__dbAddBalance(playerAuth, player.name, cashout); } catch(e) {}
+            room.sendAnnouncement('💰 ' + player.name + ' se retiro en x' + botState.crashActive.multiplier.toFixed(2) + '! Gana ' + formatMoney(cashout), null, 0x00FF00, 'bold', 2);
+            botState.crashActive = null;
+            return false;
+        }
+        if (crashParts.length < 2) {
+            room.sendAnnouncement('🚀 Usa: !crash [monto]\nEl multiplicador sube (x1.1, x1.5, x2...).\nEscribe !crash para retirar antes de que crashee!\nSi crashea, pierdes todo.', player.id, 0xFFFF00);
+            return false;
+        }
+        if (botState.crashActive) {
+            room.sendAnnouncement('⚠️ Ya hay un crash activo', player.id, 0xFF6600);
+            return false;
+        }
+        var crashMonto = parseInt(crashParts[1].replace(/\./g, ''));
+        if (isNaN(crashMonto) || crashMonto < 500) { room.sendAnnouncement('⚠️ Monto minimo: $500', player.id, 0xFF6600); return false; }
+        if (crashMonto > 20000) { room.sendAnnouncement('⚠️ Monto maximo: $20.000', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, crashMonto, '!crash', 180000, function() {
+            // Generar punto de crash con distribucion agresiva
+            // 35% crash instantaneo (x1.0 - x1.5), 25% crash rapido (x1.5 - x2.5)
+            // 25% crash medio (x2.5 - x4.0), 15% crash alto (x4.0 - x8.0)
+            var crashRoll = Math.random();
+            var crashPoint;
+            if (crashRoll < 0.35) crashPoint = 1.0 + Math.random() * 0.5;
+            else if (crashRoll < 0.60) crashPoint = 1.5 + Math.random() * 1.0;
+            else if (crashRoll < 0.85) crashPoint = 2.5 + Math.random() * 1.5;
+            else crashPoint = 4.0 + Math.random() * 4.0;
+            botState.crashActive = {
+                auth: playerAuth, name: player.name, playerId: player.id, monto: crashMonto,
+                multiplier: 1.00, crashPoint: crashPoint, crashed: false, interval: null, ticks: 0
+            };
+            room.sendAnnouncement('🚀 CRASH iniciado por ' + player.name + ' (' + formatMoney(crashMonto) + ')!\nEscribe !crash para retirar!', null, 0x00BFFF, 'bold', 2);
+            botState.crashActive.interval = setInterval(function() {
+                if (!botState.crashActive) return;
+                // Pausar durante explicaciones y durante noche de Impostor/Pistolero
+                if (botState.gamePaused) return;
+                try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) return; } catch(e){}
+                try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) return; } catch(e){}
+                botState.crashActive.multiplier += 0.15 + Math.random() * 0.25;
+                botState.crashActive.multiplier = parseFloat(botState.crashActive.multiplier.toFixed(2));
+                if (botState.crashActive.multiplier >= botState.crashActive.crashPoint) {
+                    // CRASH!
+                    clearInterval(botState.crashActive.interval);
+                    botState.crashActive.crashed = true;
+                    room.sendAnnouncement('💥 CRASH en x' + botState.crashActive.multiplier.toFixed(2) + '! ' + botState.crashActive.name + ' perdio ' + formatMoney(botState.crashActive.monto), null, 0xFF0000, 'bold', 2);
+                    botState.crashActive = null;
+                } else {
+                    botState.crashActive.ticks++;
+                    // Solo mostrar mensaje cada 3 ticks para reducir spam
+                    if (botState.crashActive.ticks % 3 === 0) {
+                        room.sendAnnouncement('🚀 ' + botState.crashActive.name + ' x' + botState.crashActive.multiplier.toFixed(2) + ' ... escribe !crash para retirar!', null, 0xFFFF00);
+                    }
+                }
+            }, 1500);
+        });
+        return false;
+    }
+
+    // !dados [monto] - Tirar dados (cooldown 30s)
+    if (message.startsWith('!dados')) {
+        if (_apuestasBloqueadas) { room.sendAnnouncement('⚠️ Espera a que termine la ronda actual', player.id, 0xFF6600); return false; }
+        var dadosParts = message.split(' ');
+        if (dadosParts.length < 2) {
+            room.sendAnnouncement('🎲 Usa: !dados [monto]\n7+ = x2 | Doble = x3 | Doble 6 = x5', player.id, 0xFFFF00);
+            return false;
+        }
+        var dadosMonto = parseInt(dadosParts[1].replace(/\./g, ''));
+        if (isNaN(dadosMonto) || dadosMonto < 100) { room.sendAnnouncement('⚠️ Monto minimo: $100', player.id, 0xFF6600); return false; }
+        if (dadosMonto > 20000) { room.sendAnnouncement('⚠️ Monto maximo: $20.000', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, dadosMonto, '!dados', 30000, function() {
+            var d1 = Math.floor(Math.random() * 6) + 1;
+            var d2 = Math.floor(Math.random() * 6) + 1;
+            var suma = d1 + d2;
+            var doble = d1 === d2;
+            room.sendAnnouncement('🎲 ' + player.name + ' tira los dados...', null, 0xFFFF00, 'bold');
+            setTimeout(function() {
+                var dadosPremio = 0;
+                var dadosMsg = '🎲 [' + d1 + '] [' + d2 + '] = ' + suma;
+                if (d1 === 6 && d2 === 6) {
+                    dadosPremio = dadosMonto * 4;
+                    dadosMsg += '\n💎 DOBLE 6! x4 = ' + formatMoney(dadosPremio);
+                } else if (suma === 7) {
+                    dadosPremio = dadosMonto * 2;
+                    dadosMsg += '\n✅ 7 exacto! x2 = ' + formatMoney(dadosPremio);
+                } else if (suma === 12 || suma === 2) {
+                    dadosPremio = dadosMonto * 3;
+                    dadosMsg += '\n🎯 ' + (suma === 12 ? 'Maximo' : 'Minimo') + '! x3 = ' + formatMoney(dadosPremio);
+                } else {
+                    dadosMsg += '\n❌ Pierdes ' + formatMoney(dadosMonto);
+                }
+                if (dadosPremio > 0) {
+                    try { window.__dbAddBalance(playerAuth, player.name, dadosPremio); } catch(e) {}
+                }
+                room.sendAnnouncement(dadosMsg, null, dadosPremio > 0 ? 0x00FF00 : 0xFF0000, 'bold', 2);
+            }, 1500);
+        });
+        return false;
+    }
+
+    // !slots [monto] - Tragamonedas 777 (cooldown 30s)
+    if (message.startsWith('!slots')) {
+        if (_apuestasBloqueadas) { room.sendAnnouncement('⚠️ Espera a que termine la ronda actual', player.id, 0xFF6600); return false; }
+        var slotsParts = message.split(' ');
+        if (slotsParts.length < 2) {
+            room.sendAnnouncement('🎰 Usa: !slots [monto]\nCombos: 777 = x50 | Triple = x10 | Doble = x3', player.id, 0xFFFF00);
+            return false;
+        }
+        var slotsMonto = parseInt(slotsParts[1].replace(/\./g, ''));
+        if (isNaN(slotsMonto) || slotsMonto < 100) { room.sendAnnouncement('⚠️ Monto minimo: $100', player.id, 0xFF6600); return false; }
+        if (slotsMonto > 20000) { room.sendAnnouncement('⚠️ Monto maximo: $20.000', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, slotsMonto, '!slots', 30000, function() {
+            var slotsSymbols = ['🍒', '🍋', '🔔', '⭐', '💎', '7️⃣', '🍇', '🍊', '🍉'];
+            var s1 = slotsSymbols[Math.floor(Math.random() * slotsSymbols.length)];
+            var s2 = slotsSymbols[Math.floor(Math.random() * slotsSymbols.length)];
+            var s3 = slotsSymbols[Math.floor(Math.random() * slotsSymbols.length)];
+            room.sendAnnouncement('🎰 ' + player.name + ' jala la palanca...', null, 0xFFFF00, 'bold');
+            setTimeout(function() {
+                var slotsPremio = 0;
+                var slotsMsg = '🎰 [ ' + s1 + ' | ' + s2 + ' | ' + s3 + ' ]';
+                if (s1 === '7️⃣' && s2 === '7️⃣' && s3 === '7️⃣') {
+                    slotsPremio = slotsMonto * 50;
+                    slotsMsg += '\n🔥 JACKPOT 777!!! x50 = ' + formatMoney(slotsPremio);
+                } else if (s1 === '💎' && s2 === '💎' && s3 === '💎') {
+                    slotsPremio = slotsMonto * 20;
+                    slotsMsg += '\n💎 TRIPLE DIAMANTE! x20 = ' + formatMoney(slotsPremio);
+                } else if (s1 === s2 && s2 === s3) {
+                    slotsPremio = slotsMonto * 5;
+                    slotsMsg += '\n🎯 TRIPLE! x5 = ' + formatMoney(slotsPremio);
+                } else if (s1 === s2 || s2 === s3) {
+                    slotsPremio = Math.floor(slotsMonto * 1.5);
+                    slotsMsg += '\n✅ PAR! x1.5 = ' + formatMoney(slotsPremio);
+                } else {
+                    slotsMsg += '\n❌ Pierdes ' + formatMoney(slotsMonto);
+                }
+                if (slotsPremio > 0) {
+                    try { window.__dbAddBalance(playerAuth, player.name, slotsPremio); } catch(e) {}
+                }
+                room.sendAnnouncement(slotsMsg, null, slotsPremio > 0 ? 0x00FF00 : 0xFF0000, 'bold', 2);
+            }, 2000);
+        });
+        return false;
+    }
+
+    // !toprich - Top 5 mas ricos
+    if (message === '!toprich') {
+        if (typeof window.__dbGetTopPlayers === 'function') {
+            window.__dbGetTopPlayers('balance', 5).then(function(top) {
+                if (top && top.length > 0) {
+                    var msg = '💰 TOP 5 MAS RICOS:\n';
+                    var medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                    for (var i = 0; i < top.length; i++) {
+                        msg += medals[i] + ' ' + (top[i].name || 'Desconocido') + ' - ' + formatMoney(top[i].balance || 0) + '\n';
+                    }
+                    room.sendAnnouncement(msg, player.id, 0xFFD700, 'bold');
+                } else {
+                    room.sendAnnouncement('📊 No hay estadisticas aun.', player.id, 0xFFFF00);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al cargar top.', player.id, 0xFF0000); });
+        }
+        return false;
+    }
+
+    // !topracha - Top 5 mejores rachas historicas
+    if (message === '!topracha') {
+        if (typeof window.__dbGetTopPlayers === 'function') {
+            window.__dbGetTopPlayers('bestStreak', 5).then(function(top) {
+                if (top && top.length > 0) {
+                    var msg = '🔥 TOP 5 MEJORES RACHAS:\n';
+                    var medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                    for (var i = 0; i < top.length; i++) {
+                        msg += medals[i] + ' ' + (top[i].name || 'Desconocido') + ' - ' + (top[i].bestStreak || 0) + ' victorias seguidas\n';
+                    }
+                    room.sendAnnouncement(msg, player.id, 0xFFD700, 'bold');
+                } else {
+                    room.sendAnnouncement('📊 No hay estadisticas aun.', player.id, 0xFFFF00);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al cargar top.', player.id, 0xFF0000); });
+        }
+        return false;
+    }
+
+    // !topgeis - Top 5 que mas veces les ha tocado gay
+    if (message === '!topgeis') {
+        if (typeof window.__dbGetTopPlayers === 'function') {
+            window.__dbGetTopPlayers('gayCount', 5).then(function(top) {
+                if (top && top.length > 0) {
+                    var msg = '🌈 TOP 5 MAS GEIS:\n';
+                    var medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                    for (var i = 0; i < top.length; i++) {
+                        msg += medals[i] + ' ' + (top[i].name || 'Desconocido') + ' - ' + (top[i].gayCount || 0) + ' veces\n';
+                    }
+                    room.sendAnnouncement(msg, player.id, 0xFF69B4, 'bold');
+                } else {
+                    room.sendAnnouncement('📊 No hay estadisticas aun.', player.id, 0xFFFF00);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al cargar top.', player.id, 0xFF0000); });
+        }
+        return false;
+    }
+
+    // !topkick - Top 5 mas kickeados
+    if (message === '!topkick') {
+        if (typeof window.__dbGetTopPlayers === 'function') {
+            window.__dbGetTopPlayers('kickCount', 5).then(function(top) {
+                if (top && top.length > 0) {
+                    var msg = '👢 TOP 5 MAS KICKEADOS:\n';
+                    var medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                    for (var i = 0; i < top.length; i++) {
+                        msg += medals[i] + ' ' + (top[i].name || 'Desconocido') + ' - ' + (top[i].kickCount || 0) + ' kicks\n';
+                    }
+                    room.sendAnnouncement(msg, player.id, 0xFF6600, 'bold');
+                } else {
+                    room.sendAnnouncement('📊 No hay estadisticas aun.', player.id, 0xFFFF00);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al cargar top.', player.id, 0xFF0000); });
+        }
+        return false;
+    }
+
+    // !topban - Top 5 mas baneados
+    if (message === '!topban') {
+        if (typeof window.__dbGetTopPlayers === 'function') {
+            window.__dbGetTopPlayers('banCount', 5).then(function(top) {
+                if (top && top.length > 0) {
+                    var msg = '🔨 TOP 5 MAS BANEADOS:\n';
+                    var medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                    for (var i = 0; i < top.length; i++) {
+                        msg += medals[i] + ' ' + (top[i].name || 'Desconocido') + ' - ' + (top[i].banCount || 0) + ' bans\n';
+                    }
+                    room.sendAnnouncement(msg, player.id, 0xFF0000, 'bold');
+                } else {
+                    room.sendAnnouncement('📊 No hay estadisticas aun.', player.id, 0xFFFF00);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al cargar top.', player.id, 0xFF0000); });
+        }
         return false;
     }
 
@@ -5167,11 +7362,21 @@ setInterval(function() {
 // ============================================
 room.onPlayerActivity = function(player) {
     botState.afkLastActivity[player.id] = Date.now();
+    delete botState.afkWarned[player.id];
 };
 
 setInterval(function() {
-    // Solo verificar durante juego activo y sin pausa
-    if (!botState.gameActive || botState.gamePaused) return;
+    if (botState.gamePaused) return;
+    if (!botState.gameActive) return;
+    // No kickear AFK en juegos basados en chat (no requieren movimiento)
+    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) return; } catch(e){}
+    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) return; } catch(e){}
+    try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) return; } catch(e){}
+    try { if (GOT && GOT.isActive && GOT.isActive()) return; } catch(e){}
+    try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) return; } catch(e){}
+    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) return; } catch(e){}
+    // No kickear AFK durante juicio público
+    if (botState.banVoteActive) return;
 
     var now = Date.now();
     var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
@@ -5183,12 +7388,25 @@ setInterval(function() {
         }
 
         var inactiveMs = now - botState.afkLastActivity[p.id];
-        if (inactiveMs >= 25000) { // 25 segundos sin presionar tecla
+        // Mid-game: 15s sin moverse = mover a espectador
+        if (inactiveMs >= 12000 && inactiveMs < 15000 && !botState.afkWarned[p.id]) {
+            botState.afkWarned[p.id] = true;
+            try { room.sendAnnouncement('⚠️ ¡Muévete o serás sacado del juego por AFK en 3 segundos!', p.id, 0xFF6600); } catch(e) {}
+        }
+        if (inactiveMs >= 15000 && inactiveMs < 25000) {
+            try {
+                room.sendAnnouncement('⏰ ' + p.name + ' fue sacado por AFK (15s sin moverse)', null, 0xFF6600);
+                room.setPlayerTeam(p.id, 0);
+            } catch(e) {}
+            delete botState.afkWarned[p.id];
+        }
+        if (inactiveMs >= 25000) { // 25 segundos sin presionar tecla = kick
             try {
                 room.sendAnnouncement('⏰ ' + p.name + ' fue kickeado por AFK (25s sin presionar tecla)', null, 0xFF6600);
                 room.kickPlayer(p.id, 'AFK - 25 segundos sin actividad', false);
             } catch(e) {}
             delete botState.afkLastActivity[p.id];
+            delete botState.afkWarned[p.id];
         }
     });
 

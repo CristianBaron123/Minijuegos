@@ -32,11 +32,13 @@ function start(room, onGameEnd) {
     if (players.length < 2) { room.sendAnnouncement('⚠️ No hay suficientes jugadores para WIND', null, 0xFF6600); if (onGameEnd) onGameEnd(null); return; }
 
     gameState.active = true;
-    gameState.players = players.map(function(p) { return { id: p.id, name: p.name }; });
     gameState.eliminated = [];
     gameState.hasBeenInBounds = {};
 
     shuffleTeams(room);
+
+    var activePlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    gameState.players = activePlayers.map(function(p) { return { id: p.id, name: p.name }; });
 
     room.sendAnnouncement(
         '🌬️ WIND 🌬️\n' +
@@ -84,6 +86,12 @@ function checkPlayers(room) {
         if (!player) {
             gameState.eliminated.push(p.id);
             room.sendAnnouncement('❌ ' + p.name + ' se desconectó', null, 0xFF6600);
+            continue;
+        }
+
+        // Si el jugador está en espectador (team 0), no cuenta como vivo
+        if (player.team === 0) {
+            gameState.eliminated.push(p.id);
             continue;
         }
 
