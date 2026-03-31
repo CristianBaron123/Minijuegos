@@ -699,6 +699,36 @@ const zombieRunModuleCode = fs.readFileSync(zombieRunModulePath, 'utf8');
 const racingGroundModulePath = path.join(__dirname, 'games', 'minijuegos', 'racing_ground.js');
 const racingGroundModuleCode = fs.readFileSync(racingGroundModulePath, 'utf8');
 
+const buhoModulePath = path.join(__dirname, 'games', 'minijuegos', 'buho.js');
+const buhoModuleCode = fs.readFileSync(buhoModulePath, 'utf8');
+
+// Cargar mapas Buho (2-MAN a 16-MAN + CAMPEON)
+const buhoMapsDir = path.join(__dirname, 'Buho', 'mapas');
+const buhoMapsData = {};
+const buhoGoalCenters = {};
+if (fs.existsSync(buhoMapsDir)) {
+    fs.readdirSync(buhoMapsDir).forEach(function(file) {
+        if (!file.endsWith('.hbs')) return;
+        const match = file.match(/^(\d+|CAMPEON)-MAN/);
+        if (match) {
+            const key = match[1];
+            const content = fs.readFileSync(path.join(buhoMapsDir, file), 'utf8');
+            buhoMapsData[key] = content;
+            try {
+                const parsed = JSON.parse(content);
+                if (parsed.goals) {
+                    buhoGoalCenters[key] = parsed.goals.map(function(g) {
+                        return { x: Math.round((g.p0[0] + g.p1[0]) / 2), y: Math.round((g.p0[1] + g.p1[1]) / 2) };
+                    });
+                } else {
+                    buhoGoalCenters[key] = [];
+                }
+            } catch(e) { buhoGoalCenters[key] = []; }
+        }
+    });
+    console.log('Mapas Buho cargados: ' + Object.keys(buhoMapsData).length);
+}
+
 // Map: Zombie Run
 const mapZombieRunPath = path.join(__dirname, 'Mapas', '¡ZOMBIE-RUN-LaboratorioByEmaxM16Ofi-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_67c8ecb1e06b7.hbs');
 const mapZombieRunData = fs.readFileSync(mapZombieRunPath, 'utf8');
@@ -712,6 +742,18 @@ const roomMainCodePath = path.join(__dirname, 'room-main.txt');
 const roomMainCode = fs.readFileSync(roomMainCodePath, 'utf8');
 
 // Función helper para transformar módulos Node.js a navegador
+function transformBuhoForBrowser(moduleCode, maps, goalCenters) {
+    const buhoDataJson = JSON.stringify({ maps: maps, goalCenters: goalCenters });
+    let code = moduleCode
+        .replace(/const fs = require\('fs'\);?\n?/g, '')
+        .replace(/const path = require\('path'\);?\n?/g, '')
+        .replace(/const /g, 'var ')
+        .replace(/let /g, 'var ')
+        .replace(/module\.exports\s*=\s*/g, 'return ')
+        .replace(/var buhoData = null;.*$/m, 'var buhoData = ' + buhoDataJson + ';');
+    return '(function() {\n' + code + '\n})()';
+}
+
 function transformModuleForBrowser(moduleCode, mapData) {
     // ⚠️ CRÍTICO: El mapa DEBE ser una STRING JSON, NO un objeto JavaScript
     // Haxball's room.setCustomStadium() espera recibir una string JSON, no un objeto
@@ -814,6 +856,7 @@ const getBotScript = () => {
         const bonkWinterModule = transformModuleForBrowser(bonkWinterModuleCode, mapBonkWinterData);
         const zombieRunModule = transformModuleForBrowser(zombieRunModuleCode, mapZombieRunData);
         const racingGroundModule = transformModuleForBrowser(racingGroundModuleCode, mapRacingGroundData);
+        const buhoModule = transformBuhoForBrowser(buhoModuleCode, buhoMapsData, buhoGoalCenters);
     const gymModule = transformModuleForBrowser(gymModuleCode, mapGymData);
     const multiballsModule = transformModuleForBrowser(multiballsModuleCode, mapMultiBallsData);
     const supermanModule = transformModuleForBrowser(supermanModuleCode, mapSupermanData);
@@ -1332,6 +1375,11 @@ var ZOMBIE_RUN = ` + zombieRunModule + `;
 var RACING_GROUND = ` + racingGroundModule + `;
 
 // ============================================
+// MÓDULO: BUHO
+// ============================================
+var BUHO = ` + buhoModule + `;
+
+// ============================================
 // MÓDULO: LUCKY
 // ============================================
 ` + escapedLuckyCode + `
@@ -1512,7 +1560,12 @@ var RACING_GROUND = ` + racingGroundModule + `;
     const useHeadless = process.env.HEADLESS === 'true';
     const browser = await puppeteer.launch({
         headless: useHeadless ? 'new' : false,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        ]
     });
     
     const page = await browser.newPage();

@@ -1932,6 +1932,16 @@ function startRACING_GROUND() {
     } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
 }
 
+function startBUHO() {
+    botState.gameActive = true;
+    if (typeof BUHO !== 'undefined') {
+        BUHO.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
 function startSHAOLIN_SOCCER() {
     botState.gameActive = true;
     if (typeof SHAOLIN_SOCCER !== 'undefined') {
@@ -2614,6 +2624,7 @@ function forceStopAllGames() {
     try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) BONK_WINTER.stop(room); } catch(e){}
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) ZOMBIE_RUN.stop(room); } catch(e){}
     try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) RACING_GROUND.stop(room); } catch(e){}
+    try { if (BUHO && BUHO.isActive && BUHO.isActive()) BUHO.stop(room); } catch(e){}
     try { room.stopGame(); } catch(e){}
     botState.gameActive = false;
     if (botState.startTimeout) {
@@ -2728,6 +2739,7 @@ function checkAndStart() {
     try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) anyModuleActive = true; } catch(e){}
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) anyModuleActive = true; } catch(e){}
     try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (BUHO && BUHO.isActive && BUHO.isActive()) anyModuleActive = true; } catch(e){}
     if (anyModuleActive) {
         console.log('⚠️ Safety: módulo de juego aún activo, forzando stop');
         forceStopAllGames();
@@ -2973,7 +2985,8 @@ function checkAndStart() {
             { name: 'BTL', module: BTL, displayName: 'B.T.L', starter: startBTL },
             // { name: 'BONK_SUMMER', module: BONK_SUMMER, displayName: 'BONK SUMMER', starter: startBONK_SUMMER }, // DESACTIVADO temporalmente
             { name: 'BONK_WINTER', module: BONK_WINTER, displayName: 'BONK WINTER', starter: startBONK_WINTER },
-            { name: 'RACING_GROUND', module: RACING_GROUND, displayName: 'RACING GROUND', starter: startRACING_GROUND }
+            { name: 'RACING_GROUND', module: RACING_GROUND, displayName: 'RACING GROUND', starter: startRACING_GROUND },
+            { name: 'BUHO', module: BUHO, displayName: 'BUHO', starter: startBUHO }
         ];
 
         // Modo test: filtrar solo los juegos seleccionados
@@ -2999,6 +3012,8 @@ function checkAndStart() {
                 if (game.name === 'WWECROSS' && playerCount > 12) return false;
                 if (game.name === 'IMPOSTOR' && playerCount < 4) return false;
                 if (game.name === 'PISTOLERO' && playerCount < 4) return false;
+                if (game.name === 'BUHO' && playerCount > 16) return false;
+                if (game.name === 'BUHO' && playerCount < 3) return false;
                 return true;
             });
         }
@@ -3210,6 +3225,28 @@ function stopSoloEntertainment() {
         _soloInterval = null;
     }
 }
+
+// ============================================
+// EVENTOS GLOBALES DE HAXBALL (para BUHO)
+// ============================================
+
+room.onTeamGoal = function(team) {
+    if (BUHO && BUHO.isActive && BUHO.isActive()) {
+        try { BUHO.onTeamGoal(room, team); } catch(e) {}
+    }
+};
+
+room.onGameTick = function() {
+    if (BUHO && BUHO.isActive && BUHO.isActive()) {
+        try { BUHO.onGameTick(room); } catch(e) {}
+    }
+};
+
+room.onPositionsReset = function() {
+    if (BUHO && BUHO.isActive && BUHO.isActive()) {
+        try { BUHO.onPositionsReset(room); } catch(e) {}
+    }
+};
 
 // ============================================
 // EVENTOS
@@ -3723,6 +3760,9 @@ room.onPlayerLeave = function(player) {
     }
     if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) {
         try { RACING_GROUND.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (BUHO && BUHO.isActive && BUHO.isActive()) {
+        try { BUHO.onPlayerLeave(room, player); } catch(e){}
     }
 
     // Limpiar actividad AFK del jugador que sale
@@ -4618,6 +4658,9 @@ room.onPlayerChat = function(player, message) {
     }
     if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) {
         try { var rgR = RACING_GROUND.onPlayerChat(player, message); if (rgR === false) return false; } catch(e){}
+    }
+    if (BUHO && BUHO.isActive && BUHO.isActive()) {
+        try { var buhoR = BUHO.onPlayerChat(player, message); if (buhoR === false) return false; } catch(e){}
     }
 
     // Sistema de etiquetas: mostrar tag antes del nombre

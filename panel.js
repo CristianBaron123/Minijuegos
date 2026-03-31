@@ -79,7 +79,7 @@ async function initBrowser() {
         console.log('Iniciando Chrome compartido...');
         browser = await puppeteer.launch({
             headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
         });
         console.log('Chrome iniciado');
     }
@@ -407,7 +407,7 @@ app.post('/api/stop', async (req, res) => {
         generateScriptForSala(c);
     });
 
-    const PORT = process.env.PANEL_PORT || 3000;
+    const PORT = process.env.PORT || process.env.PANEL_PORT || 3000;
     app.listen(PORT, () => {
         console.log('\n========================================');
         console.log('  Panel de Salas HaxBall');

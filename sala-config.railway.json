@@ -1,0 +1,8 @@
+[
+    {
+        "id": "minijuegos",
+        "name": "Minijuegos_Isagi v1.9",
+        "script": "bot.js",
+        "maxPlayers": 30
+    }
+]
