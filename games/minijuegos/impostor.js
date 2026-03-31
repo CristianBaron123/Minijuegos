@@ -1,8 +1,9 @@
 // ============================================
 // MINIJUEGO: IMPOSTOR - Estilo Among Us / Werewolf
 // 1 impostor (<8 jugadores) o 2 impostores (8+)
-// Roles inocentes: Medico, Vidente, Guardaespaldas, Sacerdote, Carcelero, Bufon
+// Roles inocentes: Medico, Vidente, Guardaespaldas, Sacerdote, Carcelero, Bufon, Cupido, Bruja, Cazador
 // Roles impostor: Impostor Vidente (1 de los 2 impostores cuando hay 8+)
+// Rol neutral: Piromano (11+) - empapar/incendiar, inmune a impostores, gana solo
 // ============================================
 
 var mapData = null;
@@ -34,6 +35,24 @@ var gameState = {
     impostorVidenteId: null, // ID del impostor vidente (sub-rol de impostor)
     pendingImpostorVision: null, // eleccion del impostor vidente esta noche
     impostorVidenteActed: false, // si el impostor vidente ya investigo esta noche
+    cupidoId: null,          // ID del cupido
+    linkedPair: [],          // [id1, id2] jugadores vinculados
+    cupidoChoice1: null,     // primer jugador elegido por cupido
+    brujaId: null,           // ID de la bruja
+    brujaLifeUsed: false,    // pocion de vida usada
+    brujaDeathUsed: false,   // pocion de muerte usada
+    pendingBrujaLife: null,  // target number pocion vida esta noche
+    pendingBrujaDeath: null, // target number pocion muerte esta noche
+    brujaProtectedId: null,  // ID protegido por bruja esta noche
+    cazadorId: null,         // ID del cazador
+    cazadorShot: false,      // si el cazador ya uso su disparo
+    cazadorDying: false,     // si el cazador esta en fase de disparo
+    cazadorCallback: null,   // callback despues del disparo del cazador
+    cazadorTarget: null,     // numero del objetivo elegido por el cazador (persistente entre noches)
+    piromanoId: null,        // ID del piromano
+    dousedPlayers: [],       // array de IDs empapados con gasolina
+    piromanoDouseTargets: [], // targets elegidos esta noche para empapar
+    piromanoAction: null,    // 'douse' o 'ignite' - accion elegida esta noche
     round: 0,
     votes: {},          // {voterId: targetNumber}
     pendingKills: {},   // {impostorId: targetNumber}
@@ -46,13 +65,13 @@ var gameState = {
 
 var config = {
     minPlayers: 4,
-    setupMs: 8000,       // 8s para leer roles
+    setupMs: 15000,      // 5s reglas + 10s para leer roles
     killMs: 20000,       // 20s para que los impostores/medico/vidente elijan
-    discussionMs: 30000, // 30s discusion
+    discussionMs: 45000, // 45s discusion
     votingMs: 15000      // 15s votacion
 };
 
-var filteredWords = ['impostor', 'inocente', 'asesino', 'killer', 'soy el imp', 'yo soy el', 'mi rol es', 'soy imp', 'medico', 'vidente', 'soy med', 'soy vid', 'guardaespaldas', 'soy guard', 'bodyguard', 'sacerdote', 'soy sac', 'padre', 'carcelero', 'soy car', 'jailer', 'bufon', 'bufo', 'soy buf', 'imp vidente'];
+var filteredWords = ['impostor', 'inocente', 'asesino', 'killer', 'soy el imp', 'yo soy el', 'mi rol es', 'soy imp', 'medico', 'vidente', 'soy med', 'soy vid', 'guardaespaldas', 'soy guard', 'bodyguard', 'sacerdote', 'soy sac', 'padre', 'carcelero', 'soy car', 'jailer', 'bufon', 'bufo', 'soy buf', 'imp vidente', 'cupido', 'soy cup', 'bruja', 'soy bru', 'cazador', 'soy caz', 'clarividente', 'soy clar', 'medium', 'nino flor', 'ninoflor', 'soy nino', 'embrujado', 'soy embru'];
 
 // ============================================
 // HELPERS
@@ -70,7 +89,7 @@ function isImpostor(playerId) {
 }
 
 function isInnocentTeam(role) {
-    return role === 'inocente' || role === 'medico' || role === 'vidente' || role === 'guardaespaldas' || role === 'sacerdote' || role === 'carcelero' || role === 'bufon';
+    return role === 'inocente' || role === 'medico' || role === 'vidente' || role === 'guardaespaldas' || role === 'sacerdote' || role === 'carcelero' || role === 'bufon' || role === 'cupido' || role === 'bruja' || role === 'cazador' || role === 'clarividente' || role === 'ninoflor' || role === 'embrujado';
 }
 
 function findPlayerById(id) {
@@ -138,6 +157,32 @@ function start(room, onGameEnd) {
     gameState.impostorVidenteId = null;
     gameState.pendingImpostorVision = null;
     gameState.impostorVidenteActed = false;
+    gameState.cupidoId = null;
+    gameState.linkedPair = [];
+    gameState.cupidoChoice1 = null;
+    gameState.brujaId = null;
+    gameState.brujaLifeUsed = false;
+    gameState.brujaDeathUsed = false;
+    gameState.pendingBrujaLife = null;
+    gameState.pendingBrujaDeath = null;
+    gameState.brujaProtectedId = null;
+    gameState.cazadorId = null;
+    gameState.cazadorShot = false;
+    gameState.cazadorDying = false;
+    gameState.cazadorCallback = null;
+    gameState.cazadorTarget = null;
+    gameState.clarividenteId = null;
+    gameState.clarividenteReviveUsed = false;
+    gameState.pendingRevive = null;
+    gameState.ninoFlorId = null;
+    gameState.ninoFlorUsed = false;
+    gameState.ninoFlorActivated = false;
+    gameState.embrujadoId = null;
+    gameState.embrujadoConverted = false;
+    gameState.piromanoId = null;
+    gameState.dousedPlayers = [];
+    gameState.piromanoDouseTargets = [];
+    gameState.piromanoAction = null;
 
     // Cargar mapa
     try {
@@ -155,8 +200,8 @@ function start(room, onGameEnd) {
         try { room.setPlayerTeam(allPlayers[k].id, (k % 2 === 0) ? 1 : 2); } catch(e) {}
     }
 
-    // Elegir impostores: 2 si hay 8+, 1 si menos
-    var numImpostors = allPlayers.length >= 8 ? 2 : 1;
+    // Elegir impostores: 3 si 14+, 2 si 8+, 1 si menos
+    var numImpostors = allPlayers.length >= 14 ? 3 : (allPlayers.length >= 8 ? 2 : 1);
     gameState.impostorIds = [];
 
     // Elegir indices para impostores
@@ -185,11 +230,15 @@ function start(room, onGameEnd) {
     }
     // Escalar roles segun cantidad de jugadores:
     // 4-5: Medico, Vidente
-    // 6: Medico, Vidente, Guardaespaldas
-    // 7: Medico, Vidente, Guardaespaldas, Bufon
-    // 8-9: Medico, Vidente, Guardaespaldas, Sacerdote, Bufon (+Impostor Vidente)
-    // 10+: Medico, Vidente, Guardaespaldas, Sacerdote, Carcelero, Bufon (+Impostor Vidente)
+    // 6: +Guardaespaldas
+    // 7: +Bufon
+    // 8-9: +Sacerdote, +Cupido (+Impostor Vidente)
+    // 10-11: +Carcelero, +Bruja
+    // 12+: +Cazador
     var bufonIdx = -1;
+    var cupidoIdx = -1;
+    var brujaIdx = -1;
+    var cazadorIdx = -1;
     var totalPlayers = allPlayers.length;
     var ri = 0; // role index
     if (totalPlayers >= 4 && innocentIndices.length > ri) { medicoIdx = innocentIndices[ri++]; }
@@ -198,6 +247,17 @@ function start(room, onGameEnd) {
     if (totalPlayers >= 8 && innocentIndices.length > ri) { sacerdoteIdx = innocentIndices[ri++]; }
     if (totalPlayers >= 10 && innocentIndices.length > ri) { jailerIdx = innocentIndices[ri++]; }
     if (totalPlayers >= 7 && innocentIndices.length > ri) { bufonIdx = innocentIndices[ri++]; }
+    if (totalPlayers >= 8 && innocentIndices.length > ri) { cupidoIdx = innocentIndices[ri++]; }
+    if (totalPlayers >= 10 && innocentIndices.length > ri) { brujaIdx = innocentIndices[ri++]; }
+    if (totalPlayers >= 12 && innocentIndices.length > ri) { cazadorIdx = innocentIndices[ri++]; }
+    var piromanoIdx = -1;
+    if (totalPlayers >= 11 && innocentIndices.length > ri) { piromanoIdx = innocentIndices[ri++]; }
+    var embrujadoIdx = -1;
+    var ninoFlorIdx = -1;
+    var clarividenteIdx = -1;
+    if (totalPlayers >= 12 && innocentIndices.length > ri) { embrujadoIdx = innocentIndices[ri++]; }
+    if (totalPlayers >= 13 && innocentIndices.length > ri) { ninoFlorIdx = innocentIndices[ri++]; }
+    if (totalPlayers >= 14 && innocentIndices.length > ri) { clarividenteIdx = innocentIndices[ri++]; }
 
     // Asignar numeros y roles
     gameState.players = [];
@@ -224,6 +284,27 @@ function start(room, onGameEnd) {
         } else if (n === bufonIdx) {
             role = 'bufon';
             gameState.bufonId = allPlayers[n].id;
+        } else if (n === cupidoIdx) {
+            role = 'cupido';
+            gameState.cupidoId = allPlayers[n].id;
+        } else if (n === brujaIdx) {
+            role = 'bruja';
+            gameState.brujaId = allPlayers[n].id;
+        } else if (n === cazadorIdx) {
+            role = 'cazador';
+            gameState.cazadorId = allPlayers[n].id;
+        } else if (n === piromanoIdx) {
+            role = 'piromano';
+            gameState.piromanoId = allPlayers[n].id;
+        } else if (n === embrujadoIdx) {
+            role = 'embrujado';
+            gameState.embrujadoId = allPlayers[n].id;
+        } else if (n === ninoFlorIdx) {
+            role = 'ninoflor';
+            gameState.ninoFlorId = allPlayers[n].id;
+        } else if (n === clarividenteIdx) {
+            role = 'clarividente';
+            gameState.clarividenteId = allPlayers[n].id;
         } else {
             role = 'inocente';
         }
@@ -237,75 +318,92 @@ function start(room, onGameEnd) {
         gameState.activePlayers[allPlayers[n].id] = true;
     }
 
-    // Si hay 2 impostores, uno se convierte en Impostor Vidente
-    if (gameState.impostorIds.length === 2) {
-        gameState.impostorVidenteId = gameState.impostorIds[Math.floor(Math.random() * 2)];
+    // Si hay 2+ impostores, uno se convierte en Impostor Vidente
+    if (gameState.impostorIds.length >= 2) {
+        gameState.impostorVidenteId = gameState.impostorIds[Math.floor(Math.random() * gameState.impostorIds.length)];
     }
 
     room.startGame();
     try { room.pauseGame(true); } catch(e) {}
 
-    // Anuncio principal
-    var impText = numImpostors === 2 ? 'Hay 2 impostores entre ustedes...' : 'Hay un impostor entre ustedes...';
-    room.sendAnnouncement('\n🔪 MINIJUEGO: IMPOSTOR\n👥 Jugadores: ' + allPlayers.length + '\n🎭 ' + impText, null, 0xFF0000, 'bold', 2);
-
-    // Enviar roles privados
-    for (var r = 0; r < gameState.players.length; r++) {
-        var pl = gameState.players[r];
-        if (pl.role === 'impostor') {
-            if (numImpostors === 2) {
-                var companion = null;
-                for (var c = 0; c < gameState.players.length; c++) {
-                    if (gameState.players[c].role === 'impostor' && gameState.players[c].id !== pl.id) {
-                        companion = gameState.players[c];
-                        break;
-                    }
-                }
-                var compMsg = companion ? ('\n🤝 Tu compañero impostor es: ' + companion.name) : '';
-                var chatHint = '\n💬 De noche puedes chatear con tu compañero (escribe texto, no numeros).';
-                if (pl.id === gameState.impostorVidenteId) {
-                    room.sendAnnouncement('🔪🔮 Eres IMPOSTOR VIDENTE!\nPuedes investigar el rol de 1 jugador cada noche con !ver [numero].\nSi eres el ultimo impostor, pierdes esta habilidad.' + compMsg + chatHint, pl.id, 0xFF00AA, 'bold', 2);
-                } else {
-                    room.sendAnnouncement('🔪 Eres IMPOSTOR! Elimina a todos sin ser descubierto.' + compMsg + chatHint, pl.id, 0xFF0000, 'bold', 2);
-                }
-            } else {
-                room.sendAnnouncement('🔪 Eres el IMPOSTOR! Elimina a todos sin ser descubierto.', pl.id, 0xFF0000, 'bold', 2);
-            }
-        } else if (pl.role === 'medico') {
-            room.sendAnnouncement('🏥 Eres el MEDICO! Cada noche puedes proteger a 1 jugador.\nA ese jugador no se le podra matar esa noche.\nEscribe el numero del jugador a proteger durante la noche.', pl.id, 0x00FFAA, 'bold', 2);
-        } else if (pl.role === 'vidente') {
-            room.sendAnnouncement('🔮 Eres el VIDENTE! Cada noche puedes ver el rol de 1 jugador.\nEscribe el numero del jugador que quieras investigar durante la noche.', pl.id, 0xAA00FF, 'bold', 2);
-        } else if (pl.role === 'guardaespaldas') {
-            room.sendAnnouncement('🛡️ Eres el GUARDAESPALDAS! Cada noche puedes proteger a 1 jugador.\nSi lo atacan, te atacan a ti en su lugar. Sobrevives al 1er ataque, mueres al 2do.\nTe proteges a ti mismo por defecto si no eliges.\nEscribe el numero del jugador a proteger durante la noche.', pl.id, 0x4488FF, 'bold', 2);
-        } else if (pl.role === 'sacerdote') {
-            room.sendAnnouncement('⛪ Eres el SACERDOTE! Cada noche puedes arrojar agua bendita a 1 jugador.\nSi es IMPOSTOR, el muere. Si NO es impostor, TU mueres.\nEs opcional - si no escribes nada, no pasa nada.\nEscribe el numero del jugador durante la noche.', pl.id, 0xFFFFAA, 'bold', 2);
-        } else if (pl.role === 'carcelero') {
-            room.sendAnnouncement('🔒 Eres el CARCELERO! Durante el dia escribe !jail [numero] para encarcelar a alguien.\nDe noche: el preso no puede usar habilidades ni ser atacado.\nPuedes hablar con el preso de forma anonima.\nEscribe !matar para usar tu UNICA bala y matarlo.', pl.id, 0x888888, 'bold', 2);
-        } else if (pl.role === 'bufon') {
-            room.sendAnnouncement('🃏 Eres el BUFON! Tu objetivo es que te VOTEN para eliminarte.\nSi la aldea te elimina por votacion, TU GANAS!\nHazte sospechoso sin ser obvio...', pl.id, 0xFF8800, 'bold', 2);
-        } else {
-            room.sendAnnouncement('😇 Eres INOCENTE. Encuentra al impostor y vota para eliminarlo.', pl.id, 0x00FF00, 'bold', 2);
-        }
-    }
-
-    // Mostrar lista numerada (lateral)
-    var listParts = [];
-    for (var l = 0; l < gameState.players.length; l++) {
-        listParts.push(gameState.players[l].number + '.' + gameState.players[l].name);
-    }
-    room.sendAnnouncement('📋 ' + listParts.join(' | '), null, 0x00BFFF);
-
-    // Instrucciones
-    var rulesText = numImpostors === 2
+    // Anuncio principal con reglas
+    var impText = numImpostors >= 2 ? ('Hay ' + numImpostors + ' impostores entre ustedes...') : 'Hay un impostor entre ustedes...';
+    var rulesText = numImpostors >= 2
         ? '📋 REGLAS: Los impostores matan de noche. De dia, discutan y voten.\n🏆 Si eliminan a TODOS los impostores, ganan los inocentes!'
         : '📋 REGLAS: El impostor mata de noche. De dia, discutan y voten.\n🏆 Si eliminan al impostor, ganan los inocentes!';
-    room.sendAnnouncement(rulesText + '\n⏱️ Comienza en 8 segundos...', null, 0xFFFF00, 'bold');
+    room.sendAnnouncement('\n🔪 MINIJUEGO: IMPOSTOR\n👥 Jugadores: ' + allPlayers.length + '\n🎭 ' + impText + '\n' + rulesText, null, 0xFF0000, 'bold', 2);
 
-    // Iniciar primera fase de kill
+    // Despues de 5 segundos, enviar roles privados
+    var tRoles = setTimeout(function() {
+        if (!gameState.active) return;
+
+        // Enviar roles privados
+        for (var r = 0; r < gameState.players.length; r++) {
+            var pl = gameState.players[r];
+            if (pl.role === 'impostor') {
+                if (numImpostors >= 2) {
+                    var companions = [];
+                    for (var c = 0; c < gameState.players.length; c++) {
+                        if (gameState.players[c].role === 'impostor' && gameState.players[c].id !== pl.id) {
+                            companions.push(gameState.players[c].name);
+                        }
+                    }
+                    var compMsg = companions.length > 0 ? ('\n🤝 Compañero(s): ' + companions.join(', ')) : '';
+                    var chatHint = '\n💬 De noche puedes chatear con tus compañeros (escribe texto, no numeros).';
+                    if (pl.id === gameState.impostorVidenteId) {
+                        room.sendAnnouncement('🔪🔮 Eres IMPOSTOR VIDENTE!\nPuedes investigar el rol de 1 jugador cada noche con !ver [numero].\nEscribe sin #. Ej: !ver 3\nSi eres el ultimo impostor, pierdes esta habilidad.\nEscribe !renunciar para abandonar tu habilidad y ser impostor normal.' + compMsg + chatHint, pl.id, 0xFF00AA, 'bold', 2);
+                    } else {
+                        room.sendAnnouncement('🔪 Eres IMPOSTOR! Elimina a todos sin ser descubierto.' + compMsg + chatHint, pl.id, 0xFF0000, 'bold', 2);
+                    }
+                } else {
+                    room.sendAnnouncement('🔪 Eres el IMPOSTOR! Elimina a todos sin ser descubierto.', pl.id, 0xFF0000, 'bold', 2);
+                }
+            } else if (pl.role === 'medico') {
+                room.sendAnnouncement('🏥 Eres el MEDICO! Cada noche puedes proteger a 1 jugador.\nA ese jugador no se le podra matar esa noche.\nEscribe solo el numero del jugador (sin #). Ej: 3', pl.id, 0x00FFAA, 'bold', 2);
+            } else if (pl.role === 'vidente') {
+                room.sendAnnouncement('🔮 Eres el VIDENTE! Cada noche puedes ver el rol de 1 jugador.\nEscribe solo el numero del jugador (sin #). Ej: 3', pl.id, 0xAA00FF, 'bold', 2);
+            } else if (pl.role === 'guardaespaldas') {
+                room.sendAnnouncement('🛡️ Eres el GUARDAESPALDAS! Cada noche puedes proteger a 1 jugador.\nSi lo atacan, te atacan a ti en su lugar. Sobrevives al 1er ataque, mueres al 2do.\nTe proteges a ti mismo por defecto si no eliges.\nEscribe solo el numero del jugador (sin #). Ej: 3', pl.id, 0x4488FF, 'bold', 2);
+            } else if (pl.role === 'sacerdote') {
+                room.sendAnnouncement('⛪ Eres el SACERDOTE! Cada noche puedes arrojar agua bendita a 1 jugador.\nSi es IMPOSTOR, el muere. Si NO es impostor, TU mueres.\nEs opcional - si no escribes nada, no pasa nada.\nEscribe solo el numero del jugador (sin #). Ej: 3', pl.id, 0xFFFFAA, 'bold', 2);
+            } else if (pl.role === 'carcelero') {
+                room.sendAnnouncement('🔒 Eres el CARCELERO! Durante el dia escribe !jail [numero] para encarcelar a alguien.\nDe noche: el preso no puede usar habilidades ni ser atacado.\nPuedes hablar con el preso de forma anonima.\nEscribe !matar para usar tu UNICA bala y matarlo.', pl.id, 0x888888, 'bold', 2);
+            } else if (pl.role === 'bufon') {
+                room.sendAnnouncement('🃏 Eres el BUFON! Tu objetivo es que te VOTEN para eliminarte.\nSi la aldea te elimina por votacion, TU GANAS!\nHazte sospechoso sin ser obvio...', pl.id, 0xFF8800, 'bold', 2);
+            } else if (pl.role === 'cupido') {
+                room.sendAnnouncement('💘 Eres CUPIDO! En la primera noche vincula a 2 jugadores.\nSi uno muere, el otro tambien!\nEscribe 2 numeros (uno por uno, sin #). Ej: 3', pl.id, 0xFF69B4, 'bold', 2);
+            } else if (pl.role === 'bruja') {
+                room.sendAnnouncement('🧪 Eres la BRUJA! Tienes 2 pociones (1 uso cada una):\n💚 !vida [numero] - Salvar a un jugador\n💀 !muerte [numero] - Matar a un jugador\nEscribe sin #. Ej: !muerte 3\nUsalas sabiamente, solo puedes usar cada una UNA vez!', pl.id, 0x9900FF, 'bold', 2);
+            } else if (pl.role === 'cazador') {
+                room.sendAnnouncement('🏹 Eres el CAZADOR! Cuando mueras, te llevas a alguien contigo.\nCada noche puedes elegir tu objetivo con !apuntar [numero].\nEscribe sin #. Ej: !apuntar 3\nPuedes cambiarlo cada noche. Si no eliges, sera aleatorio.', pl.id, 0x8B4513, 'bold', 2);
+            } else if (pl.role === 'clarividente') {
+                room.sendAnnouncement('👁️ Eres el CLARIVIDENTE! Durante la noche puedes leer mensajes de los muertos.\nUna vez por partida puedes revivir a un jugador muerto con !revivir [numero].\nEscribe sin #. Ej: !revivir 3\nUsalo sabiamente!', pl.id, 0x00CED1, 'bold', 2);
+            } else if (pl.role === 'piromano') {
+                room.sendAnnouncement('🔥 Eres el PIROMANO! Rol independiente.\nCada noche puedes:\n🛢️ !empapar [numero] - Empapar a 2 jugadores con gasolina (puedes elegir 2 por noche)\n🔥 !incendiar - Quemar a TODOS los empapados (los mata, atraviesa protecciones)\nLos impostores NO pueden matarte.\n🏆 Ganas si eres el ULTIMO jugador vivo.\nEscribe sin #. Ej: !empapar 3', pl.id, 0xFF4500, 'bold', 2);
+            } else if (pl.role === 'ninoflor') {
+                room.sendAnnouncement('🌸 Eres el NINO FLOR! Puedes salvar a alguien del linchamiento UNA vez.\nDurante la votacion, escribe !salvar para cancelar la eliminacion.\nSolo puedes usarlo 1 vez en toda la partida!', pl.id, 0xFF99CC, 'bold', 2);
+            } else if (pl.role === 'embrujado') {
+                room.sendAnnouncement('🌑 Eres el EMBRUJADO! Pareces un inocente normal...\nPero si los impostores intentan matarte, te CONVIERTES en impostor!\nNadie lo sabe, ni siquiera los impostores.', pl.id, 0x666666, 'bold', 2);
+            } else {
+                room.sendAnnouncement('😇 Eres INOCENTE. Encuentra al impostor y vota para eliminarlo.', pl.id, 0x00FF00, 'bold', 2);
+            }
+        }
+
+        // Mostrar lista numerada
+        var listParts = [];
+        for (var l = 0; l < gameState.players.length; l++) {
+            listParts.push(gameState.players[l].number + '.' + gameState.players[l].name);
+        }
+        room.sendAnnouncement('📋 ' + listParts.join(' | '), null, 0x00BFFF);
+        room.sendAnnouncement('⏱️ La noche comienza en 10 segundos... LEE TU ROL!', null, 0xFFFF00, 'bold');
+    }, 5000);
+    gameState.timeouts.push(tRoles);
+
+    // Iniciar primera fase de kill (5s reglas + 10s roles = 15s total)
     var t = setTimeout(function() {
         if (!gameState.active) return;
         startKillPhase(room);
-    }, config.setupMs);
+    }, 15000);
     gameState.timeouts.push(t);
 }
 
@@ -325,6 +423,9 @@ function startKillPhase(room) {
     gameState.jailerKilledThisNight = false;
     gameState.pendingImpostorVision = null;
     gameState.impostorVidenteActed = false;
+    gameState.pendingBrujaLife = null;
+    gameState.pendingBrujaDeath = null;
+    gameState.brujaProtectedId = null;
 
     // Activar encarcelamiento desde la eleccion del dia
     gameState.jailedPlayerId = null;
@@ -352,6 +453,56 @@ function startKillPhase(room) {
         if (!gameState.active || gameState.phase !== 'kill') return;
 
     room.sendAnnouncement('\n🌙 RONDA ' + gameState.round + ' - ES DE NOCHE...\nLos roles nocturnos eligen sus acciones...', null, 0x4444FF, 'bold', 2);
+
+    // Mostrar lista de jugadores vivos a todos
+    var nightListParts = [];
+    for (var nl = 0; nl < alivePlayers.length; nl++) {
+        nightListParts.push(alivePlayers[nl].number + '.' + alivePlayers[nl].name);
+    }
+    room.sendAnnouncement('📋 Jugadores vivos: ' + nightListParts.join(' | ') + '\n⚠️ Escribe SOLO el numero (sin #). Ej: 3', null, 0x00BFFF);
+
+    // Recordar rol a cada jugador vivo
+    for (var ri = 0; ri < alivePlayers.length; ri++) {
+        var rp = alivePlayers[ri];
+        var roleReminder = null;
+        if (gameState.impostorVidenteId && rp.id === gameState.impostorVidenteId) {
+            roleReminder = '🔪🔮 Tu rol: IMPOSTOR VIDENTE — Elige victima y usa !ver [num] para investigar';
+        } else if (gameState.impostorIds && gameState.impostorIds.indexOf(rp.id) !== -1) {
+            roleReminder = '🔪 Tu rol: IMPOSTOR — Elige a quien matar';
+        } else if (rp.id === gameState.medicoId) {
+            roleReminder = '🏥 Tu rol: MEDICO — Protege a 1 jugador';
+        } else if (rp.id === gameState.bodyguardId) {
+            roleReminder = '🛡️ Tu rol: GUARDAESPALDAS — Protege a 1 jugador';
+        } else if (rp.id === gameState.videnteId) {
+            roleReminder = '🔮 Tu rol: VIDENTE — Investiga a 1 jugador';
+        } else if (rp.id === gameState.sacerdoteId) {
+            roleReminder = '⛪ Tu rol: SACERDOTE — Arroja agua bendita a 1 jugador';
+        } else if (rp.id === gameState.jailerId) {
+            roleReminder = '🔒 Tu rol: CARCELERO — Tu prisionero ya fue elegido de dia';
+        } else if (rp.id === gameState.ninoFlorId) {
+            roleReminder = '🌸 Tu rol: NINO FLOR — Puedes usar !salvar durante la votacion';
+        } else if (rp.id === gameState.piromanoId) {
+            var dousedCount = gameState.dousedPlayers ? gameState.dousedPlayers.length : 0;
+            roleReminder = '🔥 Tu rol: PIROMANO — !empapar [num] o !incendiar (' + dousedCount + ' empapados)';
+        } else if (rp.id === gameState.bufonId) {
+            roleReminder = '🤡 Tu rol: BUFON — Ganas si logras que te eliminen en la votacion';
+        } else if (rp.id === gameState.cupidoId) {
+            roleReminder = '💘 Tu rol: CUPIDO — Uniste a 2 jugadores, si uno muere el otro tambien';
+        } else if (rp.id === gameState.cazadorId) {
+            roleReminder = '🏹 Tu rol: CAZADOR — Si mueres, te llevas a alguien contigo';
+        } else if (rp.id === gameState.clarividenteId) {
+            roleReminder = '🔮 Tu rol: CLARIVIDENTE — Ves el rol del ultimo eliminado';
+        } else if (rp.id === gameState.embrujadoId) {
+            roleReminder = '👻 Tu rol: EMBRUJADO — Si el vidente te investiga, muere';
+        } else if (rp.id === gameState.brujaId) {
+            roleReminder = '🧙 Tu rol: BRUJA — Usa !vida o !muerte esta noche';
+        } else {
+            roleReminder = '👤 Tu rol: INOCENTE — Sobrevive y vota bien de dia';
+        }
+        if (roleReminder) {
+            room.sendAnnouncement(roleReminder, rp.id, 0xAAAAAA);
+        }
+    }
 
     // Notificar encarcelamiento
     if (gameState.jailedPlayerId) {
@@ -441,6 +592,72 @@ function startKillPhase(room) {
                 ivParts.push(ivTargets[iv].number + '.' + ivTargets[iv].name);
             }
             room.sendAnnouncement('🔮 Puedes investigar un jugador esta noche.\nEscribe !ver [numero]:\n' + ivParts.join(' | '), gameState.impostorVidenteId, 0xFF00AA, 'bold');
+        }
+    }
+
+    // Cupido: solo primera noche, elige 2 jugadores para vincular
+    if (gameState.cupidoId && gameState.round === 1) {
+        var cupidoP = findPlayerById(gameState.cupidoId);
+        if (cupidoP && cupidoP.alive && gameState.cupidoId !== gameState.jailedPlayerId) {
+            var cupidoTargets = alivePlayers;
+            var cupidoParts = [];
+            for (var cp = 0; cp < cupidoTargets.length; cp++) {
+                cupidoParts.push(cupidoTargets[cp].number + '.' + cupidoTargets[cp].name);
+            }
+            room.sendAnnouncement('💘 Elige 2 jugadores para vincular (escribe un numero, luego otro):\n' + cupidoParts.join(' | '), gameState.cupidoId, 0xFF69B4, 'bold', 2);
+        }
+    }
+
+    // Bruja: opciones de pociones
+    if (gameState.brujaId) {
+        var brujaP = findPlayerById(gameState.brujaId);
+        if (brujaP && brujaP.alive && gameState.brujaId !== gameState.jailedPlayerId) {
+            var brujaMsg = '🧪 Tus pociones disponibles:';
+            if (!gameState.brujaLifeUsed) brujaMsg += '\n💚 !vida [numero] - Salvar a alguien';
+            if (!gameState.brujaDeathUsed) brujaMsg += '\n💀 !muerte [numero] - Matar a alguien';
+            if (gameState.brujaLifeUsed && gameState.brujaDeathUsed) {
+                brujaMsg += '\n(Ya usaste ambas pociones)';
+            } else {
+                var brujaTargets = alivePlayers.filter(function(p) { return p.id !== gameState.brujaId; });
+                var brujaParts = [];
+                for (var bp = 0; bp < brujaTargets.length; bp++) {
+                    brujaParts.push(brujaTargets[bp].number + '.' + brujaTargets[bp].name);
+                }
+                brujaMsg += '\n' + brujaParts.join(' | ');
+            }
+            room.sendAnnouncement(brujaMsg, gameState.brujaId, 0x9900FF, 'bold', 2);
+        }
+    }
+
+    // Cazador: puede elegir/cambiar su objetivo cada noche
+    var cazadorPlayer = gameState.cazadorId ? findPlayerById(gameState.cazadorId) : null;
+    if (cazadorPlayer && cazadorPlayer.alive && gameState.cazadorId !== gameState.jailedPlayerId) {
+        var cazTargets = alivePlayers.filter(function(p) { return p.id !== gameState.cazadorId; });
+        var cazParts = [];
+        for (var cz = 0; cz < cazTargets.length; cz++) {
+            cazParts.push(cazTargets[cz].number + '.' + cazTargets[cz].name);
+        }
+        var currentTarget = gameState.cazadorTarget ? findPlayerByNumber(gameState.cazadorTarget) : null;
+        var currentMsg = currentTarget && currentTarget.alive ? ('\n🎯 Objetivo actual: ' + currentTarget.name) : '';
+        room.sendAnnouncement('🏹 Elige a quien dispararas si mueres (escribe !apuntar [numero]):\n' + cazParts.join(' | ') + currentMsg + '\n(Puedes cambiarlo cada noche)', gameState.cazadorId, 0x8B4513, 'bold', 2);
+    }
+
+    // Piromano: opciones de empapar o incendiar
+    if (gameState.piromanoId) {
+        var piromanoP = findPlayerById(gameState.piromanoId);
+        if (piromanoP && piromanoP.alive && gameState.piromanoId !== gameState.jailedPlayerId) {
+            var piroTargets = alivePlayers.filter(function(p) { return p.id !== gameState.piromanoId; });
+            var piroParts = [];
+            for (var pi = 0; pi < piroTargets.length; pi++) {
+                var isDoused = gameState.dousedPlayers.indexOf(piroTargets[pi].id) !== -1;
+                piroParts.push(piroTargets[pi].number + '.' + piroTargets[pi].name + (isDoused ? ' 🛢️' : ''));
+            }
+            var piroMsg = '🔥 PIROMANO - Elige tu accion:\n🛢️ !empapar [numero] - Empapar a un jugador (puedes elegir 2 por noche)\n🔥 !incendiar - Quemar a TODOS los empapados\n';
+            piroMsg += 'Empapados actuales: ' + (gameState.dousedPlayers.length > 0 ? gameState.dousedPlayers.length + ' jugadores (marcados con 🛢️)' : 'ninguno');
+            piroMsg += '\n' + piroParts.join(' | ');
+            room.sendAnnouncement(piroMsg, gameState.piromanoId, 0xFF4500, 'bold', 2);
+            gameState.piromanoAction = null;
+            gameState.piromanoDouseTargets = [];
         }
     }
 
@@ -664,7 +881,10 @@ function processImpostorVision(room, player, numStr) {
     }
 
     var num = parseInt(numStr);
-    if (isNaN(num)) return;
+    if (isNaN(num)) {
+        room.sendAnnouncement('⚠️ Usa: !ver [numero]. Ej: !ver 3', player.id, 0xFF6600);
+        return;
+    }
 
     var target = findPlayerByNumber(num);
     if (!target || !target.alive || target.id === player.id || target.role === 'impostor') {
@@ -686,6 +906,234 @@ function processImpostorVision(room, player, numStr) {
     else { roleLabel = '😇 INOCENTE'; }
 
     room.sendAnnouncement('🔮 ' + target.name + ' es: ' + roleLabel, player.id, 0xFF00AA, 'bold', 2);
+}
+
+// ============================================
+// CUPIDO - VINCULAR 2 JUGADORES
+// ============================================
+function processCupidoChoice(room, player, message) {
+    if (gameState.phase !== 'kill' || player.id !== gameState.cupidoId) return;
+    if (gameState.round !== 1) return;
+    if (gameState.linkedPair.length === 2) {
+        room.sendAnnouncement('⚠️ Ya vinculaste a 2 jugadores.', player.id, 0xFF6600);
+        return;
+    }
+
+    var num = parseInt(message.trim());
+    if (isNaN(num)) return;
+
+    var target = findPlayerByNumber(num);
+    if (!target || !target.alive) {
+        room.sendAnnouncement('⚠️ Numero invalido.', player.id, 0xFF6600);
+        return;
+    }
+
+    if (gameState.cupidoChoice1 === null) {
+        gameState.cupidoChoice1 = target.id;
+        room.sendAnnouncement('💘 Primer vinculado: ' + target.name + '. Ahora elige al segundo.', player.id, 0xFF69B4);
+    } else {
+        if (target.id === gameState.cupidoChoice1) {
+            room.sendAnnouncement('⚠️ No puedes vincular al mismo jugador dos veces.', player.id, 0xFF6600);
+            return;
+        }
+        gameState.linkedPair = [gameState.cupidoChoice1, target.id];
+        var first = findPlayerById(gameState.cupidoChoice1);
+        room.sendAnnouncement('💘 Vinculaste a ' + (first ? first.name : '?') + ' y ' + target.name + '!', player.id, 0xFF69B4, 'bold');
+        room.sendAnnouncement('💘 Cupido te ha vinculado con alguien. Si uno muere, el otro tambien!', gameState.cupidoChoice1, 0xFF69B4, 'bold', 2);
+        room.sendAnnouncement('💘 Cupido te ha vinculado con alguien. Si uno muere, el otro tambien!', target.id, 0xFF69B4, 'bold', 2);
+    }
+}
+
+function handleCupidoLink(room, deadPlayerId) {
+    if (gameState.linkedPair.length !== 2) return;
+    var idx = gameState.linkedPair.indexOf(deadPlayerId);
+    if (idx === -1) return;
+
+    var partnerId = gameState.linkedPair[idx === 0 ? 1 : 0];
+    var partner = findPlayerById(partnerId);
+    if (partner && partner.alive) {
+        partner.alive = false;
+        try { room.setPlayerTeam(partnerId, 0); } catch(e) {}
+        room.sendAnnouncement('💔 ' + partner.name + ' estaba vinculado y murio de corazon roto!', null, 0xFF69B4, 'bold', 2);
+    }
+}
+
+// ============================================
+// BRUJA - POCIONES
+// ============================================
+function processBrujaLifeChoice(room, player, numStr) {
+    if (gameState.phase !== 'kill' || player.id !== gameState.brujaId) return;
+    if (gameState.brujaLifeUsed) {
+        room.sendAnnouncement('⚠️ Ya usaste tu pocion de vida.', player.id, 0xFF6600);
+        return;
+    }
+    if (gameState.pendingBrujaLife !== null) {
+        room.sendAnnouncement('⚠️ Ya elegiste a quien salvar esta noche.', player.id, 0xFF6600);
+        return;
+    }
+
+    var num = parseInt(numStr);
+    if (isNaN(num)) {
+        room.sendAnnouncement('⚠️ Usa: !vida [numero]. Ej: !vida 3', player.id, 0xFF6600);
+        return;
+    }
+
+    var target = findPlayerByNumber(num);
+    if (!target || !target.alive || target.id === gameState.brujaId) {
+        room.sendAnnouncement('⚠️ Numero invalido.', player.id, 0xFF6600);
+        return;
+    }
+
+    gameState.pendingBrujaLife = num;
+    room.sendAnnouncement('💚 Usaras tu pocion de vida en ' + target.name + ' esta noche.', player.id, 0x00FF00);
+}
+
+function processBrujaDeathChoice(room, player, numStr) {
+    if (gameState.phase !== 'kill' || player.id !== gameState.brujaId) return;
+    if (gameState.brujaDeathUsed) {
+        room.sendAnnouncement('⚠️ Ya usaste tu pocion de muerte.', player.id, 0xFF6600);
+        return;
+    }
+    if (gameState.pendingBrujaDeath !== null) {
+        room.sendAnnouncement('⚠️ Ya elegiste a quien envenenar esta noche.', player.id, 0xFF6600);
+        return;
+    }
+
+    var num = parseInt(numStr);
+    if (isNaN(num)) {
+        room.sendAnnouncement('⚠️ Usa: !muerte [numero]. Ej: !muerte 3', player.id, 0xFF6600);
+        return;
+    }
+
+    var target = findPlayerByNumber(num);
+    if (!target || !target.alive || target.id === gameState.brujaId) {
+        room.sendAnnouncement('⚠️ Numero invalido.', player.id, 0xFF6600);
+        return;
+    }
+
+    gameState.pendingBrujaDeath = num;
+    room.sendAnnouncement('💀 Enveneraras a ' + target.name + ' esta noche.', player.id, 0xFF0000);
+}
+
+// ============================================
+// CAZADOR - DISPARO AL MORIR
+// ============================================
+function startCazadorShot(room, callback) {
+    gameState.cazadorDying = true;
+    gameState.cazadorCallback = callback;
+
+    var alive = getAlivePlayers();
+
+    // Si el cazador ya habia elegido un objetivo valido, disparar automaticamente
+    if (gameState.cazadorTarget !== null) {
+        var preTarget = findPlayerByNumber(gameState.cazadorTarget);
+        if (preTarget && preTarget.alive) {
+            room.sendAnnouncement('🏹 EL CAZADOR HA CAIDO! Ya tenia su objetivo elegido...', null, 0xFF8800, 'bold', 2);
+            var t = setTimeout(function() {
+                if (!gameState.active) return;
+                executeCazadorShot(room, preTarget);
+                gameState.cazadorDying = false;
+                if (gameState.cazadorCallback) {
+                    var cb = gameState.cazadorCallback;
+                    gameState.cazadorCallback = null;
+                    var t2 = setTimeout(function() {
+                        if (!gameState.active) return;
+                        if (checkWinCondition(room)) return;
+                        cb();
+                    }, 2000);
+                    gameState.timeouts.push(t2);
+                }
+            }, 1500);
+            gameState.timeouts.push(t);
+            return;
+        }
+    }
+
+    // Si no tenia objetivo, disparo aleatorio inmediato
+    room.sendAnnouncement('🏹 EL CAZADOR HA CAIDO! No tenia objetivo elegido... disparo aleatorio!', null, 0xFF8800, 'bold', 2);
+    if (alive.length > 0) {
+        var randomTarget = alive[Math.floor(Math.random() * alive.length)];
+        var t3 = setTimeout(function() {
+            if (!gameState.active) return;
+            executeCazadorShot(room, randomTarget);
+            gameState.cazadorDying = false;
+            if (gameState.cazadorCallback) {
+                var cb2 = gameState.cazadorCallback;
+                gameState.cazadorCallback = null;
+                var t4 = setTimeout(function() {
+                    if (!gameState.active) return;
+                    if (checkWinCondition(room)) return;
+                    cb2();
+                }, 2000);
+                gameState.timeouts.push(t4);
+            }
+        }, 1500);
+        gameState.timeouts.push(t3);
+    } else {
+        gameState.cazadorDying = false;
+        if (callback) callback();
+    }
+}
+
+function executeCazadorShot(room, target) {
+    gameState.cazadorShot = true;
+    target.alive = false;
+    try { room.setPlayerTeam(target.id, 0); } catch(e) {}
+    room.sendAnnouncement('🏹💥 El cazador se llevo a ' + target.name + '!', null, 0xFF4400, 'bold', 2);
+    handleCupidoLink(room, target.id);
+}
+
+function processCazadorShot(room, player, message) {
+    if (!gameState.cazadorDying || player.id !== gameState.cazadorId) return false;
+    if (gameState.cazadorShot) return false;
+
+    var num = parseInt(message.trim());
+    if (isNaN(num)) return true; // bloquear mensaje pero no procesar
+
+    var target = findPlayerByNumber(num);
+    if (!target || !target.alive) {
+        room.sendAnnouncement('⚠️ Numero invalido.', player.id, 0xFF6600);
+        return true;
+    }
+
+    executeCazadorShot(room, target);
+    gameState.cazadorDying = false;
+
+    // Limpiar timer y llamar callback
+    if (gameState.cazadorCallback) {
+        var cb = gameState.cazadorCallback;
+        gameState.cazadorCallback = null;
+        var t = setTimeout(function() {
+            if (!gameState.active) return;
+            if (checkWinCondition(room)) return;
+            cb();
+        }, 2000);
+        gameState.timeouts.push(t);
+    }
+    return true;
+}
+
+// Funcion helper: despues de muertes, manejar cupido link y cazador
+function proceedAfterDeaths(room, killedIds, nextFn) {
+    // Aplicar cupido links
+    for (var deadId in killedIds) {
+        handleCupidoLink(room, parseInt(deadId));
+    }
+    // Revisar si cupido link mato a alguien mas y agregarlo
+    // (handleCupidoLink ya actualiza alive, no necesitamos tracking adicional)
+
+    if (checkWinCondition(room)) return;
+
+    // Verificar si el cazador murio
+    var cazP = gameState.cazadorId ? findPlayerById(gameState.cazadorId) : null;
+    if (cazP && !cazP.alive && !gameState.cazadorShot) {
+        startCazadorShot(room, function() {
+            if (checkWinCondition(room)) return;
+            nextFn();
+        });
+    } else {
+        nextFn();
+    }
 }
 
 // ============================================
@@ -743,7 +1191,18 @@ function resolveNightActions(room) {
     // Verificar condicion de victoria despues del agua bendita
     if (checkWinCondition(room)) return;
 
-    // 4. Ejecutar kills (verificando proteccion medico y guardaespaldas)
+    // 4. Aplicar proteccion de bruja (pocion de vida)
+    gameState.brujaProtectedId = null;
+    if (gameState.pendingBrujaLife !== null) {
+        var brujaLifeTarget = findPlayerByNumber(gameState.pendingBrujaLife);
+        if (brujaLifeTarget && brujaLifeTarget.alive) {
+            gameState.brujaProtectedId = brujaLifeTarget.id;
+            room.sendAnnouncement('💚 Tu pocion de vida protege a ' + brujaLifeTarget.name + ' esta noche.', gameState.brujaId, 0x00FF00);
+        }
+        gameState.brujaLifeUsed = true;
+    }
+
+    // 5. Ejecutar kills (verificando protecciones)
     var killedNames = [];
     var killedIds = {};
 
@@ -758,36 +1217,39 @@ function resolveNightActions(room) {
 
     for (var impId in gameState.pendingKills) {
         var targetNum = gameState.pendingKills[impId];
-        // Skip impostor encarcelado (kill marcado como -1)
         if (targetNum === -1) continue;
         var victim = findPlayerByNumber(targetNum);
         if (victim && victim.alive && !killedIds[victim.id]) {
-            // Check proteccion carcel
-            if (victim.id === gameState.jailedPlayerId) {
-                continue; // no se puede atacar al preso
+            if (victim.id === gameState.jailedPlayerId) continue;
+            // Piromano: los impostores no pueden matarlo
+            if (victim.id === gameState.piromanoId) {
+                room.sendAnnouncement('🔥 Intentaron matar al piromano... pero es inmune!', null, 0xFF4500);
+                continue;
             }
             // Check proteccion medico
             if (victim.id === gameState.protectedPlayerId) {
                 room.sendAnnouncement('🏥 Tu proteccion salvo a ' + victim.name + '!', gameState.medicoId, 0x00FFAA);
                 continue;
             }
+            // Check proteccion bruja (pocion de vida)
+            if (victim.id === gameState.brujaProtectedId) {
+                room.sendAnnouncement('💚 Tu pocion de vida salvo a ' + victim.name + '!', gameState.brujaId, 0x00FF00);
+                continue;
+            }
             // Check proteccion guardaespaldas
             if (victim.id === gameState.guardedPlayerId && bodyguardP && bodyguardP.alive && !killedIds[gameState.bodyguardId]) {
                 gameState.bodyguardHits++;
                 if (gameState.bodyguardHits >= 2) {
-                    // Guardaespaldas muere
                     bodyguardP.alive = false;
                     killedIds[gameState.bodyguardId] = true;
                     killedNames.push(bodyguardP.name);
                     try { room.setPlayerTeam(gameState.bodyguardId, 0); } catch(e) {}
                     room.sendAnnouncement('🛡️ El guardaespaldas recibio el golpe protegiendo a ' + victim.name + '... y no sobrevivio!', null, 0x4488FF, 'bold');
                 } else {
-                    // Guardaespaldas herido pero vive
                     room.sendAnnouncement('🛡️ El guardaespaldas recibio el golpe protegiendo a ' + victim.name + '! Sobrevivio... pero esta herido.', null, 0x4488FF, 'bold');
                 }
                 continue;
             }
-            // Ataque directo al guardaespaldas (cuando se protege a si mismo)
             if (victim.id === gameState.bodyguardId && bodyguardP && bodyguardP.alive) {
                 gameState.bodyguardHits++;
                 if (gameState.bodyguardHits >= 2) {
@@ -800,6 +1262,20 @@ function resolveNightActions(room) {
                 }
                 continue;
             }
+            // Check embrujado: se convierte en impostor en vez de morir
+            if (victim.id === gameState.embrujadoId && !gameState.embrujadoConverted) {
+                gameState.embrujadoConverted = true;
+                victim.role = 'impostor';
+                gameState.impostorIds.push(victim.id);
+                room.sendAnnouncement('🌑 Intentaron matarte... pero la maldicion te convirtio en IMPOSTOR!', victim.id, 0xFF0000, 'bold', 2);
+                // Los impostores se enteran
+                for (var ei = 0; ei < gameState.impostorIds.length; ei++) {
+                    if (gameState.impostorIds[ei] !== victim.id) {
+                        room.sendAnnouncement('🌑 ' + victim.name + ' era el EMBRUJADO! Ahora es su compañero impostor.', gameState.impostorIds[ei], 0xFF0000, 'bold');
+                    }
+                }
+                continue;
+            }
             victim.alive = false;
             killedIds[victim.id] = true;
             killedNames.push(victim.name);
@@ -807,16 +1283,85 @@ function resolveNightActions(room) {
         }
     }
 
+    // 6. Aplicar pocion de muerte de la bruja
+    if (gameState.pendingBrujaDeath !== null) {
+        var brujaDeathTarget = findPlayerByNumber(gameState.pendingBrujaDeath);
+        if (brujaDeathTarget && brujaDeathTarget.alive && !killedIds[brujaDeathTarget.id]) {
+            brujaDeathTarget.alive = false;
+            killedIds[brujaDeathTarget.id] = true;
+            killedNames.push(brujaDeathTarget.name);
+            try { room.setPlayerTeam(brujaDeathTarget.id, 0); } catch(e) {}
+        }
+        gameState.brujaDeathUsed = true;
+    }
+
+    // 7. Piromano: empapar o incendiar
+    if (gameState.piromanoId) {
+        var piromanoP2 = findPlayerById(gameState.piromanoId);
+        if (piromanoP2 && piromanoP2.alive) {
+            if (gameState.piromanoAction === 'douse') {
+                // Empapar a los targets elegidos
+                for (var dt = 0; dt < gameState.piromanoDouseTargets.length; dt++) {
+                    var douseId = gameState.piromanoDouseTargets[dt];
+                    if (gameState.dousedPlayers.indexOf(douseId) === -1) {
+                        var douseP = findPlayerById(douseId);
+                        if (douseP && douseP.alive) {
+                            gameState.dousedPlayers.push(douseId);
+                        }
+                    }
+                }
+                if (gameState.piromanoDouseTargets.length > 0) {
+                    room.sendAnnouncement('🛢️ Has empapado a ' + gameState.piromanoDouseTargets.length + ' jugador(es). Total empapados: ' + gameState.dousedPlayers.length, gameState.piromanoId, 0xFF4500);
+                }
+            } else if (gameState.piromanoAction === 'ignite' && gameState.dousedPlayers.length > 0) {
+                // Incendiar a todos los empapados - atraviesa TODAS las protecciones
+                var burnedNames = [];
+                for (var bi = 0; bi < gameState.dousedPlayers.length; bi++) {
+                    var burnP = findPlayerById(gameState.dousedPlayers[bi]);
+                    if (burnP && burnP.alive && !killedIds[burnP.id]) {
+                        burnP.alive = false;
+                        killedIds[burnP.id] = true;
+                        killedNames.push(burnP.name);
+                        burnedNames.push(burnP.name);
+                        try { room.setPlayerTeam(burnP.id, 0); } catch(e) {}
+                    }
+                }
+                if (burnedNames.length > 0) {
+                    room.sendAnnouncement('🔥🔥🔥 EL PIROMANO INCENDIA! ' + burnedNames.join(', ') + ' arden en llamas!', null, 0xFF4500, 'bold', 2);
+                }
+                gameState.dousedPlayers = [];
+            }
+        }
+        gameState.piromanoDouseTargets = [];
+        gameState.piromanoAction = null;
+    }
+
+    // 8. Clarividente revive a un jugador muerto
+    if (gameState.pendingRevive !== null) {
+        var reviveTarget = findPlayerById(gameState.pendingRevive);
+        if (reviveTarget && !reviveTarget.alive) {
+            reviveTarget.alive = true;
+            var revTeam = gameState.savedTeams[reviveTarget.id] || 1;
+            try { room.setPlayerTeam(reviveTarget.id, revTeam); } catch(e) {}
+            room.sendAnnouncement('👁️ ' + reviveTarget.name + ' ha sido REVIVIDO por el clarividente!', null, 0x00CED1, 'bold', 2);
+            // Quitar de killedNames si estaba ahi (murio esta misma noche y fue revivido)
+            var rnIdx = killedNames.indexOf(reviveTarget.name);
+            if (rnIdx !== -1) killedNames.splice(rnIdx, 1);
+            delete killedIds[reviveTarget.id];
+        }
+        gameState.pendingRevive = null;
+    }
+
     // Limpiar protecciones
     gameState.protectedPlayerId = null;
     gameState.guardedPlayerId = null;
+    gameState.brujaProtectedId = null;
     gameState.jailedPlayerId = null;
 
-    // Verificar condicion de victoria despues de kills
-    if (checkWinCondition(room)) return;
-
-    // Pasar a discusion
-    startDiscussionPhase(room, killedNames);
+    // Usar proceedAfterDeaths para manejar cupido links y cazador
+    proceedAfterDeaths(room, killedIds, function() {
+        startDiscussionPhase(room, killedNames);
+    });
 }
 
 // ============================================
@@ -838,6 +1383,15 @@ function startDiscussionPhase(room, killedNames) {
     }
 
     try { room.pauseGame(false); } catch(e) {}
+
+    // Teleportar cada jugador a su celda para que no queden apilados
+    var _cellSpawns = [[259,27],[225,130],[153,210],[54,254],[-54,254],[-153,210],[-225,130],[-259,27],[-247,-80],[-193,-174],[-106,-238],[0,-260],[106,-238],[193,-174],[247,-80],[247,80],[193,174],[106,238],[0,260],[-106,238],[-193,174],[-247,80],[-259,-27],[-225,-130],[-153,-210],[-54,-254],[54,-254],[153,-210],[225,-130],[259,-27]];
+    setTimeout(function() {
+        var alive = getAlivePlayers();
+        for (var ci = 0; ci < alive.length && ci < _cellSpawns.length; ci++) {
+            try { room.setPlayerDiscProperties(alive[ci].id, { x: _cellSpawns[ci][0], y: _cellSpawns[ci][1], xspeed: 0, yspeed: 0 }); } catch(e) {}
+        }
+    }, 200);
 
     // Esperar a que se procesen los movimientos de equipo, luego mostrar mensajes
     setTimeout(function() {
@@ -891,7 +1445,7 @@ function startVotingPhase(room) {
     for (var i = 0; i < alivePlayers.length; i++) {
         voteParts.push(alivePlayers[i].number + '.' + alivePlayers[i].name);
     }
-    room.sendAnnouncement('🗳️ VOTACION! Escribe el numero del sospechoso (' + (config.votingMs / 1000) + 's):\n' + voteParts.join(' | '), null, 0xFFFF00, 'bold', 2);
+    room.sendAnnouncement('🗳️ VOTACION! Escribe solo el numero del sospechoso, sin # (' + (config.votingMs / 1000) + 's):\n' + voteParts.join(' | '), null, 0xFFFF00, 'bold', 2);
 
     gameState.phaseTimer = setTimeout(function() {
         if (!gameState.active || gameState.phase !== 'voting') return;
@@ -1004,6 +1558,20 @@ function resolveVotes(room) {
     var eliminatedNum = maxTargets[0];
     var eliminated = findPlayerByNumber(eliminatedNum);
 
+    // Nino Flor cancela el linchamiento
+    if (gameState.ninoFlorActivated && eliminated) {
+        gameState.ninoFlorActivated = false;
+        room.sendAnnouncement('🌸 ' + eliminated.name + ' iba a ser eliminado... pero el NINO FLOR lo salvo!', null, 0xFF99CC, 'bold', 2);
+        gameState.phase = 'result';
+        var tFlor = setTimeout(function() {
+            if (!gameState.active) return;
+            startKillPhase(room);
+        }, 5000);
+        gameState.timeouts.push(tFlor);
+        return;
+    }
+    gameState.ninoFlorActivated = false;
+
     if (eliminated) {
         eliminated.alive = false;
         try { room.setPlayerTeam(eliminated.id, 0); } catch(e) {}
@@ -1020,12 +1588,38 @@ function resolveVotes(room) {
             return;
         }
 
-        var roleIcon = eliminated.role === 'impostor' ? '🔪' : '😇';
-        var roleText = eliminated.role === 'impostor' ? 'ERA IMPOSTOR!' : 'Era INOCENTE...';
-        var roleColor = eliminated.role === 'impostor' ? 0x00FF00 : 0xFF0000;
-        room.sendAnnouncement('\n⚖️ ' + eliminated.name + ' fue eliminado por votacion!\n' + roleIcon + ' ' + roleText, null, roleColor, 'bold', 2);
+        var roleNames = {
+            'impostor': '🔪 ERA IMPOSTOR!',
+            'inocente': '😇 Era INOCENTE...',
+            'medico': '🏥 Era MEDICO...',
+            'vidente': '🔮 Era VIDENTE...',
+            'guardaespaldas': '🛡️ Era GUARDAESPALDAS...',
+            'sacerdote': '⛪ Era SACERDOTE...',
+            'carcelero': '🔒 Era CARCELERO...',
+            'cupido': '💘 Era CUPIDO...',
+            'bruja': '🧙 Era BRUJA...',
+            'cazador': '🏹 Era CAZADOR...',
+            'clarividente': '🔮 Era CLARIVIDENTE...',
+            'ninoflor': '🌸 Era NIÑO FLOR...',
+            'embrujado': '👻 Era EMBRUJADO...',
+            'piromano': '🔥 Era PIROMANO!'
+        };
+        var roleText = roleNames[eliminated.role] || ('❓ Era ' + eliminated.role.toUpperCase());
+        var roleColor = eliminated.role === 'impostor' || eliminated.role === 'piromano' ? 0x00FF00 : 0xFF0000;
+        room.sendAnnouncement('\n⚖️ ' + eliminated.name + ' fue eliminado por votacion!\n' + roleText, null, roleColor, 'bold', 2);
 
-        if (checkWinCondition(room)) return;
+        // Manejar cupido link y cazador despues de la eliminacion por voto
+        var voteKilledIds = {};
+        voteKilledIds[eliminated.id] = true;
+        gameState.phase = 'result';
+        proceedAfterDeaths(room, voteKilledIds, function() {
+            var t2 = setTimeout(function() {
+                if (!gameState.active) return;
+                startKillPhase(room);
+            }, 5000);
+            gameState.timeouts.push(t2);
+        });
+        return;
     }
 
     gameState.phase = 'result';
@@ -1043,14 +1637,34 @@ function resolveVotes(room) {
 function checkWinCondition(room) {
     var alivePlayers = getAlivePlayers();
     var aliveImpostors = getAliveImpostors();
+    var piromanoAlive = gameState.piromanoId ? (function() { var p = findPlayerById(gameState.piromanoId); return p && p.alive; })() : false;
 
-    if (aliveImpostors.length === 0) {
+    // Piromano gana si es el unico vivo
+    if (piromanoAlive && alivePlayers.length === 1) {
+        endGame(room, 'piromano');
+        return true;
+    }
+
+    // Contar inocentes (sin piromano)
+    var aliveInocentes = alivePlayers.filter(function(p) {
+        return p.role !== 'impostor' && p.id !== gameState.piromanoId;
+    }).length;
+
+    // Inocentes ganan si todos los impostores muertos Y piromano muerto
+    if (aliveImpostors.length === 0 && !piromanoAlive) {
         endGame(room, 'inocentes');
         return true;
     }
 
-    var aliveInocentes = alivePlayers.length - aliveImpostors.length;
-    if (aliveInocentes <= 1 && aliveImpostors.length > 0) {
+    // Impostores ganan si inocentes <= 1 Y piromano muerto
+    if (aliveInocentes <= 1 && aliveImpostors.length > 0 && !piromanoAlive) {
+        endGame(room, 'impostor');
+        return true;
+    }
+
+    // Si solo quedan impostores y piromano (sin inocentes), impostores ganan
+    // (el piromano no puede ganar solo contra impostores sin incendiar)
+    if (aliveInocentes === 0 && aliveImpostors.length > 0 && piromanoAlive) {
         endGame(room, 'impostor');
         return true;
     }
@@ -1076,6 +1690,24 @@ function endGame(room, winner) {
         if (isInnocentTeam(gameState.players[i].role) && gameState.players[i].alive) {
             inocentesVivos.push(gameState.players[i]);
         }
+    }
+
+    if (winner === 'piromano') {
+        var piromanoP = findPlayerById(gameState.piromanoId);
+        var piromanoName = piromanoP ? piromanoP.name : 'Piromano';
+        var impNames = impostors.map(function(p) { return p.name; }).join(' y ');
+        room.sendAnnouncement('\n🔥🔥🔥 EL PIROMANO GANA!\n🔥 ' + piromanoName + ' incendio todo a su paso!\n🔪 Los impostores eran: ' + (impNames || 'ninguno'), null, 0xFF4500, 'bold', 2);
+        setTimeout(function() {
+            try { room.stopGame(); } catch(e) {}
+            if (callback) {
+                callback({
+                    type: 'piromano_win',
+                    piromanoId: gameState.piromanoId,
+                    piromanoName: piromanoName
+                });
+            }
+        }, 4000);
+        return;
     }
 
     if (winner === 'bufon') {
@@ -1155,8 +1787,26 @@ function endGame(room, winner) {
 function onPlayerChat(player, message) {
     if (!gameState.active) return true;
 
+    // Cazador muriendo - prioridad maxima (cualquier fase)
+    if (gameState.cazadorDying && player.id === gameState.cazadorId) {
+        processCazadorShot(_room, player, message);
+        return false;
+    }
+
     // SETUP: bloquear todo
     if (gameState.phase === 'setup') return false;
+
+    // Comandos de roles: interceptar en cualquier fase para que no se filtren al chat publico
+    var cmdLower = message.toLowerCase().trim();
+    var roleCommands = ['!muerte', '!vida', '!apuntar', '!revivir', '!matar', '!ver', '!renunciar', '!empapar', '!incendiar'];
+    var isRoleCmd = false;
+    for (var rc = 0; rc < roleCommands.length; rc++) {
+        if (cmdLower.indexOf(roleCommands[rc]) === 0) { isRoleCmd = true; break; }
+    }
+    if (isRoleCmd && gameState.phase !== 'kill') {
+        _room.sendAnnouncement('⚠️ Solo puedes usar comandos de rol durante la NOCHE.', player.id, 0xFF6600);
+        return false;
+    }
 
     // KILL: impostores, medico, vidente, carcelero, preso escriben
     if (gameState.phase === 'kill') {
@@ -1171,8 +1821,12 @@ function onPlayerChat(player, message) {
             if (impP && impP.alive) {
                 var msgTrim = message.trim();
                 var msgLower = msgTrim.toLowerCase();
+                // Comando !renunciar del impostor vidente
+                if (msgLower === '!renunciar' && player.id === gameState.impostorVidenteId) {
+                    gameState.impostorVidenteId = null;
+                    _room.sendAnnouncement('🔮❌ Has renunciado a tu habilidad de investigar. Ahora eres un impostor normal.', player.id, 0xFF6600, 'bold');
                 // Comando !ver del impostor vidente
-                if (msgLower.indexOf('!ver') === 0 && player.id === gameState.impostorVidenteId) {
+                } else if (msgLower.indexOf('!ver') === 0 && player.id === gameState.impostorVidenteId) {
                     processImpostorVision(_room, player, msgTrim.substring(4).trim());
                 } else if (!isNaN(parseInt(msgTrim))) {
                     // Es un numero: kill choice
@@ -1206,12 +1860,140 @@ function onPlayerChat(player, message) {
             if (videnteP && videnteP.alive) {
                 processVisionChoice(_room, player, message);
             }
+        } else if (player.id === gameState.cupidoId && gameState.activePlayers[player.id] && gameState.round === 1) {
+            var cupidoP = findPlayerById(player.id);
+            if (cupidoP && cupidoP.alive) {
+                processCupidoChoice(_room, player, message);
+            }
+        } else if (player.id === gameState.brujaId && gameState.activePlayers[player.id]) {
+            var brujaP2 = findPlayerById(player.id);
+            if (brujaP2 && brujaP2.alive) {
+                var brujaLower = message.toLowerCase().trim();
+                if (brujaLower.indexOf('!vida') === 0) {
+                    processBrujaLifeChoice(_room, player, brujaLower.substring(5).trim());
+                } else if (brujaLower.indexOf('!muerte') === 0) {
+                    processBrujaDeathChoice(_room, player, brujaLower.substring(7).trim());
+                }
+            }
+        // Cazador: !apuntar durante la noche
+        } else if (player.id === gameState.cazadorId && gameState.activePlayers[player.id]) {
+            var cazP = findPlayerById(player.id);
+            if (cazP && cazP.alive) {
+                var cazLower = message.toLowerCase().trim();
+                if (cazLower.indexOf('!apuntar') === 0) {
+                    var cazNum = parseInt(cazLower.substring(8).trim());
+                    if (isNaN(cazNum)) {
+                        _room.sendAnnouncement('⚠️ Usa: !apuntar [numero]', player.id, 0xFF6600);
+                    } else {
+                        var cazTarget = findPlayerByNumber(cazNum);
+                        if (!cazTarget || !cazTarget.alive || cazTarget.id === player.id) {
+                            _room.sendAnnouncement('⚠️ Numero invalido.', player.id, 0xFF6600);
+                        } else {
+                            gameState.cazadorTarget = cazNum;
+                            _room.sendAnnouncement('🏹🎯 Apuntando a ' + cazTarget.name + '. Si mueres, le dispararas automaticamente.', player.id, 0x8B4513, 'bold');
+                        }
+                    }
+                }
+            }
+        // Piromano: !empapar y !incendiar durante la noche
+        } else if (player.id === gameState.piromanoId && gameState.activePlayers[player.id]) {
+            var piroP = findPlayerById(player.id);
+            if (piroP && piroP.alive) {
+                var piroLower = message.toLowerCase().trim();
+                if (piroLower.indexOf('!empapar') === 0) {
+                    if (gameState.piromanoAction === 'ignite') {
+                        _room.sendAnnouncement('⚠️ Ya elegiste INCENDIAR esta noche. No puedes empapar.', player.id, 0xFF6600);
+                    } else if (gameState.piromanoDouseTargets.length >= 2) {
+                        _room.sendAnnouncement('⚠️ Ya empapaste a 2 jugadores esta noche.', player.id, 0xFF6600);
+                    } else {
+                        var piroNum = parseInt(piroLower.substring(8).trim());
+                        if (isNaN(piroNum)) {
+                            _room.sendAnnouncement('⚠️ Usa: !empapar [numero]. Ej: !empapar 3', player.id, 0xFF6600);
+                        } else {
+                            var piroTarget = findPlayerByNumber(piroNum);
+                            if (!piroTarget || !piroTarget.alive || piroTarget.id === player.id) {
+                                _room.sendAnnouncement('⚠️ Numero invalido.', player.id, 0xFF6600);
+                            } else if (gameState.dousedPlayers.indexOf(piroTarget.id) !== -1) {
+                                _room.sendAnnouncement('⚠️ ' + piroTarget.name + ' ya esta empapado.', player.id, 0xFF6600);
+                            } else if (gameState.piromanoDouseTargets.indexOf(piroTarget.id) !== -1) {
+                                _room.sendAnnouncement('⚠️ Ya elegiste empapar a ' + piroTarget.name + ' esta noche.', player.id, 0xFF6600);
+                            } else {
+                                gameState.piromanoAction = 'douse';
+                                gameState.piromanoDouseTargets.push(piroTarget.id);
+                                _room.sendAnnouncement('🛢️ Empaparas a ' + piroTarget.name + ' con gasolina. (' + gameState.piromanoDouseTargets.length + '/2)', player.id, 0xFF4500, 'bold');
+                            }
+                        }
+                    }
+                } else if (piroLower === '!incendiar') {
+                    if (gameState.piromanoAction === 'douse') {
+                        _room.sendAnnouncement('⚠️ Ya elegiste EMPAPAR esta noche. No puedes incendiar.', player.id, 0xFF6600);
+                    } else if (gameState.dousedPlayers.length === 0) {
+                        _room.sendAnnouncement('⚠️ No hay jugadores empapados para incendiar.', player.id, 0xFF6600);
+                    } else {
+                        gameState.piromanoAction = 'ignite';
+                        var dousedNames = [];
+                        for (var dn = 0; dn < gameState.dousedPlayers.length; dn++) {
+                            var dp = findPlayerById(gameState.dousedPlayers[dn]);
+                            if (dp && dp.alive) dousedNames.push(dp.name);
+                        }
+                        _room.sendAnnouncement('🔥 INCENDIARAS a ' + dousedNames.length + ' jugadores: ' + dousedNames.join(', '), player.id, 0xFF4500, 'bold');
+                    }
+                }
+            }
+        // Clarividente: !revivir durante la noche
+        } else if (player.id === gameState.clarividenteId && gameState.activePlayers[player.id]) {
+            var clavP = findPlayerById(player.id);
+            if (clavP && clavP.alive) {
+                var clavLower = message.toLowerCase().trim();
+                if (clavLower.indexOf('!revivir') === 0) {
+                    if (gameState.clarividenteReviveUsed) {
+                        _room.sendAnnouncement('⚠️ Ya usaste tu poder de revivir.', player.id, 0xFF6600);
+                    } else {
+                        var revNum = parseInt(clavLower.substring(8).trim());
+                        if (isNaN(revNum)) {
+                            _room.sendAnnouncement('⚠️ Usa: !revivir [numero]', player.id, 0xFF6600);
+                        } else {
+                            var revTarget = findPlayerByNumber(revNum);
+                            if (!revTarget || revTarget.alive) {
+                                _room.sendAnnouncement('⚠️ Numero invalido o el jugador esta vivo.', player.id, 0xFF6600);
+                            } else {
+                                gameState.clarividenteReviveUsed = true;
+                                gameState.pendingRevive = revTarget.id;
+                                _room.sendAnnouncement('👁️ Reviviras a ' + revTarget.name + ' al final de la noche.', player.id, 0x00CED1, 'bold');
+                            }
+                        }
+                    }
+                }
+            }
         }
+
+        // Muertos hablan al clarividente durante la noche
+        if (gameState.clarividenteId) {
+            var deadP = findPlayerById(player.id);
+            if (deadP && !deadP.alive && gameState.activePlayers[player.id]) {
+                var clavAlive = findPlayerById(gameState.clarividenteId);
+                if (clavAlive && clavAlive.alive) {
+                    _room.sendAnnouncement('💀 [Muerto] ' + deadP.name + ': ' + message, gameState.clarividenteId, 0x00CED1);
+                    _room.sendAnnouncement('💀 Tu mensaje fue enviado al clarividente.', player.id, 0x00CED1);
+                }
+            }
+        }
+
         return false;
     }
 
     // VOTING: solo jugadores vivos votan
     if (gameState.phase === 'voting') {
+        // Nino Flor: !salvar durante votacion
+        if (player.id === gameState.ninoFlorId && !gameState.ninoFlorUsed && message.toLowerCase().trim() === '!salvar') {
+            var nfp = findPlayerById(player.id);
+            if (nfp && nfp.alive) {
+                gameState.ninoFlorUsed = true;
+                gameState.ninoFlorActivated = true;
+                _room.sendAnnouncement('🌸 El NINO FLOR ha usado su poder! La eliminacion sera cancelada!', null, 0xFF99CC, 'bold', 2);
+            }
+            return false;
+        }
         if (gameState.activePlayers[player.id]) {
             var vp = findPlayerById(player.id);
             if (vp && vp.alive) {
@@ -1300,6 +2082,13 @@ function onPlayerLeave(room, player) {
             gameState.jailedPlayerId = null;
         }
     }
+
+    // Piromano: quitar de empapados si se desconecta
+    var dousedIdx = gameState.dousedPlayers.indexOf(player.id);
+    if (dousedIdx !== -1) gameState.dousedPlayers.splice(dousedIdx, 1);
+
+    // Cupido link: si el que se fue estaba vinculado, matar al otro
+    handleCupidoLink(room, player.id);
 
     // Si un impostor se fue
     if (isImpostor(player.id)) {
@@ -1400,6 +2189,32 @@ function stop(room) {
     gameState.impostorVidenteId = null;
     gameState.pendingImpostorVision = null;
     gameState.impostorVidenteActed = false;
+    gameState.cupidoId = null;
+    gameState.linkedPair = [];
+    gameState.cupidoChoice1 = null;
+    gameState.brujaId = null;
+    gameState.brujaLifeUsed = false;
+    gameState.brujaDeathUsed = false;
+    gameState.pendingBrujaLife = null;
+    gameState.pendingBrujaDeath = null;
+    gameState.brujaProtectedId = null;
+    gameState.cazadorId = null;
+    gameState.cazadorShot = false;
+    gameState.cazadorDying = false;
+    gameState.cazadorCallback = null;
+    gameState.cazadorTarget = null;
+    gameState.clarividenteId = null;
+    gameState.clarividenteReviveUsed = false;
+    gameState.pendingRevive = null;
+    gameState.ninoFlorId = null;
+    gameState.ninoFlorUsed = false;
+    gameState.ninoFlorActivated = false;
+    gameState.embrujadoId = null;
+    gameState.embrujadoConverted = false;
+    gameState.piromanoId = null;
+    gameState.dousedPlayers = [];
+    gameState.piromanoDouseTargets = [];
+    gameState.piromanoAction = null;
     try { room.stopGame(); } catch(e) {}
 }
 

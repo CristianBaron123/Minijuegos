@@ -39,10 +39,11 @@ function start(room, onGameEnd) {
         }
     } catch (e) { console.error('❌ MEADOWLANDS: fallo al cargar mapa', e && e.message); }
 
-    // Todos al mismo equipo
+    // Alternar entre equipo rojo y azul
     var players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
     for (var k = 0; k < players.length; k++) {
-        try { room.setPlayerTeam(players[k].id, 1); } catch(e){}
+        var team = (k % 2 === 0) ? 1 : 2;
+        try { room.setPlayerTeam(players[k].id, team); } catch(e){}
     }
 
     gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
@@ -52,8 +53,6 @@ function start(room, onGameEnd) {
     room.sendAnnouncement('🌿 MEADOWLANDS SURVIVAL\n👥 Jugadores: ' + gameState.players.length, null, 0x00BFFF, 'bold', 2);
 
     setTimeout(function(){
-        // Verificacion 2: confirmar mapa antes de iniciar
-        try { room.setCustomStadium(mapData); } catch(e){}
         room.startGame();
         try { room.pauseGame(true); } catch(e){}
         gameState.chatBlocked = true;

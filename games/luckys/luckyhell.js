@@ -26,6 +26,19 @@ const LUCKY_HELL = (function() {
     // AZUL => ban 1min, VERDE => pasar, ROJO => cerrar sala
     var zones = [];
 
+    // Close room (ROJO) - PRIMERO para prioridad en detección
+    zones.push({
+        name: 'CLOSE_ROOM',
+        color: 'FF0000',
+        minX: 189,
+        maxX: 213,
+        minY: 335,
+        maxY: 345,
+        effect: 'close_room',
+        detectionType: 'curve',
+        confirmationTime: config.confirmationTime
+    });
+
     // Ban (AZUL) -- 8 tramos
     var banCoords = [
         {a:[-7.38,338.96], b:[16.25,338.47]},
@@ -57,7 +70,7 @@ const LUCKY_HELL = (function() {
         {a:[16.25,338.47], b:[41.25,338.47]},
         {a:[66.25,338.47], b:[91.25,338.47]},
         {a:[116.25,338.47], b:[141.25,338.47]},
-        {a:[166.25,338.47], b:[211,338.47]},
+        {a:[166.25,338.47], b:[191.25,338.47]},
         {a:[236,338.47], b:[261,338.47]},
         {a:[286,338.47], b:[311,338.47]},
         {a:[336,338.47], b:[361,338.47]},
@@ -78,18 +91,7 @@ const LUCKY_HELL = (function() {
         });
     });
 
-    // Close room (ROJO) - A(166.25,338.47) B(191.25,338.47)
-    zones.push({
-        name: 'CLOSE_ROOM',
-        color: 'FF0000',
-        minX: 166.25,
-        maxX: 191.25,
-        minY: 338.47,
-        maxY: 338.47,
-        effect: 'close_room',
-        detectionType: 'curve',
-        confirmationTime: config.confirmationTime
-    });
+    // (ROJO movido al inicio del array para prioridad en detección)
 
     // Helper: in curve zone if x in range and y >= minY (ball below curve)
     function inZone(ball, z) {
@@ -274,7 +276,7 @@ const LUCKY_HELL = (function() {
                         if (p && p.id !== 0) {
                             var _pAuth = (typeof botState !== 'undefined' && botState.authMap) ? botState.authMap[p.id] : null;
                             if (_pAuth && typeof botState !== 'undefined') botState.kickedByGame[_pAuth] = true;
-                            try { room.kickPlayer(p.id, 'Has sido kickeado por cierre de Lucky HELL', false); } catch(e){}
+                            try { room.kickPlayer(p.id, 'Se cerró la sala, se abrirá en unos segundos', false); } catch(e){}
                         }
                     });
                     finishEffect(room);

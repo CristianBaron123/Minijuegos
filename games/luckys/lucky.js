@@ -628,7 +628,7 @@ var LUCKY = (function() {
                     var winnerAuth = (typeof botState !== 'undefined' && botState.authMap && botState.authMap[winner.id])
                         ? botState.authMap[winner.id] : winner.auth;
                     if (winnerAuth) {
-                        gameState.callbacks.onGayTag(winnerAuth);
+                        gameState.callbacks.onGayTag(winnerAuth, winner.name);
                     } else {
                         console.error("[LUCKY] No se pudo asignar etiqueta GAY - auth no disponible para " + winner.name);
                     }
@@ -660,6 +660,7 @@ var LUCKY = (function() {
                     // Iniciar Lucky HELL con el callback guardado
                     if (typeof LUCKY_HELL !== 'undefined') {
                         LUCKY_HELL.start(room, winner, savedOnGameEnd, {
+                            isProtected: function() { return false; },
                             onBanTemp: savedCallbacks ? savedCallbacks.onBanTemp : null,
                             onLuckyPass: savedCallbacks ? savedCallbacks.onLuckyPass : null
                         });

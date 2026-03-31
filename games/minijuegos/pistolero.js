@@ -261,8 +261,9 @@ function resolveShot(room, target) {
         return;
     }
 
+    // Últimos 2 → 1v1 final (Air Hockey / Dominic Survivor)
     if (alive.length === 2) {
-        startFinale(room, alive[0], alive[1]);
+        startFinale(_room, alive[0], alive[1]);
         return;
     }
 
@@ -410,12 +411,6 @@ function onPlayerLeave(room, player) {
         } else {
             endGame(null);
         }
-        return;
-    }
-
-    if (alive.length === 2) {
-        if (gameState.phaseTimer) { clearTimeout(gameState.phaseTimer); gameState.phaseTimer = null; }
-        startFinale(room, alive[0], alive[1]);
         return;
     }
 

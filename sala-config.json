@@ -1,0 +1,20 @@
+[
+    {
+        "id": "minijuegos",
+        "name": "Minijuegos_Isagi v1.9",
+        "script": "bot.js",
+        "maxPlayers": 30
+    },
+    {
+        "id": "buho",
+        "name": "Buho by Isagi",
+        "script": "../Buho/script/bot.js",
+        "maxPlayers": 16
+    },
+    {
+        "id": "real-futsal",
+        "name": "Real Futsal",
+        "script": "../Real futsal/script/bot.js",
+        "maxPlayers": 30
+    }
+]
