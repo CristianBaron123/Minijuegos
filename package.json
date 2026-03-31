@@ -4,7 +4,7 @@
   "description": "Sala de minijuegos para Haxball Headless",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node panel.js",
     "test": "node bot.js",
     "dev": "nodemon index.js"
   },

@@ -38,7 +38,10 @@
       "Bash(head -20 grep -n \"var to = setTimeout\\\\|stopRequested\\\\|stopped\" \"c:/Users/cristian/Desktop/minijuegos/Minijuegos/games/minijuegos/ultraball.js\")",
       "Bash(/dev/null ls:*)",
       "Bash(node -e \":*)",
-      "Bash(npm init:*)"
+      "Bash(npm init:*)",
+      "WebSearch",
+      "WebFetch(domain:www.hetzner.com)",
+      "WebFetch(domain:contabo.com)"
     ]
   }
 }
