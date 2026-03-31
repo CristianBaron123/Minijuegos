@@ -5624,7 +5624,8 @@ room.onPlayerChat = function(player, message) {
             {n:'SWING_CANNONS', d:'Swing Cannons', s:startSWING_CANNONS}, {n:'SURVIVAL_INSECT', d:'Survival Insect', s:startSURVIVAL_INSECT},
             {n:'RUN_LUCK', d:'Run Luck', s:startRUN_LUCK}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette', s:startPINBALL_ROULETTE},
             {n:'JUMPING_SURVIVAL', d:'Jumping Survival', s:startJUMPING_SURVIVAL},
-            {n:'RACING_GROUND', d:'Racing Ground', s:startRACING_GROUND}
+            {n:'RACING_GROUND', d:'Racing Ground', s:startRACING_GROUND},
+            {n:'BUHO', d:'Buho', s:startBUHO}
         ];
         if (!escogerArg || escogerArg.toLowerCase() === 'lista') {
             var eThird = Math.ceil(escogerGames.length / 3);
@@ -5765,7 +5766,8 @@ room.onPlayerChat = function(player, message) {
             {n:'SWING_CANNONS', d:'Swing Cannons'}, {n:'SURVIVAL_INSECT', d:'Survival Insect'},
             {n:'RUN_LUCK', d:'Run Luck'}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette'},
             {n:'JUMPING_SURVIVAL', d:'Jumping Survival'},
-            {n:'RACING_GROUND', d:'Racing Ground'}
+            {n:'RACING_GROUND', d:'Racing Ground'},
+            {n:'BUHO', d:'Buho'}
         ];
         if (!elegirArg || elegirArg.toLowerCase() === 'lista') {
             var third = Math.ceil(elegirGames.length / 3);
