@@ -106,7 +106,7 @@ function checkRemaining(room) {
         if (winnerId) {
             var winner = gameState.players[winnerId];
             room.sendAnnouncement('\n🏆🦉 ' + winner.name.toUpperCase() + ' GANA BUHO! 🦉🏆', null, 0xFFD700, 'bold', 2);
-            try { room.setPlayerAvatar(winnerId, '👑'); } catch(e) {}
+            try { room.setPlayerAvatar(winnerId, null); } catch(e) {}
 
             // Mapa campeón
             if (buhoData.maps['CAMPEON']) {
@@ -201,7 +201,7 @@ function start(room, onGameEnd) {
             goalIndex: -1,
             alive: true
         };
-        try { room.setPlayerAvatar(players[i].id, '❤️'); } catch(e) {}
+        try { room.setPlayerAvatar(players[i].id, null); } catch(e) {}
     }
 
     var mapSize = Math.min(players.length, 16);

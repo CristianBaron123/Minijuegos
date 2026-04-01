@@ -2500,6 +2500,8 @@ function loadLuckyMap(winner) {
 function excludeAFKFromGame() {
     // No excluir durante juicio público
     if (botState.banVoteActive || botState.pendingBanVote) return;
+    // En zombie run los jugadores se mueven solos, no excluir
+    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) return; } catch(e){}
     var now = Date.now();
     var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
     players.forEach(function(p) {
@@ -7314,6 +7316,8 @@ setInterval(function() {
     try { if (GOT && GOT.isActive && GOT.isActive()) return; } catch(e){}
     try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) return; } catch(e){}
     try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) return; } catch(e){}
+    // En zombie run los jugadores se mueven solos por física, no presionan teclas
+    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) return; } catch(e){}
     // No kickear AFK durante juicio público
     if (botState.banVoteActive) return;
 
@@ -7327,22 +7331,15 @@ setInterval(function() {
         }
 
         var inactiveMs = now - botState.afkLastActivity[p.id];
-        // Mid-game: 15s sin moverse = mover a espectador
-        if (inactiveMs >= 12000 && inactiveMs < 15000 && !botState.afkWarned[p.id]) {
+        // 20s sin presionar tecla = advertencia
+        if (inactiveMs >= 20000 && inactiveMs < 25000 && !botState.afkWarned[p.id]) {
             botState.afkWarned[p.id] = true;
-            try { room.sendAnnouncement('⚠️ ¡Muévete o serás sacado del juego por AFK en 3 segundos!', p.id, 0xFF6600); } catch(e) {}
-        }
-        if (inactiveMs >= 15000 && inactiveMs < 25000) {
-            try {
-                room.sendAnnouncement('⏰ ' + p.name + ' fue sacado por AFK (15s sin moverse)', null, 0xFF6600);
-                room.setPlayerTeam(p.id, 0);
-            } catch(e) {}
-            delete botState.afkWarned[p.id];
+            try { room.sendAnnouncement('⚠️ ' + p.name + ' ¡Presiona una tecla o serás kickeado por AFK!', p.id, 0xFF6600); } catch(e) {}
         }
         if (inactiveMs >= 25000) { // 25 segundos sin presionar tecla = kick
             try {
-                room.sendAnnouncement('⏰ ' + p.name + ' fue kickeado por AFK (25s sin presionar tecla)', null, 0xFF6600);
-                room.kickPlayer(p.id, 'AFK - 25 segundos sin actividad', false);
+                room.sendAnnouncement('⏰ ' + p.name + ' fue kickeado por AFK', null, 0xFF6600);
+                room.kickPlayer(p.id, 'AFK - sin actividad', false);
             } catch(e) {}
             delete botState.afkLastActivity[p.id];
             delete botState.afkWarned[p.id];

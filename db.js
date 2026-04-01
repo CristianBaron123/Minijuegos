@@ -140,8 +140,10 @@ async function getStats(auth) {
 async function getTopPlayers(field, limit) {
     if (!db) return [];
     try {
+        var filter = {};
+        filter[field] = { $gt: 0 };
         var docs = await db.collection('players')
-            .find({})
+            .find(filter)
             .sort({ [field]: -1 })
             .limit(limit || 5)
             .toArray();

@@ -1,54 +1,46 @@
 // ============================================
 // MINIJUEGO: RACING GROUND - Carrera con checkpoints
 // Mapa: 1.-Racing-Ground by HaxMods
-// Anti-trampa: 9 checkpoints obligatorios en orden
+// Sentido antihorario. 9 checkpoints obligatorios.
 // ============================================
 
 var mapData = null;
 
-// ──────────────────────────────────────────
-// CHECKPOINTS en orden de carrera
-// (basados en los discos transparentes del mapa)
-// Dirección: Inicio → Este → Norte → Oeste → Inicio
-// ──────────────────────────────────────────
+// Spawn: y=505-575, centro-bottom
+// Finish line: y=420, x=-150 a 500 (cruzar yendo al NORTE = y decrece)
+// Orden: izquierda → noroeste → norte → este → sureste → finish
 var CHECKPOINTS = [
-    { x:  665, y:  600, r: 115, name: 'CP1' },  // Sur-Este
-    { x: 1440, y:  235, r: 140, name: 'CP2' },  // Este-Sur
-    { x: 1345, y:   28, r: 140, name: 'CP3' },  // Este-Norte
-    { x:  802, y: -418, r: 130, name: 'CP4' },  // Norte-Este
-    { x:  290, y: -515, r: 130, name: 'CP5' },  // Norte
-    { x: -474, y: -414, r: 130, name: 'CP6' },  // Norte-Oeste
-    { x: -811, y: -338, r: 130, name: 'CP7' },  // Oeste
-    { x: -774, y:   74, r: 130, name: 'CP8' },  // Oeste-Sur
-    { x: -350, y:  540, r: 115, name: 'CP9' },  // Sur-Oeste
+    { x: -350, y:  575, r: 120, name: 'CP1' },  // Izquierda-bottom
+    { x: -350, y:  505, r: 120, name: 'CP2' },  // Izquierda-medio
+    { x: -774, y:   74, r: 130, name: 'CP3' },  // Izquierda
+    { x: -811, y: -338, r: 130, name: 'CP4' },  // Noroeste
+    { x: -474, y: -414, r: 130, name: 'CP5' },  // Norte-oeste
+    { x:  290, y: -515, r: 130, name: 'CP6' },  // Norte
+    { x: 1345, y:   28, r: 130, name: 'CP7' },  // Este
+    { x: 1453, y:  235, r: 130, name: 'CP8' },  // Este-sur
+    { x:  665, y:  599, r: 120, name: 'CP9' },  // Sureste
 ];
 
-// Línea de meta: franja horizontal en y≈420, x entre -200 y 550
-// Cruzar hacia NORTE (y baja) = arrancar
-// Cruzar hacia SUR  (y sube) + todos CPs = terminar
+// Finish: y=420, x entre -150 y 500, cruzar yendo al NORTE (y decrece)
 var FINISH_Y    = 420;
 var FINISH_XMIN = -200;
 var FINISH_XMAX = 550;
 
 var gameState = {
-    active:   false,
-    started:  false,
-    racers:   {},       // { pid: { name, auth, startTime, finishTime, nextCp, lastY, finished } }
-    rankings: [],
-    callback: null,
+    active:        false,
+    started:       false,
+    racers:        {},   // { pid: { name, auth, startTime, finishTime, nextCp, lastX, lastY, finished } }
+    rankings:      [],
+    callback:      null,
     checkInterval: null,
     gameTimer:     null
 };
 
 var config = {
     minPlayers:  2,
-    countdownMs: 5000,
     maxGameMs:   360000   // 6 minutos máximo
 };
 
-// ──────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────
 function dist2d(x1, y1, x2, y2) {
     var dx = x1 - x2, dy = y1 - y2;
     return Math.sqrt(dx * dx + dy * dy);
@@ -61,6 +53,14 @@ function formatTime(ms) {
     var cent = Math.floor((ms % 1000) / 10);
     return (min > 0 ? min + ':' + (sec < 10 ? '0' : '') : '') +
            sec + '.' + (cent < 10 ? '0' : '') + cent + 's';
+}
+
+function getPos(room, pid) {
+    try {
+        var d = room.getPlayerDiscProperties(pid);
+        if (d) return { x: d.x, y: d.y };
+    } catch(e) {}
+    return null;
 }
 
 // ──────────────────────────────────────────
@@ -92,14 +92,13 @@ function start(room, onGameEnd) {
     gameState.rankings = [];
     gameState.callback = onGameEnd || null;
 
-    // Distribuir equipos alternando para usar ambos spawns
     for (var i = 0; i < players.length; i++) {
         try { room.setPlayerTeam(players[i].id, (i % 2 === 0) ? 1 : 2); } catch(e) {}
     }
 
     room.sendAnnouncement(
         '🏎️ RACING GROUND - ' + players.length + ' corredores\n' +
-        '🏁 Completa 1 vuelta pasando los 9 checkpoints en orden\n' +
+        '🏁 Pasa los 9 checkpoints en orden y cruza la meta\n' +
         '⚠️ Saltarte un CP = no cuenta la vuelta',
         null, 0xFFD700, 'bold', 2
     );
@@ -108,51 +107,51 @@ function start(room, onGameEnd) {
         try { room.startGame(); } catch(e) {}
         try { room.pauseGame(true); } catch(e) {}
 
-        room.sendAnnouncement('🟡 ¡Preparados! Comienza en 5 segundos...', null, 0xFFFF00, 'bold', 2);
+        room.sendAnnouncement('🟡 ¡Preparados! Arranca en 5 segundos...', null, 0xFFFF00, 'bold', 2);
 
         setTimeout(function() {
             try { room.pauseGame(false); } catch(e) {}
 
-            // Inicializar corredores con su Y actual
+            var now = Date.now();
             var ps = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
             ps.forEach(function(p) {
-                var py = (p.position) ? p.position.y : 540;
+                var pos = getPos(room, p.id);
                 gameState.racers[p.id] = {
-                    name:       p.name,
-                    auth:       p.auth || null,
-                    startTime:  null,
+                    name:      p.name,
+                    auth:      p.auth || null,
+                    startTime: now,   // El timer empieza para todos al mismo tiempo
                     finishTime: null,
-                    nextCp:     0,
-                    lastY:      py,
-                    finished:   false
+                    nextCp:    0,
+                    lastX:     pos ? pos.x : 100,
+                    lastY:     pos ? pos.y : 540,
+                    finished:  false
                 };
-                try { room.setPlayerAvatar(p.id, '🏁'); } catch(e) {}
+                try { room.setPlayerAvatar(p.id, '1'); } catch(e) {}
             });
 
             gameState.started = true;
             room.sendAnnouncement(
-                '🟢 ¡ARRANCA! Cruza la línea de meta yendo HACIA ARRIBA para iniciar tu vuelta.',
+                '🟢 ¡ARRANCA! Ve a los checkpoints en orden. ¡Primero al CP1!',
                 null, 0x00FF00, 'bold', 2
             );
 
             gameState.checkInterval = setInterval(function() { checkRace(room); }, 50);
 
-            // Tiempo máximo
             gameState.gameTimer = setTimeout(function() {
                 if (!gameState.active) return;
-                var sorted = buildRankings(room);
+                var sorted = buildRankings();
                 var msg = '⏰ Tiempo agotado!\n🏆 Resultados:\n';
                 sorted.forEach(function(r, i) {
                     var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
                     msg += medal + ' ' + r.name +
                            (r.finished ? ' — ' + formatTime(r.finishTime - r.startTime) :
-                            ' (' + r.nextCp + '/' + CHECKPOINTS.length + ' CPs)') + '\n';
+                            ' (CP ' + r.nextCp + '/' + CHECKPOINTS.length + ')') + '\n';
                 });
                 room.sendAnnouncement(msg, null, 0xFFFF00, 'bold', 2);
                 endRace(room, sorted.length > 0 ? sorted[0] : null);
             }, config.maxGameMs);
 
-        }, config.countdownMs);
+        }, 5000);
     }, 1500);
 }
 
@@ -167,97 +166,76 @@ function checkRace(room) {
 
     ps.forEach(function(p) {
         var r = gameState.racers[p.id];
-        if (!r || r.finished || !p.position) return;
+        if (!r || r.finished) return;
 
-        var cx = p.position.x;
-        var cy = p.position.y;
+        var pos = getPos(room, p.id);
+        if (!pos) return;
+
+        var cx = pos.x;
+        var cy = pos.y;
         var prevY = r.lastY;
 
-        // ── Detección de cruce de META ──────────────────
-        if (cx >= FINISH_XMIN && cx <= FINISH_XMAX) {
-
-            // START: cruzó yendo hacia el NORTE (y bajando a través de FINISH_Y)
-            if (!r.startTime && prevY > FINISH_Y && cy <= FINISH_Y) {
-                r.startTime = now;
-                r.nextCp = 0;
-                room.sendAnnouncement('🏁 ' + p.name + ' ¡ARRANCÓ! Busca los checkpoints.', null, 0x00FF00);
-                try { room.setPlayerAvatar(p.id, '1'); } catch(e) {}
-            }
-
-            // FINISH: cruzó yendo hacia el SUR (y subiendo a través de FINISH_Y) con todos los CPs
-            if (r.startTime && prevY < FINISH_Y && cy >= FINISH_Y) {
-                if (r.nextCp >= CHECKPOINTS.length) {
-                    // ¡TERMINÓ!
-                    r.finished   = true;
-                    r.finishTime = now;
-                    var elapsed  = now - r.startTime;
-                    var pos      = gameState.rankings.length + 1;
-                    var medal    = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : pos + '.';
-
-                    gameState.rankings.push({ id: p.id, name: p.name, time: elapsed, auth: r.auth });
-
-                    room.sendAnnouncement(
-                        medal + ' ' + p.name.toUpperCase() + ' TERMINA! ⏱️ ' + formatTime(elapsed),
-                        null, pos === 1 ? 0xFFD700 : 0x00BFFF, 'bold', 2
-                    );
-                    try { room.setPlayerAvatar(p.id, medal); } catch(e) {}
-
-                    // Si ganó el 1º, esperar 20s para los demás y terminar
-                    if (pos === 1) {
-                        setTimeout(function() { if (gameState.active) endRace(room, gameState.rankings[0]); }, 20000);
-                    }
-
-                    // Si todos terminaron, terminar ya
-                    var unfinished = Object.keys(gameState.racers).filter(function(id) {
-                        return !gameState.racers[id].finished && gameState.racers[id].startTime;
-                    });
-                    if (unfinished.length === 0) { endRace(room, gameState.rankings[0]); }
-
-                } else {
-                    // Intentó cruzar la meta sin todos los CPs
-                    room.sendAnnouncement(
-                        '⛔ ' + p.name + ' te falta completar checkpoints! (' + r.nextCp + '/' + CHECKPOINTS.length + ')',
-                        p.id, 0xFF0000, 'bold'
-                    );
-                }
-            }
-        }
-
-        // ── Detección de CHECKPOINTS ────────────────────
-        if (r.startTime && !r.finished && r.nextCp < CHECKPOINTS.length) {
+        // ── Checkpoints ─────────────────────────────────
+        if (r.nextCp < CHECKPOINTS.length) {
             var cp = CHECKPOINTS[r.nextCp];
             if (dist2d(cx, cy, cp.x, cp.y) <= cp.r) {
                 r.nextCp++;
-                var progress = r.nextCp + '/' + CHECKPOINTS.length;
-                try { room.setPlayerAvatar(p.id, r.nextCp >= CHECKPOINTS.length ? '⚡' : r.nextCp.toString()); } catch(e) {}
+                var cpNum = r.nextCp;
+                var total = CHECKPOINTS.length;
 
-                if (r.nextCp >= CHECKPOINTS.length) {
-                    room.sendAnnouncement('✅ ' + p.name + ' ¡Todos los CPs! Vuelve a la META!', null, 0x00FF00, 'bold');
+                if (cpNum >= total) {
+                    // Todos los CPs completos
+                    try { room.setPlayerAvatar(p.id, '⚡'); } catch(e) {}
+                    room.sendAnnouncement('✅ ' + p.name + ' ¡Todos los CPs! ¡Ve a la META!', null, 0x00FF00, 'bold');
                 } else {
-                    // Solo anuncio cada 3 CPs para no saturar el chat
-                    if (r.nextCp % 3 === 0) {
-                        room.sendAnnouncement('📍 ' + p.name + ': ' + progress, null, 0xAAAAAA);
+                    try { room.setPlayerAvatar(p.id, cpNum.toString()); } catch(e) {}
+                    if (cpNum % 3 === 0) {
+                        room.sendAnnouncement('📍 ' + p.name + ': CP ' + cpNum + '/' + total, null, 0xAAAAAA);
                     }
                 }
             }
         }
 
+        // ── Detección de META (cruzar al NORTE, y decrece, después de todos los CPs) ──
+        if (r.nextCp >= CHECKPOINTS.length) {
+            if (cx >= FINISH_XMIN && cx <= FINISH_XMAX && prevY > FINISH_Y && cy <= FINISH_Y) {
+                r.finished   = true;
+                r.finishTime = now;
+                var elapsed  = now - r.startTime;
+                var pos2     = gameState.rankings.length + 1;
+                var medal    = pos2 === 1 ? '🥇' : pos2 === 2 ? '🥈' : pos2 === 3 ? '🥉' : pos2 + '.';
+
+                gameState.rankings.push({ id: p.id, name: p.name, time: elapsed, auth: r.auth });
+
+                room.sendAnnouncement(
+                    medal + ' ' + p.name.toUpperCase() + ' TERMINA! ⏱️ ' + formatTime(elapsed),
+                    null, pos2 === 1 ? 0xFFD700 : 0x00BFFF, 'bold', 2
+                );
+                try { room.setPlayerAvatar(p.id, medal); } catch(e) {}
+
+                if (pos2 === 1) {
+                    setTimeout(function() { if (gameState.active) endRace(room, gameState.rankings[0]); }, 20000);
+                }
+
+                var unfinished = Object.keys(gameState.racers).filter(function(id) {
+                    return !gameState.racers[id].finished;
+                });
+                if (unfinished.length === 0) { endRace(room, gameState.rankings[0]); }
+            }
+        }
+
+        r.lastX = cx;
         r.lastY = cy;
     });
 }
 
-// ──────────────────────────────────────────
-// Helpers internos
-// ──────────────────────────────────────────
-function buildRankings(room) {
-    var all = Object.keys(gameState.racers).map(function(id) {
+function buildRankings() {
+    return Object.keys(gameState.racers).map(function(id) {
         return gameState.racers[id];
-    });
-    return all.sort(function(a, b) {
+    }).sort(function(a, b) {
         if (a.finished && !b.finished) return -1;
         if (!a.finished && b.finished) return 1;
         if (a.finished && b.finished) return a.finishTime - b.finishTime;
-        // Por progreso de CPs
         return b.nextCp - a.nextCp;
     });
 }
@@ -269,11 +247,9 @@ function endRace(room, winner) {
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
     if (gameState.gameTimer)     { clearTimeout(gameState.gameTimer);     gameState.gameTimer = null; }
 
-    // Limpiar avatars
     var all = room.getPlayerList().filter(function(p) { return p.id !== 0; });
     all.forEach(function(p) { try { room.setPlayerAvatar(p.id, null); } catch(e) {} });
 
-    // Mostrar podio final si hay más de 1 clasificado
     if (gameState.rankings.length > 1) {
         var podio = '\n🏆 PODIO FINAL:\n';
         gameState.rankings.slice(0, 5).forEach(function(r, i) {
@@ -285,9 +261,7 @@ function endRace(room, winner) {
 
     setTimeout(function() {
         try { room.stopGame(); } catch(e) {}
-        if (gameState.callback) {
-            gameState.callback(winner || null);
-        }
+        if (gameState.callback) { gameState.callback(winner || null); }
     }, 3000);
 }
 
@@ -301,14 +275,11 @@ function stop(room) {
 }
 
 function onPlayerLeave(room, player) {
-    if (!gameState.active) return;
-    if (!gameState.racers[player.id]) return;
-
+    if (!gameState.active || !gameState.racers[player.id]) return;
     delete gameState.racers[player.id];
     room.sendAnnouncement('❌ ' + player.name + ' abandonó la carrera', null, 0xFF6600);
-
     var remaining = Object.keys(gameState.racers).filter(function(id) {
-        return gameState.racers[id].startTime && !gameState.racers[id].finished;
+        return !gameState.racers[id].finished;
     });
     if (remaining.length === 0 && gameState.rankings.length > 0) {
         endRace(room, gameState.rankings[0]);
@@ -320,11 +291,11 @@ function isActive()  { return gameState.active; }
 function getStats()  { return {}; }
 
 module.exports = {
-    start:        start,
-    stop:         stop,
-    isActive:     isActive,
+    start:         start,
+    stop:          stop,
+    isActive:      isActive,
     onPlayerLeave: onPlayerLeave,
-    onPlayerChat: onPlayerChat,
-    getStats:     getStats,
-    setMapData:   function(d) { mapData = d; }
+    onPlayerChat:  onPlayerChat,
+    getStats:      getStats,
+    setMapData:    function(d) { mapData = d; }
 };
