@@ -196,9 +196,9 @@ function checkRace(room) {
             }
         }
 
-        // ── Detección de META (cruzar al NORTE, y decrece, después de todos los CPs) ──
+        // ── Detección de META (entrar al túnel = cruzar al SUR, y aumenta, después de todos los CPs) ──
         if (r.nextCp >= CHECKPOINTS.length) {
-            if (cx >= FINISH_XMIN && cx <= FINISH_XMAX && prevY > FINISH_Y && cy <= FINISH_Y) {
+            if (cx >= FINISH_XMIN && cx <= FINISH_XMAX && prevY < FINISH_Y && cy >= FINISH_Y) {
                 r.finished   = true;
                 r.finishTime = now;
                 var elapsed  = now - r.startTime;
