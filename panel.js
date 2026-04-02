@@ -170,7 +170,35 @@ async function exposeDbFunctions(page) {
             return await db.loadDailyRewards();
         });
         await page.exposeFunction('__sendMonthlyStats', async () => {
-            return 'OK';
+            try {
+                const report = await db.getMonthlyReport();
+                if (report) {
+                    const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+                    const now = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+                    let msg = '📊 **REPORTE MENSUAL — ' + now.toUpperCase() + '**\n\n';
+                    msg += '🏆 **TOP 5 GANADORES:**\n';
+                    if (report.topWins && report.topWins.length > 0) {
+                        report.topWins.forEach((p, i) => { msg += (medals[i] || (i+1)+'.') + ' **' + (p.name||'?') + '** — ' + (p.wins||0) + ' wins\n'; });
+                    } else { msg += '_Sin datos_\n'; }
+                    msg += '\n💰 **TOP 5 MÁS RICOS:**\n';
+                    if (report.topRich && report.topRich.length > 0) {
+                        report.topRich.forEach((p, i) => { msg += (medals[i] || (i+1)+'.') + ' **' + (p.name||'?') + '** — $' + (p.balance||0).toLocaleString() + '\n'; });
+                    } else { msg += '_Sin datos_\n'; }
+                    const webhookUrl = 'https://discord.com/api/webhooks/1477693022148886540/ojM5ATpO2A6F_sny-AknN-KKuJTLaDwmQ1H_e0l-R9ocb48zzuZC38ryiDlDa68FKwR8';
+                    const resp = await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: msg })
+                    });
+                    console.log('[STATS] Reporte enviado a Discord:', resp.status);
+                }
+                await db.resetMonthlyWins();
+                console.log('[STATS] Stats mensuales reseteadas');
+                return 'OK';
+            } catch(e) {
+                console.error('[STATS] Error:', e.message);
+                throw e;
+            }
         });
         await page.exposeFunction('__dbResetMonthlyWins', async () => {
             await db.resetMonthlyWins();
@@ -191,7 +219,25 @@ async function exposeDbFunctions(page) {
             });
         }
         // Discord webhook
+        const DISCORD_WEBHOOKS = {
+            calladmin: 'https://discord.com/api/webhooks/1474239767452582111/4yh70-ixJH5MxtRc5r0oCVSFqL8IyMQw1BnNd94_VlnC_2OKFiPLSn7ttI0nwR8lMrO_',
+            reportes:  'https://discord.com/api/webhooks/1474240910459011143/MYAaiXpGD-S9yjPe_JEF7VcZxa_7SAlLHDTukt0aB6kOvdaHh9LxvWww0DoYd0RSke97',
+            tokens:    'https://discord.com/api/webhooks/1474240022461943862/-ETrQZuogk-52LRh_f6j1TvstlPqnt-Uf4NfVH4GUoNrz7XpfdyUM0lAjSF97PZHLa2m',
+            chatlog:   'https://discord.com/api/webhooks/1475216935850475560/tzzFhOdHCgUwBZoy0vE_Vde9BErDbCB0OmX_jbEvj24_dmeEtdemz16TtoGWYwx2taKu',
+            replays:   'https://discord.com/api/webhooks/1475321739591549091/OdpkhWdvgD-psJISt5r0YjE51W2wuwV7uAo_ab6RigjmwNAeStN09eii3_fKNat-qdmn',
+            stats:     'https://discord.com/api/webhooks/1477693022148886540/ojM5ATpO2A6F_sny-AknN-KKuJTLaDwmQ1H_e0l-R9ocb48zzuZC38ryiDlDa68FKwR8',
+            bugs:      'https://discord.com/api/webhooks/1474240910459011143/MYAaiXpGD-S9yjPe_JEF7VcZxa_7SAlLHDTukt0aB6kOvdaHh9LxvWww0DoYd0RSke97'
+        };
         await page.exposeFunction('__discordWebhook', async (type, content) => {
+            const url = DISCORD_WEBHOOKS[type];
+            if (!url) return 'OK';
+            try {
+                await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: content })
+                });
+            } catch(e) { console.error('[DISCORD] Error webhook ' + type + ':', e.message); }
             return 'OK';
         });
         await page.exposeFunction('__sendReplay', async (replayArray, gameName) => {
