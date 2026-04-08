@@ -99,7 +99,8 @@ function checkPlayers(room, onGameEnd) {
         }
 
         var pos = player.position;
-        if (!pos) return;
+        // Sin posicion = jugador sin equipo/espectador, no cuenta como vivo ni eliminado
+        if (!pos) { alivePlayers.push(p); return; }
 
         var eliminated = false;
         var reason = '';

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const puppeteer = require('puppeteer');
 const path = require('path');
@@ -65,8 +66,11 @@ function loadBotScriptForSala(salaConfig, token) {
     var scriptDir = path.dirname(scriptPath);
     var debugPath = path.join(scriptDir, 'debug-script.js');
 
-    if (!fs.existsSync(debugPath)) {
-        if (!generateScriptForSala(salaConfig)) return null;
+    // Siempre regenerar para asegurar que usa los archivos actualizados
+    if (!generateScriptForSala(salaConfig)) {
+        // Si falla regenerar pero existe el viejo, usarlo como fallback
+        if (!fs.existsSync(debugPath)) return null;
+        console.log('Usando debug-script.js existente como fallback');
     }
     var script = fs.readFileSync(debugPath, 'utf8');
     // Reemplazar token por el nuevo
@@ -77,10 +81,23 @@ function loadBotScriptForSala(salaConfig, token) {
 async function initBrowser() {
     if (!browser || !browser.isConnected()) {
         console.log('Iniciando Chrome compartido...');
-        browser = await puppeteer.launch({
+        const launchOptions = {
             headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-        });
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--single-process',
+                '--no-zygote'
+            ]
+        };
+        // En Railway/Docker el ejecutable puede estar en una ruta distinta
+        if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+            launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+        }
+        browser = await puppeteer.launch(launchOptions);
         console.log('Chrome iniciado');
     }
     return browser;
@@ -169,28 +186,51 @@ async function exposeDbFunctions(page) {
         await page.exposeFunction('__dbLoadDailyRewards', async () => {
             return await db.loadDailyRewards();
         });
-        await page.exposeFunction('__sendMonthlyStats', async () => {
+        await page.exposeFunction('__sendMonthlyStats', async (creatorAuthsJson) => {
             try {
-                const report = await db.getMonthlyReport();
+                const creatorAuths = creatorAuthsJson ? JSON.parse(creatorAuthsJson) : [];
+                const report = await db.getMonthlyReport(creatorAuths);
                 if (report) {
                     const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
                     const now = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-                    let msg = '📊 **REPORTE MENSUAL — ' + now.toUpperCase() + '**\n\n';
-                    msg += '🏆 **TOP 5 GANADORES:**\n';
-                    if (report.topWins && report.topWins.length > 0) {
-                        report.topWins.forEach((p, i) => { msg += (medals[i] || (i+1)+'.') + ' **' + (p.name||'?') + '** — ' + (p.wins||0) + ' wins\n'; });
-                    } else { msg += '_Sin datos_\n'; }
-                    msg += '\n💰 **TOP 5 MÁS RICOS:**\n';
-                    if (report.topRich && report.topRich.length > 0) {
-                        report.topRich.forEach((p, i) => { msg += (medals[i] || (i+1)+'.') + ' **' + (p.name||'?') + '** — $' + (p.balance||0).toLocaleString() + '\n'; });
-                    } else { msg += '_Sin datos_\n'; }
                     const webhookUrl = 'https://discord.com/api/webhooks/1477693022148886540/ojM5ATpO2A6F_sny-AknN-KKuJTLaDwmQ1H_e0l-R9ocb48zzuZC38ryiDlDa68FKwR8';
-                    const resp = await fetch(webhookUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ content: msg })
-                    });
-                    console.log('[STATS] Reporte enviado a Discord:', resp.status);
+
+                    const sendMsg = async (content) => {
+                        await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+                    };
+
+                    // Mensaje 1: header + ganadores + ricos + racha
+                    let msg1 = '📊 **REPORTE MENSUAL — ' + now.toUpperCase() + '**\n\n';
+                    msg1 += '🏆 **TOP 5 GANADORES:**\n';
+                    if (report.topWins && report.topWins.length > 0) {
+                        report.topWins.forEach((p, i) => { msg1 += (medals[i]||i+1+'.') + ' **' + (p.name||'?') + '** — ' + (p.wins||0) + ' wins\n'; });
+                    } else { msg1 += '_Sin datos_\n'; }
+                    msg1 += '\n💰 **TOP 5 MÁS RICOS:**\n';
+                    if (report.topRich && report.topRich.length > 0) {
+                        report.topRich.forEach((p, i) => { msg1 += (medals[i]||i+1+'.') + ' **' + (p.name||'?') + '** — $' + (p.balance||0).toLocaleString() + '\n'; });
+                    } else { msg1 += '_Sin datos_\n'; }
+                    msg1 += '\n🔥 **TOP 5 MEJOR RACHA:**\n';
+                    if (report.topStreak && report.topStreak.length > 0) {
+                        report.topStreak.forEach((p, i) => { msg1 += (medals[i]||i+1+'.') + ' **' + (p.name||'?') + '** — ' + (p.bestStreak||0) + ' racha\n'; });
+                    } else { msg1 += '_Sin datos_\n'; }
+                    await sendMsg(msg1);
+
+                    // Mensaje 2: geis + kicks + bans
+                    let msg2 = '🏳️‍🌈 **TOP 5 MÁS GEIS:**\n';
+                    if (report.topGeis && report.topGeis.length > 0) {
+                        report.topGeis.forEach((p, i) => { msg2 += (medals[i]||i+1+'.') + ' **' + (p.name||'?') + '** — ' + (p.gayCount||0) + ' veces\n'; });
+                    } else { msg2 += '_Sin datos_\n'; }
+                    msg2 += '\n👟 **TOP 5 MÁS KICKEADOS:**\n';
+                    if (report.topKick && report.topKick.length > 0) {
+                        report.topKick.forEach((p, i) => { msg2 += (medals[i]||i+1+'.') + ' **' + (p.name||'?') + '** — ' + (p.kickCount||0) + ' kicks\n'; });
+                    } else { msg2 += '_Sin datos_\n'; }
+                    msg2 += '\n🔨 **TOP 5 MÁS BANEADOS:**\n';
+                    if (report.topBan && report.topBan.length > 0) {
+                        report.topBan.forEach((p, i) => { msg2 += (medals[i]||i+1+'.') + ' **' + (p.name||'?') + '** — ' + (p.banCount||0) + ' bans\n'; });
+                    } else { msg2 += '_Sin datos_\n'; }
+                    await sendMsg(msg2);
+
+                    console.log('[STATS] Reporte enviado a Discord (2 mensajes)');
                 }
                 await db.resetMonthlyWins();
                 console.log('[STATS] Stats mensuales reseteadas');
@@ -320,11 +360,29 @@ async function startSala(salaId, token) {
             addLog(s, text);
 
             if (text.includes('haxball.com/play')) {
-                const match = text.match(/(https:\/\/www\.haxball\.com\/play\?c=[A-Za-z0-9]+)/);
+                const match = text.match(/(https:\/\/www\.haxball\.com\/play\?c=[A-Za-z0-9]+(?:&p=\d+)?)/);
                 if (match) s.link = match[1];
             }
         } catch(e) {}
     });
+
+    // Capturar errores JS del navegador (errores de sintaxis, excepciones, etc.)
+    page.on('pageerror', err => {
+        const msg = '❌ ERROR JS: ' + (err && err.message ? err.message : String(err));
+        addLog(s, msg, true);
+    });
+
+    // Verificar sintaxis del script antes de inyectar
+    try {
+        new Function(script);
+    } catch(syntaxErr) {
+        const msg = '❌ ERROR DE SINTAXIS en el script: ' + syntaxErr.message;
+        addLog(s, msg, true);
+        await page.close();
+        s.page = null;
+        s.status = 'stopped';
+        throw new Error(msg);
+    }
 
     // Inyectar script
     addLog(s, 'Inyectando script...');

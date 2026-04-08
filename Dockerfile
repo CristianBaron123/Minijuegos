@@ -1,10 +1,9 @@
 FROM node:20-slim
 
-# Dependencias de Chrome en Linux
+# Dependencias del sistema para Chromium (Puppeteer)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     fonts-liberation \
-    libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
     libcairo2 \
@@ -38,7 +37,9 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-ENV HEADLESS=true
+# Variables de entorno para Puppeteer headless en Linux
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+ENV PUPPETEER_EXECUTABLE_PATH=""
 ENV NODE_ENV=production
 
 WORKDIR /app
@@ -50,7 +51,7 @@ RUN npm ci --omit=dev
 # Copiar el resto del proyecto
 COPY . .
 
-# Usar configuración solo con sala Minijuegos
+# Usar configuración de Railway (solo sala Minijuegos, sin Buho)
 RUN cp sala-config.railway.json sala-config.json
 
 EXPOSE 3000
