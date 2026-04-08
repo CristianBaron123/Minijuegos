@@ -3,6 +3,11 @@ node_modules
 .env
 *.log
 Mapasbeta
-Numberchair
 debug-script.js
 bot-test.js
+test-inject.js
+test-output.js
+check_syntax.js
+CLAUDE.md
+README.md
+squidgames

@@ -43,7 +43,9 @@ var gameState = {
     callback: null,
     stopRequested: false,
     warningTimeouts: [],  // timeouts de avisos de tiempo
-    currentNumChairs: 0   // sillas del mapa actual
+    currentNumChairs: 0,  // sillas del mapa actual
+    currentChairs: [],    // coordenadas de sillas del mapa actual
+    roundId: 0            // id de la ronda actual (para invalidar closures viejos)
 };
 
 var config = {
@@ -164,7 +166,13 @@ function startRound(room, mapVersion) {
     var chairs = chairPositions[actualVersion];
     if (!chairs) { finishGame(room); return; }
 
-    // Cargar nuevo mapa si cambio de version
+    // Guardar chairs y roundId en gameState (no en closure)
+    gameState.currentChairs = chairs;
+    gameState.currentNumChairs = chairs.length;
+    gameState.roundId++;
+    var thisRoundId = gameState.roundId;
+
+    // Cargar nuevo mapa
     try { room.stopGame(); } catch(e){}
     try { room.setCustomStadium(allMaps[actualVersion]); } catch(e) {
         console.error('[NUMBERCHAIRS] Error cargando mapa v' + actualVersion);
@@ -172,11 +180,22 @@ function startRound(room, mapVersion) {
         return;
     }
 
-    // Poner jugadores en equipos, eliminados a espectador
-    for (var ei = 0; ei < gameState.eliminated.length; ei++) {
-        try { room.setPlayerTeam(gameState.eliminated[ei].id, 0); } catch(e){}
+    // Primero: TODOS a espectador
+    var allP = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    allP.forEach(function(p) { try { room.setPlayerTeam(p.id, 0); } catch(e){} });
+
+    // Luego: solo los vivos del gameState a equipos alternados
+    var aliveIds = {};
+    for (var ai = 0; ai < gameState.players.length; ai++) {
+        aliveIds[gameState.players[ai].id] = true;
     }
-    shuffleTeams(room);
+    var teamIdx = 0;
+    allP.forEach(function(p) {
+        if (aliveIds[p.id]) {
+            try { room.setPlayerTeam(p.id, (teamIdx % 2 === 0) ? 1 : 2); } catch(e){}
+            teamIdx++;
+        }
+    });
 
     try { room.startGame(); } catch(e){}
 
@@ -184,7 +203,6 @@ function startRound(room, mapVersion) {
     gameState.occupiedChairs = {};
 
     var numChairs = chairs.length;
-    gameState.currentNumChairs = numChairs;
     var numPlayers = gameState.players.length;
     var toEliminate = numPlayers - numChairs;
     if (toEliminate < 1) toEliminate = 1;
@@ -197,36 +215,37 @@ function startRound(room, mapVersion) {
     // Grace period de 3s antes de empezar a detectar posiciones
     if (gameState.checkInterval) clearInterval(gameState.checkInterval);
     setTimeout(function() {
-        if (!gameState.active) return;
+        if (!gameState.active || gameState.roundId !== thisRoundId) return;
         gameState.timers = {};
         gameState.occupiedChairs = {};
         room.sendAnnouncement('🟢 Busquen una silla!', null, 0x00FF00, 'bold', 2);
         gameState.checkInterval = setInterval(function() {
-            checkPlayersInChairs(room, chairs, numChairs);
+            if (gameState.roundId !== thisRoundId) { clearInterval(gameState.checkInterval); return; }
+            checkPlayersInChairs(room, gameState.currentChairs, gameState.currentNumChairs);
         }, config.checkIntervalMs);
     }, 3000);
 
-    // Avisos de tiempo (se guardan para limpiar entre rondas)
+    // Avisos de tiempo
     gameState.warningTimeouts.push(setTimeout(function() {
-        if (!gameState.active) return;
+        if (!gameState.active || gameState.roundId !== thisRoundId) return;
         room.sendAnnouncement('⏰ Quedan 30 segundos!', null, 0xFFFF00, 'bold');
     }, 3000 + config.roundTimeMs - 30000));
 
     gameState.warningTimeouts.push(setTimeout(function() {
-        if (!gameState.active) return;
+        if (!gameState.active || gameState.roundId !== thisRoundId) return;
         room.sendAnnouncement('⏰ Quedan 15 segundos!', null, 0xFF6600, 'bold');
     }, 3000 + config.roundTimeMs - 15000));
 
     gameState.warningTimeouts.push(setTimeout(function() {
-        if (!gameState.active) return;
+        if (!gameState.active || gameState.roundId !== thisRoundId) return;
         room.sendAnnouncement('⏰ Quedan 5 segundos!', null, 0xFF0000, 'bold');
     }, 3000 + config.roundTimeMs - 5000));
 
     // Timeout de la ronda (60s + 3s grace)
     if (gameState.roundTimeout) clearTimeout(gameState.roundTimeout);
     gameState.roundTimeout = setTimeout(function() {
-        if (!gameState.active) return;
-        endRound(room, chairs, numChairs);
+        if (!gameState.active || gameState.roundId !== thisRoundId) return;
+        endRound(room, gameState.currentChairs, gameState.currentNumChairs);
     }, config.roundTimeMs + 3000);
 }
 

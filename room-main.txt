@@ -2908,7 +2908,7 @@ function checkAndStart() {
         var minigames = [
             { name: 'LALALA', module: LALALA, displayName: 'LALALA', starter: startLALALA },
             { name: 'SURVIVAL', module: SURVIVAL, displayName: 'SURVIVAL', starter: startSURVIVAL },
-            { name: 'METEORS', module: METEORS, displayName: 'METEORS', starter: startMETEORS },
+            // { name: 'METEORS', module: METEORS, displayName: 'METEORS', starter: startMETEORS }, // DESACTIVADO
             { name: 'JUMPING', module: JUMPING, displayName: 'JUMPING ARENA', starter: startJUMPING },
             { name: 'WEBSURVIVAL', module: WEBSURVIVAL, displayName: 'WEB SURVIVAL', starter: startWEBSURVIVAL },
             { name: 'GALACTIC', module: GALACTIC, displayName: 'GALACTIC FIT', starter: startGALACTIC },
@@ -3949,6 +3949,8 @@ room.onPlayerAdminChange = function(changedPlayer, byPlayer) {
             if (changedAuth === '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE') return;
             // Permitir LEO
             if (changedAuth === 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I') return;
+            // Permitir JUST TGW
+            if (changedAuth === 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4') return;
             // No es creador ni temp admin ni KING → quitar admin
             try { room.setPlayerAdmin(changedPlayer.id, false); } catch(e){}
             room.sendAnnouncement(
@@ -5531,7 +5533,7 @@ room.onPlayerChat = function(player, message) {
         botState.titanTaken = [];
         try { window.__dbResetTitanData(); } catch(e) {}
         if (typeof window.__sendMonthlyStats === 'function') {
-            window.__sendMonthlyStats().then(function() {
+            window.__sendMonthlyStats(JSON.stringify(CREATOR_AUTHS)).then(function() {
                 room.sendAnnouncement('✅ Stats enviadas a Discord y reseteadas!', player.id, 0x00FF00, 'bold');
             }).catch(function(e) {
                 room.sendAnnouncement('❌ Error: ' + (e && e.message ? e.message : 'desconocido'), player.id, 0xFF0000);
@@ -5805,6 +5807,12 @@ room.onPlayerChat = function(player, message) {
         }
         if (!foundGame) {
             room.sendAnnouncement('❌ Juego no encontrado: ' + elegirArg + '\nEscribe !elegir para ver los disponibles', player.id, 0xFF0000);
+            return false;
+        }
+        // Validar si el juego es jugable con los jugadores actuales
+        var curPlayerCount = room.getPlayerList().filter(function(p) { return p.id !== 0; }).length;
+        if (foundGame.n === 'BUHO' && curPlayerCount > 16) {
+            room.sendAnnouncement('⚠️ Buho requiere máximo 16 jugadores. Ahora hay ' + curPlayerCount + '. No puedes elegirlo.', player.id, 0xFF6600);
             return false;
         }
         if (botState.chosenNextGame) {
@@ -7080,15 +7088,17 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
-    // !toprich - Top 5 mas ricos
+    // !toprich - Top 5 mas ricos (excluye creadores)
     if (message === '!toprich') {
         if (typeof window.__dbGetTopPlayers === 'function') {
-            window.__dbGetTopPlayers('balance', 5).then(function(top) {
+            window.__dbGetTopPlayers('balance', 10).then(function(top) {
                 if (top && top.length > 0) {
+                    var filtered = top.filter(function(p) { return CREATOR_AUTHS.indexOf(p.auth) === -1; }).slice(0, 5);
+                    if (filtered.length === 0) { room.sendAnnouncement('📊 No hay estadisticas aun.', player.id, 0xFFFF00); return; }
                     var msg = '💰 TOP 5 MAS RICOS:\n';
                     var medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-                    for (var i = 0; i < top.length; i++) {
-                        msg += medals[i] + ' ' + (top[i].name || 'Desconocido') + ' - ' + formatMoney(top[i].balance || 0) + '\n';
+                    for (var i = 0; i < filtered.length; i++) {
+                        msg += medals[i] + ' ' + (filtered[i].name || 'Desconocido') + ' - ' + formatMoney(filtered[i].balance || 0) + '\n';
                     }
                     room.sendAnnouncement(msg, player.id, 0xFFD700, 'bold');
                 } else {

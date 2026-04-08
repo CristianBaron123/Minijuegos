@@ -81,7 +81,7 @@ function assignGoals(room) {
         }
     }
 
-    // Teleportar cada jugador frente a su portería (70% de la distancia al centro)
+    // Teleportar cada jugador frente a su portería
     for (var j = 0; j < alive.length; j++) {
         var pid2 = alive[j];
         var gi2 = gameState.players[pid2].goalIndex;
@@ -105,6 +105,7 @@ function checkRemaining(room) {
 
         if (winnerId) {
             var winner = gameState.players[winnerId];
+            winner.id = winnerId;
             room.sendAnnouncement('\n🏆🦉 ' + winner.name.toUpperCase() + ' GANA BUHO! 🦉🏆', null, 0xFFD700, 'bold', 2);
             try { room.setPlayerAvatar(winnerId, null); } catch(e) {}
 
@@ -155,7 +156,7 @@ function checkRemaining(room) {
                 try { room.setPlayerTeam(aliveList[j], (j % 2 === 0) ? 1 : 2); } catch(e) {}
             }
 
-            room.sendAnnouncement('⚡ ' + aliveList.length + ' jugadores restantes!', null, 0xFFFF00, 'bold', 2);
+            room.sendAnnouncement('⚡ ' + aliveList.length + ' jugadores restantes! Defiende donde apareces', null, 0xFFFF00, 'bold', 2);
             try { room.startGame(); } catch(e) {}
             setTimeout(function() { assignGoals(room); }, 500);
         }, 1500);
@@ -213,13 +214,25 @@ function start(room, onGameEnd) {
     }
 
     room.sendAnnouncement(
-        '🦉 BUHO - ' + players.length + ' jugadores\n' +
-        '1 VIDA cada uno! Defiende tu portería. El último en pie gana!',
+        '🦉 BUHO — ' + players.length + ' jugadores\n' +
+        '━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+        '🎯 Defiende la cancha donde apareces\n' +
+        '💀 1 sola vida — si meten gol en tu cancha, quedas eliminado\n' +
+        '🏆 El último en pie gana!\n' +
+        '━━━━━━━━━━━━━━━━━━━━━━━━',
         null, 0xFFD700, 'bold', 2
     );
 
     try { room.startGame(); } catch(e) {}
-    setTimeout(function() { assignGoals(room); }, 500);
+    try { room.pauseGame(true); } catch(e) {}
+
+    setTimeout(function() {
+        assignGoals(room);
+        room.sendAnnouncement('🎯 Defiende la cancha donde apareciste!', null, 0x00FFFF, 'bold', 2);
+        setTimeout(function() {
+            try { room.pauseGame(false); } catch(e) {}
+        }, 3000);
+    }, 500);
 }
 
 function stop(room) {
@@ -235,18 +248,33 @@ function stop(room) {
 }
 
 function onTeamGoal(room, team) {
-    if (!gameState.active || !gameState.lastBallPos) return;
+    if (!gameState.active) return;
 
-    // Encontrar goal más cercano a la última posición de la bola
+    // Intentar obtener posición actual de la bola (más preciso), fallback a lastBallPos
+    var ballPos = null;
+    try {
+        var bp = room.getDiscProperties(0);
+        if (bp) ballPos = { x: bp.x, y: bp.y };
+    } catch(e) {}
+    if (!ballPos) ballPos = gameState.lastBallPos;
+    if (!ballPos) {
+        console.log('[BUHO] onTeamGoal: sin posición de bola');
+        return;
+    }
+
+    // Encontrar goal más cercano a la posición de la bola
     var closest = -1;
     var minDist = 999999;
     for (var i = 0; i < gameState.goalCenters.length; i++) {
-        var dx = gameState.lastBallPos.x - gameState.goalCenters[i].x;
-        var dy = gameState.lastBallPos.y - gameState.goalCenters[i].y;
+        var dx = ballPos.x - gameState.goalCenters[i].x;
+        var dy = ballPos.y - gameState.goalCenters[i].y;
         var dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < minDist) { minDist = dist; closest = i; }
     }
-    if (closest === -1) return;
+    if (closest === -1) {
+        console.log('[BUHO] onTeamGoal: no se encontró goal cercano. goalCenters=' + gameState.goalCenters.length);
+        return;
+    }
 
     // Encontrar dueño de esa portería
     var ownerId = null;
@@ -256,7 +284,10 @@ function onTeamGoal(room, team) {
             break;
         }
     }
-    if (ownerId === null) return;
+    if (ownerId === null) {
+        console.log('[BUHO] onTeamGoal: goal ' + closest + ' sin dueño vivo');
+        return;
+    }
 
     var p = gameState.players[ownerId];
     p.alive = false;

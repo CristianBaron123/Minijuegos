@@ -260,22 +260,21 @@ async function resetMonthlyWins() {
     }
 }
 
-async function getMonthlyReport() {
+async function getMonthlyReport(creatorAuths) {
     if (!db) return null;
     try {
-        var topWins = await db.collection('players')
-            .find({ wins: { $gt: 0 } })
-            .sort({ wins: -1 })
-            .limit(5)
-            .toArray();
+        var richFilter = (creatorAuths && creatorAuths.length > 0)
+            ? { balance: { $gt: 0 }, auth: { $nin: creatorAuths } }
+            : { balance: { $gt: 0 } };
 
-        var topRich = await db.collection('players')
-            .find({ balance: { $gt: 0 } })
-            .sort({ balance: -1 })
-            .limit(5)
-            .toArray();
+        var topWins = await db.collection('players').find({ wins: { $gt: 0 } }).sort({ wins: -1 }).limit(5).toArray();
+        var topRich = await db.collection('players').find(richFilter).sort({ balance: -1 }).limit(5).toArray();
+        var topStreak = await db.collection('players').find({ bestStreak: { $gt: 0 } }).sort({ bestStreak: -1 }).limit(5).toArray();
+        var topGeis = await db.collection('players').find({ gayCount: { $gt: 0 } }).sort({ gayCount: -1 }).limit(5).toArray();
+        var topKick = await db.collection('players').find({ kickCount: { $gt: 0 } }).sort({ kickCount: -1 }).limit(5).toArray();
+        var topBan = await db.collection('players').find({ banCount: { $gt: 0 } }).sort({ banCount: -1 }).limit(5).toArray();
 
-        return { topWins: topWins, topRich: topRich };
+        return { topWins, topRich, topStreak, topGeis, topKick, topBan };
     } catch(e) {
         console.error('❌ DB getMonthlyReport error:', e.message);
         return null;

@@ -4,7 +4,6 @@ builder = "dockerfile"
 [deploy]
 startCommand = "node panel.js"
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
-
-[[services]]
-internalPort = 3000
+restartPolicyMaxRetries = 10
+healthcheckPath = "/api/status"
+healthcheckTimeout = 30

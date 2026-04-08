@@ -21,10 +21,10 @@ var CHECKPOINTS = [
     { x:  665, y:  599, r: 120, name: 'CP9' },  // Sureste
 ];
 
-// Finish: y=420, x entre -150 y 500, cruzar yendo al NORTE (y decrece)
-var FINISH_Y    = 420;
-var FINISH_XMIN = -200;
-var FINISH_XMAX = 550;
+// Finish: entrar al túnel desde la derecha (x decrece pasando 450) con y entre 480 y 620
+var FINISH_X     = 450;
+var FINISH_YMIN  = 480;
+var FINISH_YMAX  = 620;
 
 var gameState = {
     active:        false,
@@ -173,7 +173,6 @@ function checkRace(room) {
 
         var cx = pos.x;
         var cy = pos.y;
-        var prevY = r.lastY;
 
         // ── Checkpoints ─────────────────────────────────
         if (r.nextCp < CHECKPOINTS.length) {
@@ -196,9 +195,10 @@ function checkRace(room) {
             }
         }
 
-        // ── Detección de META (entrar al túnel = cruzar al SUR, y aumenta, después de todos los CPs) ──
+        // ── Detección de META: vienen del CP9 (x=665) hacia la izquierda, entran al túnel cruzando x=450 ──
+        var prevX = r.lastX;
         if (r.nextCp >= CHECKPOINTS.length) {
-            if (cx >= FINISH_XMIN && cx <= FINISH_XMAX && prevY < FINISH_Y && cy >= FINISH_Y) {
+            if (cy >= FINISH_YMIN && cy <= FINISH_YMAX && prevX > FINISH_X && cx <= FINISH_X) {
                 r.finished   = true;
                 r.finishTime = now;
                 var elapsed  = now - r.startTime;
@@ -247,9 +247,6 @@ function endRace(room, winner) {
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
     if (gameState.gameTimer)     { clearTimeout(gameState.gameTimer);     gameState.gameTimer = null; }
 
-    var all = room.getPlayerList().filter(function(p) { return p.id !== 0; });
-    all.forEach(function(p) { try { room.setPlayerAvatar(p.id, null); } catch(e) {} });
-
     if (gameState.rankings.length > 1) {
         var podio = '\n🏆 PODIO FINAL:\n';
         gameState.rankings.slice(0, 5).forEach(function(r, i) {
@@ -260,7 +257,16 @@ function endRace(room, winner) {
     }
 
     setTimeout(function() {
+        var all = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+        all.forEach(function(p) { try { room.setPlayerAvatar(p.id, null); } catch(e) {} });
         try { room.stopGame(); } catch(e) {}
+        // Asegurar que el ganador esté en team 1 para que loadLuckyMap no lo anule
+        if (winner && winner.id) {
+            try {
+                var w = room.getPlayer(winner.id);
+                if (w && w.team === 0) { room.setPlayerTeam(winner.id, 1); }
+            } catch(e) {}
+        }
         if (gameState.callback) { gameState.callback(winner || null); }
     }, 3000);
 }
