@@ -95,7 +95,17 @@ async function initBrowser() {
                 '--disable-background-networking',
                 '--disable-default-apps',
                 '--mute-audio',
-                '--no-first-run'
+                '--no-first-run',
+                '--js-flags=--max-old-space-size=256',
+                '--renderer-process-limit=1',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-background-timer-throttling',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-sync',
+                '--disable-translate',
+                '--metrics-recording-only',
+                '--safebrowsing-disable-auto-update'
             ]
         };
         // En Railway/Docker el ejecutable puede estar en una ruta distinta
