@@ -82,21 +82,27 @@ async function initBrowser() {
     if (!browser || !browser.isConnected()) {
         console.log('Iniciando Chrome compartido...');
         const launchOptions = {
-            headless: 'new',
+            headless: true,
+            timeout: 60000,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--disable-software-rasterizer',
-                '--single-process',
-                '--no-zygote'
+                '--no-zygote',
+                '--disable-extensions',
+                '--disable-background-networking',
+                '--disable-default-apps',
+                '--mute-audio',
+                '--no-first-run'
             ]
         };
         // En Railway/Docker el ejecutable puede estar en una ruta distinta
         if (process.env.PUPPETEER_EXECUTABLE_PATH) {
             launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
         }
+        console.log('Lanzando Chrome con opciones:', JSON.stringify(launchOptions.args));
         browser = await puppeteer.launch(launchOptions);
         console.log('Chrome iniciado');
     }
