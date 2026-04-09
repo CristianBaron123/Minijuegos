@@ -6872,6 +6872,11 @@ room.onPlayerChat = function(player, message) {
             return false;
         }
         var btdNow = Date.now();
+        var btdElapsed = btdNow - (botState.minigameStartTime || 0);
+        if (btdElapsed > 10000) {
+            room.sendAnnouncement('⚠️ Bites the Dust solo se puede usar en los primeros 10 segundos del minijuego', player.id, 0xFF6600);
+            return false;
+        }
         if (btdNow < botState.bitesGlobalCooldown) {
             var btdWait = Math.ceil((botState.bitesGlobalCooldown - btdNow) / 1000);
             room.sendAnnouncement('⚠️ Bites the Dust en cooldown global. Espera ' + btdWait + 's', player.id, 0xFF6600);
