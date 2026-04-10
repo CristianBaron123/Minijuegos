@@ -22,6 +22,7 @@ var config = {
     firstExplanationMs: 5000,
     matchTimeMs: 90000,
     goalsToWin: 3,
+    playersPerTeam: 3,
     oobBoundsX: 835,
     oobBoundsY: 340
 };
@@ -43,7 +44,8 @@ function start(room, onGameEnd) {
     try { room.setCustomStadium(mapData); } catch(e) { console.error('[TANK_WAR] Error cargando mapa', e.message); if (onGameEnd) onGameEnd(null); return; }
 
     var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
-    if (players.length < 2) { room.sendAnnouncement('⚠️ No hay suficientes jugadores para Tank War', null, 0xFF6600); if (onGameEnd) onGameEnd(null); return; }
+    var minPlayers = isTestMode() ? 2 : 6;
+    if (players.length < minPlayers) { room.sendAnnouncement('⚠️ Se necesitan al menos 6 jugadores para Tank War (3v3)', null, 0xFF6600); if (onGameEnd) onGameEnd(null); return; }
 
     gameState.active = true;
     gameState.players = players.map(function(p) { return p.id; });
@@ -244,10 +246,20 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         playerIds = validIds;
         if (playerIds.length < 2) { resolve(null); return; }
 
+        // Limitar a playersPerTeam por equipo (3v3)
+        var maxPlayers = (isTestMode() ? playerIds.length : config.playersPerTeam * 2);
+        if (playerIds.length > maxPlayers) {
+            var extras = playerIds.splice(maxPlayers);
+            for (var ei = 0; ei < extras.length; ei++) {
+                if (gameState.spectatorPool.indexOf(extras[ei]) === -1) gameState.spectatorPool.push(extras[ei]);
+                try { room.setPlayerTeam(extras[ei], 0); } catch(e){}
+            }
+        }
+
         if ((playerIds.length % 2) === 1 && gameState.spectatorPool.length > 0) {
             for (var si = 0; si < gameState.spectatorPool.length; si++) {
                 var sp = gameState.spectatorPool[si];
-                if (room.getPlayer(sp)) {
+                if (room.getPlayer(sp) && playerIds.length < maxPlayers) {
                     gameState.spectatorPool.splice(si, 1);
                     playerIds.push(sp);
                     if (gameState.players.indexOf(sp) === -1) gameState.players.push(sp);
