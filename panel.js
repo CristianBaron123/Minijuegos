@@ -14,7 +14,7 @@ app.use(express.json());
 
 // Chrome compartido
 let browser = null;
-const MAX_LOGS = 200;
+const MAX_LOGS = 50;
 
 // Estado de salas
 const salas = {};
@@ -38,6 +38,35 @@ salaConfigs.forEach(c => {
 // ============================================
 // Funciones del bot (importadas de bot.js)
 // ============================================
+
+const DISCORD_REPLAY_WEBHOOK = 'https://discord.com/api/webhooks/1475321739591549091/OdpkhWdvgD-psJISt5r0YjE51W2wuwV7uAo_ab6RigjmwNAeStN09eii3_fKNat-qdmn';
+
+async function sendDiscordReplay(replayArray, gameName) {
+    try {
+        const buffer = Buffer.from(replayArray);
+        const blob = new Blob([buffer], { type: 'application/octet-stream' });
+        const formData = new FormData();
+        const now = new Date();
+        const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const safeName = (gameName || 'replay').replace(/[^a-zA-Z0-9_ ]/g, '').replace(/ /g, '_');
+        const fileName = safeName + '_' + timestamp + '.hbr';
+        formData.append('file', blob, fileName);
+        formData.append('payload_json', JSON.stringify({
+            content: '🎮 **' + gameName + '** - ' + now.toLocaleString('es-ES')
+        }));
+        const resp = await fetch(DISCORD_REPLAY_WEBHOOK, { method: 'POST', body: formData });
+        if (resp.ok) {
+            console.log("✅ Replay '" + gameName + "' enviado a Discord");
+            return true;
+        } else {
+            console.error('❌ Replay Discord error:', resp.status, await resp.text());
+            return false;
+        }
+    } catch(e) {
+        console.error('❌ Replay send error:', e.message);
+        return false;
+    }
+}
 
 const { execSync } = require('child_process');
 
@@ -297,7 +326,7 @@ async function exposeDbFunctions(page) {
             return 'OK';
         });
         await page.exposeFunction('__sendReplay', async (replayArray, gameName) => {
-            return 'OK';
+            return await sendDiscordReplay(replayArray, gameName);
         });
     } catch(e) {
         console.log('Error exponiendo funciones DB:', e.message);
