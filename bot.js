@@ -392,23 +392,23 @@ const mapRunRebound2Path = path.join(__dirname, 'Mapas', 'RUN rebound 2 by pagus
 const mapRunRebound2Data = fs.readFileSync(mapRunRebound2Path, 'utf8');
 
 // Map: Swing Cannons
-const mapSwingCannonsPath = path.join(__dirname, 'Mapasbeta', 'Swing-3-Cannons-by-kara-aytac-8-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_62636226478f4.hbs');
+const mapSwingCannonsPath = path.join(__dirname, 'Mapas', 'Swing-3-Cannons-by-kara-aytac-8-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_62636226478f4.hbs');
 const mapSwingCannonsData = fs.readFileSync(mapSwingCannonsPath, 'utf8');
 
 // Map: Survival Insect
-const mapSurvivalInsectPath = path.join(__dirname, 'Mapasbeta', 'Survival-From-Insect-by-FY-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_64c62a1d6140d.hbs');
+const mapSurvivalInsectPath = path.join(__dirname, 'Mapas', 'Survival-From-Insect-by-FY-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_64c62a1d6140d.hbs');
 const mapSurvivalInsectData = fs.readFileSync(mapSurvivalInsectPath, 'utf8');
 
 // Map: Run Luck
-const mapRunLuckPath = path.join(__dirname, 'Mapasbeta', 'Run-Luck-By-Beru-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_6512efefb172b (1).hbs');
+const mapRunLuckPath = path.join(__dirname, 'Mapas', 'Run-Luck-By-Beru-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_6512efefb172b (1).hbs');
 const mapRunLuckData = fs.readFileSync(mapRunLuckPath, 'utf8');
 
 // Map: Pinball Roulette
-const mapPinballRoulettePath = path.join(__dirname, 'Mapasbeta', 'KOR-P.-CECH-Pinball-Roulette-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_6534bd14f1879.hbs');
+const mapPinballRoulettePath = path.join(__dirname, 'Mapas', 'KOR-P.-CECH-Pinball-Roulette-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_6534bd14f1879.hbs');
 const mapPinballRouletteData = fs.readFileSync(mapPinballRoulettePath, 'utf8');
 
 // Map: Jumping Survival
-const mapJumpingSurvivalPath = path.join(__dirname, 'Mapasbeta', 'Jumping-Survival-by-Serefli-Seref-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae1e1af196f.hbs');
+const mapJumpingSurvivalPath = path.join(__dirname, 'Mapas', 'Jumping-Survival-by-Serefli-Seref-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae1e1af196f.hbs');
 const mapJumpingSurvivalData = fs.readFileSync(mapJumpingSurvivalPath, 'utf8');
 
 // Map: Shaolin Soccer
