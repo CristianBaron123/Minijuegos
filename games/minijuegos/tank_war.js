@@ -114,7 +114,7 @@ function runTournament(room) {
                 var winnerId = result.winners[0];
                 var p = room.getPlayerList().find(function(x) { return x.id === winnerId; });
                 if (p) {
-                    room.sendAnnouncement('\n🏆 ¡' + p.name.toUpperCase() + ' HA GANADO WAR OF CONQUEST! 🏆', null, 0xFFD700, 'bold', 2);
+                    room.sendAnnouncement('\n🏆 ¡' + p.name.toUpperCase() + ' HA GANADO TANK WAR! 🏆', null, 0xFFD700, 'bold', 2);
                     setTimeout(function() { if (gameState.callback) gameState.callback({ id: p.id, name: p.name }); }, 2000);
                 } else {
                     if (gameState.callback) gameState.callback(null);
@@ -153,7 +153,7 @@ function runTournament(room) {
                     var winnerId = result.winners[0];
                     var p = room.getPlayerList().find(function(x) { return x.id === winnerId; });
                     if (p) {
-                        room.sendAnnouncement('\n🏆 ¡' + p.name.toUpperCase() + ' HA GANADO WAR OF CONQUEST! 🏆', null, 0xFFD700, 'bold', 2);
+                        room.sendAnnouncement('\n🏆 ¡' + p.name.toUpperCase() + ' HA GANADO TANK WAR! 🏆', null, 0xFFD700, 'bold', 2);
                         setTimeout(function() { if (gameState.callback) gameState.callback({ id: p.id, name: p.name }); }, 2000);
                     }
                 }
