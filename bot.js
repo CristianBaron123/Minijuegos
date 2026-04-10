@@ -247,6 +247,14 @@ const mapCopsRobbersData = fs.readFileSync(mapCopsRobbersPath, 'utf8');
 const map1234Path = path.join(__dirname, 'Mapas', '1234-by-Qua-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_6359999414324.hbs');
 const map1234Data = fs.readFileSync(map1234Path, 'utf8');
 
+// Map: War of Conquest
+const mapWarConquestPath = path.join(__dirname, 'Mapas', 'War-Of-Conquest-by-Namajunas-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_6556da2c05a07.hbs');
+const mapWarConquestData = fs.readFileSync(mapWarConquestPath, 'utf8');
+
+// Map: Tank War
+const mapTankWarPath = path.join(__dirname, 'Mapas', 'Tank-War-flag-version-by-namajunas-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_63445a4ca17fe.hbs');
+const mapTankWarData = fs.readFileSync(mapTankWarPath, 'utf8');
+
 // Map: Jump by Qua
 const mapJumpQuaPath = path.join(__dirname, 'Mapas', 'Jump by Qua [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
 const mapJumpQuaData = fs.readFileSync(mapJumpQuaPath, 'utf8');
@@ -563,6 +571,12 @@ const copsRobbersModuleCode = fs.readFileSync(copsRobbersModulePath, 'utf8');
 const juego1234ModulePath = path.join(__dirname, 'games', 'minijuegos', 'juego_1234.js');
 const juego1234ModuleCode = fs.readFileSync(juego1234ModulePath, 'utf8');
 
+const warConquestModulePath = path.join(__dirname, 'games', 'minijuegos', 'war_conquest.js');
+const warConquestModuleCode = fs.readFileSync(warConquestModulePath, 'utf8');
+
+const tankWarModulePath = path.join(__dirname, 'games', 'minijuegos', 'tank_war.js');
+const tankWarModuleCode = fs.readFileSync(tankWarModulePath, 'utf8');
+
 const jumpQuaModulePath = path.join(__dirname, 'games', 'minijuegos', 'jump.js');
 const jumpQuaModuleCode = fs.readFileSync(jumpQuaModulePath, 'utf8');
 
@@ -816,6 +830,8 @@ const getBotScript = () => {
         const ctfModule = transformModuleForBrowser(ctfModuleCode, mapCTFData);
         const copsRobbersModule = transformModuleForBrowser(copsRobbersModuleCode, mapCopsRobbersData);
         const juego1234Module = transformModuleForBrowser(juego1234ModuleCode, map1234Data);
+        const warConquestModule = transformModuleForBrowser(warConquestModuleCode, mapWarConquestData);
+        const tankWarModule = transformModuleForBrowser(tankWarModuleCode, mapTankWarData);
         const jumpQuaModule = transformModuleForBrowser(jumpQuaModuleCode, mapJumpQuaData);
         const boomerangModule = transformModuleForBrowser(boomerangModuleCode, mapBoomerangData);
         const xdGoalsModule = transformModuleForBrowser(xdGoalsModuleCode, mapXDData);
@@ -1146,6 +1162,16 @@ var COPS_ROBBERS = ` + copsRobbersModule + `;
 // MÓDULO: JUEGO 1234
 // ============================================
 var JUEGO_1234 = ` + juego1234Module + `;
+
+// ============================================
+// MÓDULO: WAR OF CONQUEST
+// ============================================
+var WAR_CONQUEST = ` + warConquestModule + `;
+
+// ============================================
+// MÓDULO: TANK WAR
+// ============================================
+var TANK_WAR = ` + tankWarModule + `;
 
 // ============================================
 // MÓDULO: JUMP QUA

@@ -1470,6 +1470,26 @@ function startCOPS_ROBBERS() {
     } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
 }
 
+function startWAR_CONQUEST() {
+    botState.gameActive = true;
+    if (typeof WAR_CONQUEST !== 'undefined') {
+        WAR_CONQUEST.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startTANK_WAR() {
+    botState.gameActive = true;
+    if (typeof TANK_WAR !== 'undefined') {
+        TANK_WAR.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
 function startJUEGO_1234() {
     botState.gameActive = true;
     if (typeof JUEGO_1234 !== 'undefined') {
@@ -2525,6 +2545,8 @@ function loadLuckyMap(winner) {
 function excludeAFKFromGame() {
     // No excluir durante juicio público
     if (botState.banVoteActive || botState.pendingBanVote) return;
+    // En modo test no excluir por AFK
+    if (typeof TEST_ONLY_GAMES !== 'undefined' && TEST_ONLY_GAMES && TEST_ONLY_GAMES.length > 0) return;
     // En zombie run los jugadores se mueven solos, no excluir
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) return; } catch(e){}
     var now = Date.now();
@@ -2653,6 +2675,8 @@ function forceStopAllGames() {
     try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) RACING_GROUND.stop(room); } catch(e){}
     try { if (BUHO && BUHO.isActive && BUHO.isActive()) BUHO.stop(room); } catch(e){}
     try { if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) JUEGO_1234.stop(room); } catch(e){}
+    try { if (WAR_CONQUEST && WAR_CONQUEST.isActive && WAR_CONQUEST.isActive()) WAR_CONQUEST.stop(room); } catch(e){}
+    try { if (TANK_WAR && TANK_WAR.isActive && TANK_WAR.isActive()) TANK_WAR.stop(room); } catch(e){}
     try { room.stopGame(); } catch(e){}
     botState.gameActive = false;
     if (botState.startTimeout) {
@@ -2769,6 +2793,8 @@ function checkAndStart() {
     try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BUHO && BUHO.isActive && BUHO.isActive()) anyModuleActive = true; } catch(e){}
     try { if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (WAR_CONQUEST && WAR_CONQUEST.isActive && WAR_CONQUEST.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (TANK_WAR && TANK_WAR.isActive && TANK_WAR.isActive()) anyModuleActive = true; } catch(e){}
     if (anyModuleActive) {
         console.log('⚠️ Safety: módulo de juego aún activo, forzando stop');
         forceStopAllGames();
@@ -2971,6 +2997,8 @@ function checkAndStart() {
             { name: 'LASER_RACE', module: LASER_RACE, displayName: 'LASER RACE', starter: startLASER_RACE },
             // { name: 'COPS_ROBBERS', module: COPS_ROBBERS, displayName: 'COPS & ROBBERS', starter: startCOPS_ROBBERS }, // DESACTIVADO
             { name: 'JUEGO_1234', module: JUEGO_1234, displayName: 'JUEGO 1234', starter: startJUEGO_1234 },
+            { name: 'WAR_CONQUEST', module: WAR_CONQUEST, displayName: 'WAR OF CONQUEST', starter: startWAR_CONQUEST },
+            { name: 'TANK_WAR', module: TANK_WAR, displayName: 'TANK WAR', starter: startTANK_WAR },
             { name: 'JUMP_QUA', module: JUMP_QUA, displayName: 'JUMP', starter: startJUMP_QUA },
             { name: 'BOOMERANG_LEAGUE', module: BOOMERANG_LEAGUE, displayName: 'BOOMERANG LEAGUE', starter: startBOOMERANG_LEAGUE },
             { name: 'XD_GOALS', module: XD_GOALS, displayName: 'XD', starter: startXD_GOALS },
@@ -3796,6 +3824,12 @@ room.onPlayerLeave = function(player) {
     }
     if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) {
         try { JUEGO_1234.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (WAR_CONQUEST && WAR_CONQUEST.isActive && WAR_CONQUEST.isActive()) {
+        try { WAR_CONQUEST.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (TANK_WAR && TANK_WAR.isActive && TANK_WAR.isActive()) {
+        try { TANK_WAR.onPlayerLeave(room, player); } catch(e){}
     }
 
     // Limpiar actividad AFK del jugador que sale
