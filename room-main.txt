@@ -1470,6 +1470,30 @@ function startCOPS_ROBBERS() {
     } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
 }
 
+function startJUEGO_1234() {
+    botState.gameActive = true;
+    if (typeof JUEGO_1234 !== 'undefined') {
+        JUEGO_1234.start(room, function(result) {
+            if (result && result.winningTeam) {
+                var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+                var winner = players.find(function(p) { return p.id === result.winningTeam; });
+                if (winner) {
+                    var wAuth = getAuth(winner);
+                    if (wAuth && typeof window.__dbAddBalance === 'function') {
+                        try { window.__dbAddBalance(wAuth, winner.name, 2000); } catch(e) {}
+                    }
+                    room.sendAnnouncement(
+                        '\n💰 ' + winner.name + ' recibe ' + formatMoney(2000) + ' por ganar el Juego 1234!',
+                        null, 0xFFD700, 'bold', 2
+                    );
+                }
+            }
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
 function startJUMP_QUA() {
     botState.gameActive = true;
     if (typeof JUMP_QUA !== 'undefined') {
@@ -2628,6 +2652,7 @@ function forceStopAllGames() {
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) ZOMBIE_RUN.stop(room); } catch(e){}
     try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) RACING_GROUND.stop(room); } catch(e){}
     try { if (BUHO && BUHO.isActive && BUHO.isActive()) BUHO.stop(room); } catch(e){}
+    try { if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) JUEGO_1234.stop(room); } catch(e){}
     try { room.stopGame(); } catch(e){}
     botState.gameActive = false;
     if (botState.startTimeout) {
@@ -2743,6 +2768,7 @@ function checkAndStart() {
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) anyModuleActive = true; } catch(e){}
     try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BUHO && BUHO.isActive && BUHO.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) anyModuleActive = true; } catch(e){}
     if (anyModuleActive) {
         console.log('⚠️ Safety: módulo de juego aún activo, forzando stop');
         forceStopAllGames();
@@ -2943,7 +2969,8 @@ function checkAndStart() {
             { name: 'KAFA_TOPU_SHADOW', module: KAFA_TOPU_SHADOW, displayName: 'KAFA TOPU SHADOW', starter: startKAFA_TOPU_SHADOW },
             { name: 'KURU_KAFA_BONK', module: KURU_KAFA_BONK, displayName: 'KURU KAFA BONK', starter: startKURU_KAFA_BONK },
             { name: 'LASER_RACE', module: LASER_RACE, displayName: 'LASER RACE', starter: startLASER_RACE },
-            { name: 'COPS_ROBBERS', module: COPS_ROBBERS, displayName: 'COPS & ROBBERS', starter: startCOPS_ROBBERS },
+            // { name: 'COPS_ROBBERS', module: COPS_ROBBERS, displayName: 'COPS & ROBBERS', starter: startCOPS_ROBBERS }, // DESACTIVADO
+            { name: 'JUEGO_1234', module: JUEGO_1234, displayName: 'JUEGO 1234', starter: startJUEGO_1234 },
             { name: 'JUMP_QUA', module: JUMP_QUA, displayName: 'JUMP', starter: startJUMP_QUA },
             { name: 'BOOMERANG_LEAGUE', module: BOOMERANG_LEAGUE, displayName: 'BOOMERANG LEAGUE', starter: startBOOMERANG_LEAGUE },
             { name: 'XD_GOALS', module: XD_GOALS, displayName: 'XD', starter: startXD_GOALS },
@@ -3766,6 +3793,9 @@ room.onPlayerLeave = function(player) {
     }
     if (BUHO && BUHO.isActive && BUHO.isActive()) {
         try { BUHO.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) {
+        try { JUEGO_1234.onPlayerLeave(room, player); } catch(e){}
     }
 
     // Limpiar actividad AFK del jugador que sale
