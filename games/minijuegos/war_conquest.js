@@ -308,8 +308,10 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         var prevOnGoal = hookGoal();
 
         // Out-of-bounds detection: si todos los jugadores activos están OOB → reiniciar mapa
+        var oobReloading = false;
         var oobInterval = setInterval(function() {
             if (stopped) { clearInterval(oobInterval); return; }
+            if (oobReloading) { return; } // cooldown durante recarga
             var activePlayers = playerIds.filter(function(id) {
                 var p = room.getPlayer(id);
                 return p && p.team !== 0;
@@ -323,15 +325,17 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
                 oobConsecutive++;
                 if (oobConsecutive >= 4) { // 4 × 500ms = 2s todos fuera
                     oobConsecutive = 0;
+                    oobReloading = true;
                     room.sendAnnouncement('⚠️ ¡Todos fuera del campo! Reiniciando... Marcador conservado (' + scores[1] + ':' + scores[2] + ')', null, 0xFF6600, 'bold');
                     try { room.stopGame(); } catch(e){}
                     setTimeout(function() {
-                        if (stopped) return;
+                        if (stopped) { oobReloading = false; return; }
                         try { room.setCustomStadium(mapData); } catch(e){}
                         setTimeout(function() {
-                            if (stopped) return;
+                            if (stopped) { oobReloading = false; return; }
                             try { room.startGame(); } catch(e){}
                             hookGoal();
+                            setTimeout(function() { oobReloading = false; }, 3000); // 3s cooldown tras spawn
                         }, 500);
                     }, 1000);
                 }
