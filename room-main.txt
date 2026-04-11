@@ -2855,8 +2855,8 @@ function checkAndStart() {
             }
         }
 
-        // Procesar prestamos activos
-        for (var prestAuth in botState.prestamos) {
+        // Procesar prestamos activos - SISTEMA DESACTIVADO
+        if (false) for (var prestAuth in botState.prestamos) {
             var prest = botState.prestamos[prestAuth];
             prest.gamesLeft--;
             var prestPlayer = room.getPlayerList().find(function(p) { return p.id !== 0 && botState.authMap[p.id] === prestAuth; });
@@ -2890,8 +2890,8 @@ function checkAndStart() {
             }
         }
 
-        // Procesar prestamos P2P (cuotas automaticas)
-        (function() {
+        // Procesar prestamos P2P - SISTEMA DESACTIVADO
+        if (false) (function() {
             var p2pKeys = Object.keys(botState.prestamosP2P);
             for (var pi = 0; pi < p2pKeys.length; pi++) {
                 var dAuth = p2pKeys[pi];
@@ -5696,7 +5696,10 @@ room.onPlayerChat = function(player, message) {
             {n:'RUN_LUCK', d:'Run Luck', s:startRUN_LUCK}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette', s:startPINBALL_ROULETTE},
             {n:'JUMPING_SURVIVAL', d:'Jumping Survival', s:startJUMPING_SURVIVAL},
             {n:'RACING_GROUND', d:'Racing Ground', s:startRACING_GROUND},
-            {n:'BUHO', d:'Buho', s:startBUHO}
+            {n:'BUHO', d:'Buho', s:startBUHO},
+            {n:'JUEGO_1234', d:'Juego 1234', s:startJUEGO_1234},
+            {n:'WAR_CONQUEST', d:'War of Conquest', s:startWAR_CONQUEST},
+            {n:'TANK_WAR', d:'Tank War', s:startTANK_WAR}
         ];
         if (!escogerArg || escogerArg.toLowerCase() === 'lista') {
             var eThird = Math.ceil(escogerGames.length / 3);
@@ -5837,7 +5840,10 @@ room.onPlayerChat = function(player, message) {
             {n:'RUN_LUCK', d:'Run Luck'}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette'},
             {n:'JUMPING_SURVIVAL', d:'Jumping Survival'},
             {n:'RACING_GROUND', d:'Racing Ground'},
-            {n:'BUHO', d:'Buho'}
+            {n:'BUHO', d:'Buho'},
+            {n:'JUEGO_1234', d:'Juego 1234'},
+            {n:'WAR_CONQUEST', d:'War of Conquest'},
+            {n:'TANK_WAR', d:'Tank War'}
         ];
         if (!elegirArg || elegirArg.toLowerCase() === 'lista') {
             var third = Math.ceil(elegirGames.length / 3);
@@ -6258,6 +6264,8 @@ room.onPlayerChat = function(player, message) {
 
     // !prestamo [monto] [juegos] - Pedir un préstamo al banco
     if (message.startsWith('!prestamo')) {
+        room.sendAnnouncement('🏦 El sistema de préstamos está desactivado.', player.id, 0xFF6600);
+        return false;
         var prestParts = message.split(' ');
         if (prestParts.length < 3) {
             room.sendAnnouncement(
@@ -6335,6 +6343,7 @@ room.onPlayerChat = function(player, message) {
 
     // !deuda - Ver todas tus deudas (banco + P2P)
     if (message === '!deuda') {
+        room.sendAnnouncement('🏦 El sistema de préstamos está desactivado.', player.id, 0xFF6600); return false;
         if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
         var miDeuda = botState.prestamos[playerAuth];
         var miP2PDeuda = botState.prestamosP2P[playerAuth];
@@ -6366,7 +6375,8 @@ room.onPlayerChat = function(player, message) {
     }
 
     // !pagar [monto] - Pagar parte o todo tu prestamo
-    if (message.startsWith('!pagar')) {
+    if (message.startsWith('!pagar') && !message.startsWith('!pagarp2p')) {
+        room.sendAnnouncement('🏦 El sistema de préstamos está desactivado.', player.id, 0xFF6600); return false;
         var pagarParts = message.split(' ');
         if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
         var miPrestPagar = botState.prestamos[playerAuth];
@@ -6407,6 +6417,7 @@ room.onPlayerChat = function(player, message) {
 
     // !topprestamos - Ranking de quienes mas han pedido prestado
     if (message === '!topprestamos') {
+        room.sendAnnouncement('🏦 El sistema de préstamos está desactivado.', player.id, 0xFF6600); return false;
         var prestEntries = [];
         for (var tpAuth in botState.totalPrestado) {
             prestEntries.push(botState.totalPrestado[tpAuth]);
@@ -6464,6 +6475,7 @@ room.onPlayerChat = function(player, message) {
 
     // !prestar #ID [monto] [cuotas] - Prestamista ofrece préstamo
     if (message.startsWith('!prestar')) {
+        room.sendAnnouncement('🏦 El sistema de préstamos está desactivado.', player.id, 0xFF6600); return false;
         var prestarParts = message.split(' ');
         if (prestarParts.length < 4) {
             room.sendAnnouncement(
@@ -6539,6 +6551,7 @@ room.onPlayerChat = function(player, message) {
 
     // !aceptarprestamo - Aceptar oferta de préstamo P2P
     if (message === '!aceptarprestamo') {
+        room.sendAnnouncement('🏦 El sistema de préstamos está desactivado.', player.id, 0xFF6600); return false;
         if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
         var oferta = botState.ofertasPrestamo[playerAuth];
         if (!oferta) { room.sendAnnouncement('⚠️ No tienes ninguna oferta de prestamo pendiente', player.id, 0xFF6600); return false; }
@@ -6572,6 +6585,7 @@ room.onPlayerChat = function(player, message) {
 
     // !rechazarprestamo - Rechazar oferta de préstamo P2P
     if (message === '!rechazarprestamo') {
+        room.sendAnnouncement('🏦 El sistema de préstamos está desactivado.', player.id, 0xFF6600); return false;
         if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
         var ofertaRech = botState.ofertasPrestamo[playerAuth];
         if (!ofertaRech) { room.sendAnnouncement('⚠️ No tienes ninguna oferta de prestamo pendiente', player.id, 0xFF6600); return false; }
@@ -6630,6 +6644,7 @@ room.onPlayerChat = function(player, message) {
 
     // !pagarp2p [monto/todo] - Pago anticipado de préstamo P2P
     if (message.startsWith('!pagarp2p')) {
+        room.sendAnnouncement('🏦 El sistema de préstamos está desactivado.', player.id, 0xFF6600); return false;
         var pagarP2PParts = message.split(' ');
         if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
         var miP2PPagar = botState.prestamosP2P[playerAuth];
