@@ -23,8 +23,8 @@ var config = {
     matchTimeMs: 90000,
     goalsToWin: 3,
     playersPerTeam: 3,
-    oobBoundsX: 835,
-    oobBoundsY: 340
+    oobBoundsX: 730,
+    oobBoundsY: 255
 };
 
 function isOutOfBounds(pos) {
