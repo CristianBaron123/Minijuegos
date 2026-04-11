@@ -310,7 +310,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         // Out-of-bounds detection: si todos los jugadores activos están OOB → reiniciar mapa
         var oobReloading = false;
         var oobInterval = setInterval(function() {
-            if (stopped) { clearInterval(oobInterval); return; }
+            if (stopped || !gameState.active) { clearInterval(oobInterval); return; }
             if (oobReloading) { return; } // cooldown durante recarga
             var activePlayers = playerIds.filter(function(id) {
                 var p = room.getPlayer(id);
