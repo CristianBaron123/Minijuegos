@@ -6294,7 +6294,32 @@ room.onPlayerChat = function(player, message) {
         if (prestMonto > 100000) { room.sendAnnouncement('⚠️ Monto maximo: $100.000', player.id, 0xFF6600); return false; }
         if (isNaN(prestJuegos) || prestJuegos < 10) { room.sendAnnouncement('⚠️ Plazo minimo: 10 juegos', player.id, 0xFF6600); return false; }
         if (prestJuegos > 50) { room.sendAnnouncement('⚠️ Plazo maximo: 50 juegos', player.id, 0xFF6600); return false; }
-        // Dar el dinero al jugador
+        // Verificar que no sea cuenta nueva (saldo mínimo $1.000 antes del préstamo)
+        if (typeof window.__dbGetStats === 'function') {
+            var _prestPlayer = player; var _prestMonto = prestMonto; var _prestJuegos = prestJuegos; var _prestAuth = playerAuth;
+            window.__dbGetStats(_prestAuth).then(function(stats) {
+                var balance = (stats && stats.balance) ? stats.balance : 0;
+                if (balance < 1000) {
+                    room.sendAnnouncement('⛔ Necesitas al menos $1.000 en tu cuenta para pedir un préstamo.', _prestPlayer.id, 0xFF0000, 'bold');
+                    return;
+                }
+                // Dar el dinero al jugador
+                try { window.__dbAddBalance(_prestAuth, _prestPlayer.name, _prestMonto); } catch(e) {}
+                botState.prestamos[_prestAuth] = { monto: _prestMonto, name: _prestPlayer.name, gamesLeft: _prestJuegos, intereses: 0, deudaTotal: _prestMonto };
+                if (!botState.totalPrestado[_prestAuth]) botState.totalPrestado[_prestAuth] = { name: _prestPlayer.name, total: 0 };
+                botState.totalPrestado[_prestAuth].total += _prestMonto;
+                botState.totalPrestado[_prestAuth].name = _prestPlayer.name;
+                room.sendAnnouncement(
+                    '🏦 ' + _prestPlayer.name + ' pidio un prestamo de ' + formatMoney(_prestMonto) + '!\n' +
+                    '⏰ Tiene ' + _prestJuegos + ' juegos para pagarlo con !pagar',
+                    null, 0x00BFFF, 'bold', 2
+                );
+            }).catch(function() {
+                room.sendAnnouncement('⚠️ No se pudo verificar tu saldo. Intenta de nuevo.', _prestPlayer.id, 0xFF6600);
+            });
+            return false;
+        }
+        // Dar el dinero al jugador (fallback si no hay DB)
         try { window.__dbAddBalance(playerAuth, player.name, prestMonto); } catch(e) {}
         botState.prestamos[playerAuth] = { monto: prestMonto, name: player.name, gamesLeft: prestJuegos, intereses: 0, deudaTotal: prestMonto };
         if (!botState.totalPrestado[playerAuth]) botState.totalPrestado[playerAuth] = { name: player.name, total: 0 };
