@@ -274,10 +274,26 @@ function checkRound(room) {
     for (var i = 0; i < gameState.alivePlayers.length; i++) remainingNames.push(gameState.alivePlayers[i].name);
     room.sendAnnouncement('✅ Sobrevivientes (' + gameState.alivePlayers.length + '): ' + remainingNames.join(', '), null, 0x00BFFF);
 
-    // Siguiente ronda
+    // Siguiente ronda: detener y reiniciar para resetear posiciones
     addTimer(setTimeout(function() {
-        if (gameState.active) startRound(room);
-    }, 4000));
+        if (!gameState.active) return;
+        try { room.stopGame(); } catch(e) {}
+        addTimer(setTimeout(function() {
+            if (!gameState.active) return;
+            // Reasignar equipos (los eliminados quedaron en team 0)
+            for (var i = 0; i < gameState.alivePlayers.length; i++) {
+                var team = (i % 2 === 0) ? 1 : 2;
+                try { room.setPlayerTeam(gameState.alivePlayers[i].id, team); } catch(e) {}
+            }
+            try { room.startGame(); } catch(e) {}
+            try { room.pauseGame(true); } catch(e) {}
+            addTimer(setTimeout(function() {
+                if (!gameState.active) return;
+                try { room.pauseGame(false); } catch(e) {}
+                startRound(room);
+            }, 1500));
+        }, 1000));
+    }, 3000));
 }
 
 function endGame(room, winner) {
