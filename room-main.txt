@@ -51,6 +51,7 @@ var botState = {
     bugCooldowns: {}, // Cooldowns del comando !bug
     knownPlayers: {}, // { auth: { name: "nombre", notified: true } } - para tracking de tokens
     authMap: {}, // { playerId: auth } - mapa de IDs a auths (auth solo disponible en onPlayerJoin)
+    connMap: {}, // { auth: conn } - mapa de auth a IP/conn para anti-exploit préstamos
     winsCache: {}, // { auth: wins } - cache local de victorias para rangos
     clanTags: {},  // { auth: 'TAG' } - cache de clan tags
     // Anti-spam
@@ -3332,6 +3333,7 @@ room.onPlayerJoin = function(player) {
         }
 
         botState.authMap[player.id] = player.auth;
+        if (player.conn) botState.connMap[player.auth] = player.conn;
 
         // Cargar victorias de DB para el sistema de rangos + clan tag
         if (typeof window.__dbGetStats === 'function') {
@@ -6271,6 +6273,16 @@ room.onPlayerChat = function(player, message) {
             return false;
         }
         if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        // Anti-exploit: 1 préstamo activo por IP
+        var myConn = botState.connMap[playerAuth] || player.conn;
+        if (myConn) {
+            for (var _pAuth in botState.prestamos) {
+                if (_pAuth !== playerAuth && botState.connMap[_pAuth] === myConn) {
+                    room.sendAnnouncement('⛔ Ya hay un préstamo activo desde tu conexión. No se permiten cuentas múltiples para pedir préstamos.', player.id, 0xFF0000, 'bold');
+                    return false;
+                }
+            }
+        }
         if (botState.prestamos[playerAuth]) {
             var miPrest = botState.prestamos[playerAuth];
             room.sendAnnouncement('⚠️ Ya tienes un prestamo activo de ' + formatMoney(miPrest.deudaTotal) + ' (' + miPrest.gamesLeft + ' juegos restantes, intereses: ' + miPrest.intereses + '/5)', player.id, 0xFF6600);
