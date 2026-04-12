@@ -5227,22 +5227,7 @@ room.onPlayerChat = function(player, message) {
     
     // Comando !afk - proteger de ser movido a equipos (solo espectadores)
     if (message === "!afk") {
-        if (player.team !== 0) {
-            room.sendAnnouncement('⚠️ !afk solo funciona estando en espectador', player.id, 0xFF6600);
-            return false;
-        }
-        var afkCmdAuth = getAuth(player);
-        if (!afkCmdAuth) {
-            room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600);
-            return false;
-        }
-        if (botState.afkProtected[afkCmdAuth]) {
-            delete botState.afkProtected[afkCmdAuth];
-            room.sendAnnouncement('✅ Modo AFK desactivado. Puedes unirte al juego.', player.id, 0x00FF00, 'bold');
-        } else {
-            botState.afkProtected[afkCmdAuth] = true;
-            room.sendAnnouncement('💤 Modo AFK activado. No serás movido a equipos.\nEscribe !afk de nuevo para desactivarlo.', player.id, 0xFFFF00, 'bold');
-        }
+        room.sendAnnouncement('⚠️ El comando !afk fue desactivado.', player.id, 0xFF6600);
         return false;
     }
 
