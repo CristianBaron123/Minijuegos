@@ -1494,23 +1494,9 @@ function startTANK_WAR() {
 function startJUEGO_1234() {
     botState.gameActive = true;
     if (typeof JUEGO_1234 !== 'undefined') {
-        JUEGO_1234.start(room, function(result) {
-            if (result && result.winningTeam) {
-                var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
-                var winner = players.find(function(p) { return p.id === result.winningTeam; });
-                if (winner) {
-                    var wAuth = getAuth(winner);
-                    if (wAuth && typeof window.__dbAddBalance === 'function') {
-                        try { window.__dbAddBalance(wAuth, winner.name, 2000); } catch(e) {}
-                    }
-                    room.sendAnnouncement(
-                        '\n💰 ' + winner.name + ' recibe ' + formatMoney(2000) + ' por ganar el Juego 1234!',
-                        null, 0xFFD700, 'bold', 2
-                    );
-                }
-            }
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
+        JUEGO_1234.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
         });
     } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
 }

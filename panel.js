@@ -529,6 +529,25 @@ app.post('/api/stop', async (req, res) => {
     }
 });
 
+app.get('/api/backup/download/:collection', async (req, res) => {
+    const allowed = ['players', 'clans', 'titan', 'dailyRewards'];
+    const col = req.params.collection;
+    if (!allowed.includes(col)) return res.status(400).json({ error: 'Coleccion invalida' });
+    try {
+        const { EJSON } = require('bson');
+        await db.createBackup();
+        const backup = await db.getLatestBackup();
+        if (!backup) return res.status(404).json({ error: 'No hay backups disponibles' });
+        const date = new Date(backup.createdAt).toISOString().slice(0, 10);
+        res.setHeader('Content-Disposition', 'attachment; filename="' + col + '_' + date + '.json"');
+        res.setHeader('Content-Type', 'application/json');
+        // EJSON preserva $oid y $date — formato importable directo en Atlas web
+        res.send(EJSON.stringify(backup[col] || [], null, 2));
+    } catch(e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ============================================
 // Iniciar
 // ============================================
@@ -550,6 +569,10 @@ app.post('/api/stop', async (req, res) => {
             console.log('MongoDB Buho no disponible:', e.message);
         }
     }
+
+    // Backup automático cada 24 horas
+    db.createBackup();
+    setInterval(function() { db.createBackup(); }, 24 * 60 * 60 * 1000);
 
     // Generar scripts de todas las salas al iniciar
     salaConfigs.forEach(function(c) {

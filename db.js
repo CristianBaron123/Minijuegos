@@ -11,7 +11,14 @@ let client = null;
 
 async function connect() {
     try {
-        client = new MongoClient(MONGO_URI);
+        if (client) { try { await client.close(); } catch(e) {} }
+        client = new MongoClient(MONGO_URI, {
+            serverSelectionTimeoutMS: 10000,
+            connectTimeoutMS: 10000,
+            socketTimeoutMS: 0,
+            heartbeatFrequencyMS: 10000,
+            retryWrites: true
+        });
         await client.connect();
         db = client.db(DB_NAME);
         console.log('✅ MongoDB conectado a ' + DB_NAME);
@@ -19,11 +26,23 @@ async function connect() {
     } catch(e) {
         console.error('❌ Error conectando a MongoDB:', e.message);
         console.error('⚠️ El bot funcionará sin estadísticas persistentes');
+        db = null;
         return null;
     }
 }
 
+async function ensureConnected() {
+    if (!db || !client) { await connect(); return; }
+    try {
+        await db.command({ ping: 1 });
+    } catch(e) {
+        console.error('⚠️ MongoDB desconectado, reconectando...');
+        await connect();
+    }
+}
+
 async function saveWin(auth, name, minigame) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         var update = {
@@ -44,6 +63,7 @@ async function saveWin(auth, name, minigame) {
 }
 
 async function saveGamePlayed(auth, name) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         await db.collection('players').updateOne(
@@ -60,6 +80,7 @@ async function saveGamePlayed(auth, name) {
 }
 
 async function addKickCount(auth, name) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         await db.collection('players').updateOne(
@@ -76,6 +97,7 @@ async function addKickCount(auth, name) {
 }
 
 async function addBanCount(auth, name) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         await db.collection('players').updateOne(
@@ -92,6 +114,7 @@ async function addBanCount(auth, name) {
 }
 
 async function addGayCount(auth, name) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         await db.collection('players').updateOne(
@@ -108,6 +131,7 @@ async function addGayCount(auth, name) {
 }
 
 async function saveBestStreak(auth, streak) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         await db.collection('players').updateOne(
@@ -124,6 +148,7 @@ async function saveBestStreak(auth, streak) {
 }
 
 async function getStats(auth) {
+    await ensureConnected();
     if (!db || !auth) return null;
     try {
         var doc = await db.collection('players').findOne({ auth: auth });
@@ -173,6 +198,7 @@ async function getPlayerRank(auth, field) {
 }
 
 async function addBalance(auth, name, amount) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         await db.collection('players').updateOne(
@@ -507,6 +533,7 @@ async function kickFromClan(leaderAuth, targetAuth) {
 // ============ TITAN ============
 
 async function saveTitan(auth, name, value) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         await db.collection('titan').updateOne(
@@ -548,6 +575,7 @@ async function resetTitanData() {
 // ============ DAILY REWARDS ============
 
 async function saveDailyReward(auth, lastClaim, streak) {
+    await ensureConnected();
     if (!db || !auth) return;
     try {
         await db.collection('dailyRewards').updateOne(
@@ -575,10 +603,71 @@ async function loadDailyRewards() {
     }
 }
 
+// ============================================
+// BACKUPS AUTOMÁTICOS
+// ============================================
+async function createBackup() {
+    await ensureConnected();
+    if (!db) { console.error('❌ Backup fallido: sin conexión a MongoDB'); return; }
+    try {
+        var players     = await db.collection('players').find({}).toArray();
+        var clans       = await db.collection('clans').find({}).toArray();
+        var titan       = await db.collection('titan').find({}).toArray();
+        var daily       = await db.collection('dailyRewards').find({}).toArray();
+
+        var timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        var snapshot = {
+            createdAt: new Date(),
+            players:  players,
+            clans:    clans,
+            titan:    titan,
+            dailyRewards: daily
+        };
+
+        // Guardar en Atlas (colección backups, máximo 7)
+        await db.collection('backups').insertOne(snapshot);
+        var total = await db.collection('backups').countDocuments();
+        if (total > 7) {
+            var oldest = await db.collection('backups').find({}).sort({ createdAt: 1 }).limit(total - 7).toArray();
+            var ids = oldest.map(function(d) { return d._id; });
+            await db.collection('backups').deleteMany({ _id: { $in: ids } });
+        }
+
+        // Guardar como archivo JSON local
+        try {
+            var fs = require('fs');
+            var path = require('path');
+            var dir = path.join(__dirname, 'backups');
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+            fs.writeFileSync(
+                path.join(dir, 'backup_' + timestamp + '.json'),
+                JSON.stringify(snapshot, null, 2),
+                'utf8'
+            );
+        } catch(fe) {
+            console.warn('⚠️ No se pudo guardar backup local:', fe.message);
+        }
+
+        console.log('✅ Backup creado: ' + players.length + ' jugadores, ' + clans.length + ' clanes');
+    } catch(e) {
+        console.error('❌ createBackup error:', e.message);
+    }
+}
+
+async function getLatestBackup() {
+    if (!db) return null;
+    try {
+        return await db.collection('backups').findOne({}, { sort: { createdAt: -1 } });
+    } catch(e) {
+        console.error('❌ getLatestBackup error:', e.message);
+        return null;
+    }
+}
+
 async function close() {
     if (client) {
         try { await client.close(); } catch(e) {}
     }
 }
 
-module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, close };
+module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, close };

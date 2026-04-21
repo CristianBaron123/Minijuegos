@@ -124,15 +124,19 @@ function startRound(room) {
     if (!gameState.active) return;
     gameState.round++;
     gameState.phase = 'countdown';
+    try { botState.chatBlocked = true; } catch(e){}
 
     var isFinale = gameState.alivePlayers.length === 2;
+    var isFast = gameState.alivePlayers.length <= 4;
 
     room.sendAnnouncement(
-        '🔢 RONDA ' + gameState.round + (isFinale ? ' ⚡ — ¡FINAL 1v1! Se eliminan 2 números!' : '') + '\n' +
+        '🔢 RONDA ' + gameState.round +
+        (isFinale ? ' ⚡ — ¡FINAL 1v1! Se eliminan 2 números!' : (isFast ? ' ⚡ — ¡Quedan pocos! Se eliminan 2 números!' : '')) + '\n' +
         '📍 ¡Entra en un cuadro! Tienes 15 segundos...\n' +
         '1️⃣ ROJO | 2️⃣ AMARILLO | 3️⃣ VERDE | 4️⃣ AZUL',
         null, 0x00BFFF, 'bold', 2
     );
+    addTimer(setTimeout(function() { try { botState.chatBlocked = false; } catch(e){} }, 3000));
 
     addTimer(setTimeout(function() {
         if (gameState.active && gameState.phase === 'countdown')
@@ -228,7 +232,8 @@ function checkRound(room) {
     }
 
     // Sortear número(s)
-    var selectedNums = isFinale ? pickRandomNumbers(2) : pickRandomNumbers(1);
+    var isFast = gameState.alivePlayers.length <= 4;
+    var selectedNums = (isFinale || isFast) ? pickRandomNumbers(2) : pickRandomNumbers(1);
     var numLabels = [];
     for (var i = 0; i < selectedNums.length; i++) {
         numLabels.push(selectedNums[i] + ' (' + boxes[selectedNums[i] - 1].name + ')');
@@ -312,7 +317,7 @@ function endGame(room, winner) {
     addTimer(setTimeout(function() {
         try { room.stopGame(); } catch(e) {}
         if (gameState.callback) {
-            gameState.callback(winner ? { winningTeam: winner.id } : null);
+            gameState.callback(winner ? { id: winner.id, name: winner.name } : null);
         }
     }, 3000));
 }
@@ -322,6 +327,7 @@ function stop(room) {
     clearTimers();
     gameState.alivePlayers = [];
     gameState.phase = null;
+    try { botState.chatBlocked = false; } catch(e){}
     try { room.stopGame(); } catch(e) {}
 }
 
