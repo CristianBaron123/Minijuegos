@@ -109,7 +109,7 @@ function start(room, onGameEnd) {
         if (!gameState.active) return;
         try { room.startGame(); } catch(e){}
         try { room.pauseGame(true); } catch(e){}
-        gameState.chatBlocked = true;
+        try { botState.chatBlocked = true; } catch(e){}
 
         var numChairs = chairPositions[mapKey] ? chairPositions[mapKey].length : (mapKey - 1);
         room.sendAnnouncement(
@@ -123,7 +123,7 @@ function start(room, onGameEnd) {
 
         setTimeout(function() {
             if (!gameState.active) return;
-            gameState.chatBlocked = false;
+            try { botState.chatBlocked = false; } catch(e){}
             try { room.pauseGame(false); } catch(e){}
             startRound(room, mapKey);
         }, config.firstExplanationMs);
@@ -212,7 +212,7 @@ function startRound(room, mapVersion) {
         null, 0x00BFFF, 'bold', 2
     );
 
-    // Grace period de 3s antes de empezar a detectar posiciones
+    // Grace period de 5s antes de empezar a detectar posiciones
     if (gameState.checkInterval) clearInterval(gameState.checkInterval);
     setTimeout(function() {
         if (!gameState.active || gameState.roundId !== thisRoundId) return;
@@ -223,30 +223,30 @@ function startRound(room, mapVersion) {
             if (gameState.roundId !== thisRoundId) { clearInterval(gameState.checkInterval); return; }
             checkPlayersInChairs(room, gameState.currentChairs, gameState.currentNumChairs);
         }, config.checkIntervalMs);
-    }, 3000);
+    }, 5000);
 
     // Avisos de tiempo
     gameState.warningTimeouts.push(setTimeout(function() {
         if (!gameState.active || gameState.roundId !== thisRoundId) return;
         room.sendAnnouncement('⏰ Quedan 30 segundos!', null, 0xFFFF00, 'bold');
-    }, 3000 + config.roundTimeMs - 30000));
+    }, 5000 + config.roundTimeMs - 30000));
 
     gameState.warningTimeouts.push(setTimeout(function() {
         if (!gameState.active || gameState.roundId !== thisRoundId) return;
         room.sendAnnouncement('⏰ Quedan 15 segundos!', null, 0xFF6600, 'bold');
-    }, 3000 + config.roundTimeMs - 15000));
+    }, 5000 + config.roundTimeMs - 15000));
 
     gameState.warningTimeouts.push(setTimeout(function() {
         if (!gameState.active || gameState.roundId !== thisRoundId) return;
         room.sendAnnouncement('⏰ Quedan 5 segundos!', null, 0xFF0000, 'bold');
-    }, 3000 + config.roundTimeMs - 5000));
+    }, 5000 + config.roundTimeMs - 5000));
 
-    // Timeout de la ronda (60s + 3s grace)
+    // Timeout de la ronda (60s + 5s grace)
     if (gameState.roundTimeout) clearTimeout(gameState.roundTimeout);
     gameState.roundTimeout = setTimeout(function() {
         if (!gameState.active || gameState.roundId !== thisRoundId) return;
         endRound(room, gameState.currentChairs, gameState.currentNumChairs);
-    }, config.roundTimeMs + 3000);
+    }, config.roundTimeMs + 5000);
 }
 
 function checkPlayersInChairs(room, chairs, numChairs) {
@@ -408,6 +408,7 @@ function stop(room) {
     gameState.timers = {};
     gameState.occupiedChairs = {};
     gameState.chatBlocked = false;
+    try { botState.chatBlocked = false; } catch(e){}
     gameState.round = 0;
     try { room.stopGame(); } catch(e){}
 }

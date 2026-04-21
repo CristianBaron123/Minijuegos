@@ -1,4 +1,5 @@
 // Bot de Haxball con sistema de minijuegos automático
+require('dotenv').config();
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
@@ -1447,6 +1448,10 @@ var BUHO = ` + buhoModule + `;
 
     // Conectar a MongoDB
     await db.connect();
+
+    // Backup automático cada 24 horas
+    db.createBackup();
+    setInterval(function() { db.createBackup(); }, 24 * 60 * 60 * 1000);
 
     // ============================================
     // STATS MENSUALES: enviar top 5 y resetear cada mes

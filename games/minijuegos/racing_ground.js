@@ -106,10 +106,12 @@ function start(room, onGameEnd) {
     setTimeout(function() {
         try { room.startGame(); } catch(e) {}
         try { room.pauseGame(true); } catch(e) {}
+        try { botState.chatBlocked = true; } catch(e) {}
 
         room.sendAnnouncement('🟡 ¡Preparados! Arranca en 5 segundos...', null, 0xFFFF00, 'bold', 2);
 
         setTimeout(function() {
+            try { botState.chatBlocked = false; } catch(e) {}
             try { room.pauseGame(false); } catch(e) {}
 
             var now = Date.now();
@@ -214,7 +216,7 @@ function checkRace(room) {
                 try { room.setPlayerAvatar(p.id, medal); } catch(e) {}
 
                 if (pos2 === 1) {
-                    setTimeout(function() { if (gameState.active) endRace(room, gameState.rankings[0]); }, 20000);
+                    setTimeout(function() { if (gameState.active) endRace(room, gameState.rankings[0]); }, 3000);
                 }
 
                 var unfinished = Object.keys(gameState.racers).filter(function(id) {
@@ -277,6 +279,7 @@ function stop(room) {
     if (gameState.gameTimer)     { clearTimeout(gameState.gameTimer);     gameState.gameTimer = null; }
     gameState.racers   = {};
     gameState.rankings = [];
+    try { botState.chatBlocked = false; } catch(e) {}
     try { room.stopGame(); } catch(e) {}
 }
 
