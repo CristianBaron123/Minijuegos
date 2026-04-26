@@ -1,0 +1,423 @@
+// ============================================
+// SALA REAL FUTSAL - HaxBall
+// ============================================
+
+var roomConfig = {
+    roomName: "Real Futsal 🥅",
+    maxPlayers: 30,
+    public: true,
+    token: "##TOKEN##",
+    noPlayer: true,
+    geo: { code: "CO", lat: 4.6, lon: -74.08 }
+};
+
+var room = HBInit(roomConfig);
+room.setTeamsLock(true);
+room.setScoreLimit(3);
+room.setTimeLimit(5);
+
+console.log("Link: " + room.link);
+
+// Cargar mapa
+var mapData = ##MAP_FUTSAL##;
+if (mapData) {
+    try { room.setCustomStadium(mapData); } catch(e) { console.log('Error cargando mapa: ' + e.message); }
+}
+
+// ============================================
+// ADMINS Y AUTHS
+// ============================================
+
+var OWNER_AUTH = "JHcYct4vfesGbi6tGaauh08AxSwWnZq3QCm4rnzn2GE";
+var CREATOR_AUTHS = [OWNER_AUTH, "MiWy-TJIU1FKLgsUzYQPzXHFwoXRKCbvZSFhmcCiqyU"];
+
+var SPECIAL_PLAYERS = {
+    '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE': { label: '⭐[The best]',  color: 0x89CFF0, admin: true },
+    'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic': { label: '👑[KING]',       color: 0xFFFFFF, admin: true },
+    'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I': { label: '🔴[LEO]',        color: 0xFF0000, admin: true },
+    'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4': { label: '🍀[JUST TGW]🍀', color: 0x228B22, admin: true }
+};
+
+var authMap = {};
+
+function getAuth(player) {
+    return player.auth || authMap[player.id] || null;
+}
+
+// ============================================
+// SISTEMA DE RANGOS
+// ============================================
+
+var RANK_TIERS = [
+    { min: 1000, label: '[INMORTAL]',     color: 0xFFD700 },
+    { min: 750,  label: '[DIVINO]',       color: 0x00FFFF },
+    { min: 500,  label: '[SUPREMO]',      color: 0xFFD700 },
+    { min: 350,  label: '[CELESTIAL]',    color: 0xE6E6FA },
+    { min: 250,  label: '[TITAN]',        color: 0xFF0000 },
+    { min: 180,  label: '[MITICO]',       color: 0xFF4500 },
+    { min: 130,  label: '[LEYENDA]',      color: 0xFF6600 },
+    { min: 90,   label: '[GRAN MAESTRO]', color: 0x9400D3 },
+    { min: 65,   label: '[MAESTRO]',      color: 0xA020F0 },
+    { min: 45,   label: '[ELITE]',        color: 0xBA55D3 },
+    { min: 30,   label: '[EXPERTO]',      color: 0x1E90FF },
+    { min: 20,   label: '[VETERANO]',     color: 0x4169E1 },
+    { min: 12,   label: '[COMPETIDOR]',   color: 0x6495ED },
+    { min: 7,    label: '[JUGADOR]',      color: 0xCD853F },
+    { min: 3,    label: '[APRENDIZ]',     color: 0xDEB887 },
+    { min: 0,    label: '[NOVATO]',       color: 0xD2B48C }
+];
+
+var winsCache = {};
+
+function getRankByWins(wins) {
+    for (var i = 0; i < RANK_TIERS.length; i++) {
+        if (wins >= RANK_TIERS[i].min) return RANK_TIERS[i];
+    }
+    return RANK_TIERS[RANK_TIERS.length - 1];
+}
+
+function getPlayerTag(player) {
+    var auth = getAuth(player);
+    if (auth && SPECIAL_PLAYERS[auth]) return SPECIAL_PLAYERS[auth];
+    if (auth && CREATOR_AUTHS.indexOf(auth) !== -1) return { label: '⚽[CREADOR]', color: 0x0055FF };
+    var wins = (auth && winsCache[auth]) ? winsCache[auth] : 0;
+    return getRankByWins(wins);
+}
+
+// ============================================
+// ESTADO DEL JUEGO
+// ============================================
+
+var lastTouch = null;
+var secondLastTouch = null;
+var gameInProgress = false;
+
+// Goles de la partida actual (en memoria, para mostrar al terminar)
+var matchGoals = {};  // { auth: { name, goals, assists } }
+
+function resetMatchGoals() {
+    matchGoals = {};
+}
+
+function addMatchGoal(auth, name) {
+    if (!auth) return;
+    if (!matchGoals[auth]) matchGoals[auth] = { name: name, goals: 0, assists: 0 };
+    matchGoals[auth].goals++;
+}
+
+function addMatchAssist(auth, name) {
+    if (!auth) return;
+    if (!matchGoals[auth]) matchGoals[auth] = { name: name, goals: 0, assists: 0 };
+    matchGoals[auth].assists++;
+}
+
+// ============================================
+// HELPERS DE DB
+// ============================================
+
+function dbSaveGoal(auth, name) {
+    if (typeof __dbFutsalSaveGoal !== 'undefined') __dbFutsalSaveGoal(auth, name);
+}
+function dbSaveAssist(auth, name) {
+    if (typeof __dbFutsalSaveAssist !== 'undefined') __dbFutsalSaveAssist(auth, name);
+}
+function dbSaveWin(auth, name) {
+    if (typeof __dbFutsalSaveWin !== 'undefined') __dbFutsalSaveWin(auth, name);
+}
+function dbSaveLoss(auth, name) {
+    if (typeof __dbFutsalSaveLoss !== 'undefined') __dbFutsalSaveLoss(auth, name);
+}
+function dbSaveGame(auth, name) {
+    if (typeof __dbFutsalSaveGame !== 'undefined') __dbFutsalSaveGame(auth, name);
+}
+
+// ============================================
+// EQUIPOS
+// ============================================
+
+function balancearEquipos() {
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    for (var i = players.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = players[i]; players[i] = players[j]; players[j] = tmp;
+    }
+    for (var k = 0; k < players.length; k++) {
+        room.setPlayerTeam(players[k].id, (k % 2 === 0) ? 1 : 2);
+    }
+}
+
+// ============================================
+// EVENTOS
+// ============================================
+
+room.onPlayerJoin = function(player) {
+    authMap[player.id] = player.auth;
+
+    // Admin automático
+    var auth = getAuth(player);
+    if (auth && CREATOR_AUTHS.indexOf(auth) !== -1) {
+        room.setPlayerAdmin(player.id, true);
+    }
+    if (auth && SPECIAL_PLAYERS[auth] && SPECIAL_PLAYERS[auth].admin) {
+        room.setPlayerAdmin(player.id, true);
+    }
+
+    // Cargar wins de DB para rank
+    if (auth && typeof __dbFutsalGetStats !== 'undefined') {
+        __dbFutsalGetStats(auth).then(function(doc) {
+            if (doc) winsCache[auth] = doc.fWins || 0;
+        });
+    }
+
+    var tag = getPlayerTag(player);
+    room.sendAnnouncement(
+        '⚽ Bienvenido ' + player.name + '! ' + tag.label + '\n' +
+        'Marcador: ' + room.getScoreLimit() + ' goles | Tiempo: ' + room.getTimeLimit() + ' min\n' +
+        'Escribe !ayuda para los comandos',
+        player.id, 0x00BFFF, 'bold'
+    );
+
+    // Auto asignar equipo balanceado
+    var allPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    var red  = allPlayers.filter(function(p) { return p.team === 1; }).length;
+    var blue = allPlayers.filter(function(p) { return p.team === 2; }).length;
+    room.setPlayerTeam(player.id, red <= blue ? 1 : 2);
+
+    // Auto iniciar si hay suficientes
+    var inTeam = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; }).length;
+    if (inTeam >= 2 && !gameInProgress) {
+        try { room.startGame(); } catch(e) {}
+    }
+};
+
+room.onPlayerLeave = function(player) {
+    delete authMap[player.id];
+    var inTeam = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; }).length;
+    if (inTeam < 2) {
+        try { room.stopGame(); } catch(e) {}
+    }
+};
+
+room.onPlayerBallKick = function(player) {
+    secondLastTouch = lastTouch;
+    lastTouch = { id: player.id, name: player.name, team: player.team, auth: getAuth(player) };
+};
+
+room.onTeamGoal = function(team) {
+    var teamName = team === 1 ? '🔴 ROJO' : '🔵 AZUL';
+    var goalMsg = 'GOL del equipo ' + teamName + '!';
+
+    if (lastTouch && lastTouch.team !== team) {
+        goalMsg = '⚽ AUTOGOL de ' + lastTouch.name + '! (' + teamName + ' anota)';
+        if (lastTouch.auth) {
+            addMatchGoal(lastTouch.auth, lastTouch.name);
+            dbSaveGoal(lastTouch.auth, lastTouch.name);
+        }
+    } else if (lastTouch && lastTouch.team === team) {
+        goalMsg = '⚽ GOL de ' + lastTouch.name + '! (' + teamName + ')';
+        if (lastTouch.auth) {
+            addMatchGoal(lastTouch.auth, lastTouch.name);
+            dbSaveGoal(lastTouch.auth, lastTouch.name);
+        }
+        if (secondLastTouch && secondLastTouch.team === team && secondLastTouch.id !== lastTouch.id) {
+            goalMsg += '\n🎯 Asistencia: ' + secondLastTouch.name;
+            if (secondLastTouch.auth) {
+                addMatchAssist(secondLastTouch.auth, secondLastTouch.name);
+                dbSaveAssist(secondLastTouch.auth, secondLastTouch.name);
+            }
+        }
+    }
+
+    room.sendAnnouncement(goalMsg, null, team === 1 ? 0xFF4444 : 0x4488FF, 'bold', 2);
+    lastTouch = null;
+    secondLastTouch = null;
+};
+
+room.onTeamVictory = function(scores) {
+    var winTeam  = scores.red > scores.blue ? 1 : 2;
+    var winName  = winTeam === 1 ? '🔴 ROJO' : '🔵 AZUL';
+    var lossTeam = winTeam === 1 ? 2 : 1;
+
+    room.sendAnnouncement(
+        '🏆 VICTORIA del equipo ' + winName + '! (' + scores.red + '-' + scores.blue + ')',
+        null, 0xFFD700, 'bold', 2
+    );
+
+    // Mostrar resumen del partido
+    var scorers = Object.keys(matchGoals).filter(function(a) { return matchGoals[a].goals > 0 || matchGoals[a].assists > 0; });
+    if (scorers.length > 0) {
+        var summary = '📊 Resumen:\n';
+        scorers.forEach(function(a) {
+            var m = matchGoals[a];
+            summary += m.name + ': ' + m.goals + '⚽' + (m.assists > 0 ? ' ' + m.assists + '🎯' : '') + '\n';
+        });
+        room.sendAnnouncement(summary, null, 0xAAAAAA);
+    }
+
+    // Guardar stats en DB
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+    players.forEach(function(p) {
+        var auth = getAuth(p);
+        if (!auth) return;
+        dbSaveGame(auth, p.name);
+        if (p.team === winTeam) {
+            dbSaveWin(auth, p.name);
+            winsCache[auth] = (winsCache[auth] || 0) + 1;
+        } else {
+            dbSaveLoss(auth, p.name);
+        }
+    });
+
+    resetMatchGoals();
+};
+
+room.onGameStart = function() {
+    gameInProgress = true;
+    lastTouch = null;
+    secondLastTouch = null;
+    resetMatchGoals();
+};
+
+room.onGameStop = function() {
+    gameInProgress = false;
+    setTimeout(function() {
+        var inTeam = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; }).length;
+        if (inTeam >= 2) {
+            balancearEquipos();
+            try { room.startGame(); } catch(e) {}
+        }
+    }, 4000);
+};
+
+// ============================================
+// CHAT
+// ============================================
+
+room.onPlayerChat = function(player, message) {
+    var msg = message.toLowerCase().trim();
+    var auth = getAuth(player);
+
+    if (msg === '!ayuda') {
+        room.sendAnnouncement(
+            '📋 COMANDOS:\n' +
+            '!stats — Tus estadísticas\n' +
+            '!top — Top goleadores\n' +
+            '!top asistencias — Top asistidores\n' +
+            '!top victorias — Top victorias\n' +
+            '!top partidos — Top partidos jugados\n' +
+            '!rank — Tu rango actual\n' +
+            '!bb — Salir de la sala',
+            player.id, 0x00BFFF
+        );
+        return false;
+    }
+
+    if (msg === '!stats') {
+        if (!auth || typeof __dbFutsalGetStats === 'undefined') {
+            room.sendAnnouncement('No hay stats disponibles', player.id, 0xFF6600);
+            return false;
+        }
+        __dbFutsalGetStats(auth).then(function(doc) {
+            var g = (doc && doc.fGoals)   || 0;
+            var a = (doc && doc.fAssists) || 0;
+            var w = (doc && doc.fWins)    || 0;
+            var l = (doc && doc.fLosses)  || 0;
+            var p = (doc && doc.fGames)   || 0;
+            var ratio = p > 0 ? Math.round((w / p) * 100) : 0;
+            var rank = getRankByWins(w);
+            room.sendAnnouncement(
+                '📊 Stats de ' + player.name + ' ' + rank.label + '\n' +
+                '⚽ Goles: ' + g + ' | 🎯 Asistencias: ' + a + '\n' +
+                '🏆 Victorias: ' + w + ' | ❌ Derrotas: ' + l + '\n' +
+                '🎮 Partidos: ' + p + ' | 📈 Win rate: ' + ratio + '%',
+                player.id, rank.color, 'bold'
+            );
+        });
+        return false;
+    }
+
+    if (msg === '!rank') {
+        var wins = (auth && winsCache[auth]) || 0;
+        var rank = getRankByWins(wins);
+        var nextTier = null;
+        for (var i = RANK_TIERS.length - 1; i >= 0; i--) {
+            if (RANK_TIERS[i].min > wins) { nextTier = RANK_TIERS[i]; break; }
+        }
+        var msg2 = '🏅 ' + player.name + ': ' + rank.label + ' (' + wins + ' victorias)';
+        if (nextTier) msg2 += '\n➡️ Próximo rango ' + nextTier.label + ' en ' + (nextTier.min - wins) + ' victorias';
+        room.sendAnnouncement(msg2, player.id, rank.color, 'bold');
+        return false;
+    }
+
+    if (msg === '!top' || msg === '!top goles') {
+        if (typeof __dbFutsalGetTop === 'undefined') return false;
+        __dbFutsalGetTop('fGoals', 5).then(function(docs) {
+            if (!docs || docs.length === 0) { room.sendAnnouncement('Sin datos aún', player.id, 0xFF6600); return; }
+            var medals = ['🥇','🥈','🥉','4.','5.'];
+            var txt = '⚽ TOP GOLEADORES:\n';
+            docs.forEach(function(d, i) { txt += medals[i] + ' ' + d.name + ' — ' + (d.fGoals || 0) + ' goles\n'; });
+            room.sendAnnouncement(txt, null, 0xFFD700, 'bold');
+        });
+        return false;
+    }
+
+    if (msg === '!top asistencias') {
+        if (typeof __dbFutsalGetTop === 'undefined') return false;
+        __dbFutsalGetTop('fAssists', 5).then(function(docs) {
+            if (!docs || docs.length === 0) { room.sendAnnouncement('Sin datos aún', player.id, 0xFF6600); return; }
+            var medals = ['🥇','🥈','🥉','4.','5.'];
+            var txt = '🎯 TOP ASISTIDORES:\n';
+            docs.forEach(function(d, i) { txt += medals[i] + ' ' + d.name + ' — ' + (d.fAssists || 0) + ' asistencias\n'; });
+            room.sendAnnouncement(txt, null, 0x00BFFF, 'bold');
+        });
+        return false;
+    }
+
+    if (msg === '!top victorias') {
+        if (typeof __dbFutsalGetTop === 'undefined') return false;
+        __dbFutsalGetTop('fWins', 5).then(function(docs) {
+            if (!docs || docs.length === 0) { room.sendAnnouncement('Sin datos aún', player.id, 0xFF6600); return; }
+            var medals = ['🥇','🥈','🥉','4.','5.'];
+            var txt = '🏆 TOP VICTORIAS:\n';
+            docs.forEach(function(d, i) { txt += medals[i] + ' ' + d.name + ' — ' + (d.fWins || 0) + ' victorias\n'; });
+            room.sendAnnouncement(txt, null, 0xFFD700, 'bold');
+        });
+        return false;
+    }
+
+    if (msg === '!top partidos') {
+        if (typeof __dbFutsalGetTop === 'undefined') return false;
+        __dbFutsalGetTop('fGames', 5).then(function(docs) {
+            if (!docs || docs.length === 0) { room.sendAnnouncement('Sin datos aún', player.id, 0xFF6600); return; }
+            var medals = ['🥇','🥈','🥉','4.','5.'];
+            var txt = '🎮 TOP PARTIDOS JUGADOS:\n';
+            docs.forEach(function(d, i) { txt += medals[i] + ' ' + d.name + ' — ' + (d.fGames || 0) + ' partidos\n'; });
+            room.sendAnnouncement(txt, null, 0xAAAAAA, 'bold');
+        });
+        return false;
+    }
+
+    if (msg === '!bb') {
+        room.kickPlayer(player.id, 'Hasta luego! ⚽', false);
+        return false;
+    }
+
+    // Comandos de admin
+    if (msg === '!balancear' && player.admin) {
+        balancearEquipos();
+        room.sendAnnouncement('⚖️ Equipos balanceados por ' + player.name, null, 0x00FF00);
+        return false;
+    }
+
+    if (msg === '!swap' && player.admin) {
+        var all = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+        all.forEach(function(p) { room.setPlayerTeam(p.id, p.team === 1 ? 2 : 1); });
+        room.sendAnnouncement('🔄 Equipos intercambiados', null, 0x00FF00);
+        return false;
+    }
+
+    // Mostrar tag en el chat
+    var tag = getPlayerTag(player);
+    room.sendAnnouncement(tag.label + ' ' + player.name + ': ' + message, null, tag.color, 'bold');
+    return false;
+};

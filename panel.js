@@ -294,6 +294,28 @@ async function exposeDbFunctions(page) {
         await page.exposeFunction('__dbResetClanWins', async () => {
             await db.resetClanWins();
         });
+        // Futsal
+        await page.exposeFunction('__dbFutsalSaveGoal', async (auth, name) => {
+            await db.saveFutsalGoal(auth, name);
+        });
+        await page.exposeFunction('__dbFutsalSaveAssist', async (auth, name) => {
+            await db.saveFutsalAssist(auth, name);
+        });
+        await page.exposeFunction('__dbFutsalSaveWin', async (auth, name) => {
+            await db.saveFutsalWin(auth, name);
+        });
+        await page.exposeFunction('__dbFutsalSaveLoss', async (auth, name) => {
+            await db.saveFutsalLoss(auth, name);
+        });
+        await page.exposeFunction('__dbFutsalSaveGame', async (auth, name) => {
+            await db.saveFutsalGame(auth, name);
+        });
+        await page.exposeFunction('__dbFutsalGetStats', async (auth) => {
+            return await db.getFutsalStats(auth);
+        });
+        await page.exposeFunction('__dbFutsalGetTop', async (field, limit) => {
+            return await db.getFutsalTop(field, limit);
+        });
         // Buho stats
         if (dbBuho) {
             await page.exposeFunction('__dbSaveStats', async (auth, name, wins, golesAnotados, golesRecibidos) => {
