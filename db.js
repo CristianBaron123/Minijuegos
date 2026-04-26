@@ -654,6 +654,90 @@ async function createBackup() {
     }
 }
 
+// ============================================
+// FUTSAL
+// ============================================
+async function saveFutsalGoal(auth, name) {
+    await ensureConnected();
+    if (!db || !auth) return;
+    try {
+        await db.collection('players').updateOne(
+            { auth },
+            { $set: { name, lastSeen: new Date() }, $inc: { fGoals: 1 } },
+            { upsert: true }
+        );
+    } catch(e) { console.error('❌ saveFutsalGoal:', e.message); }
+}
+
+async function saveFutsalAssist(auth, name) {
+    await ensureConnected();
+    if (!db || !auth) return;
+    try {
+        await db.collection('players').updateOne(
+            { auth },
+            { $set: { name, lastSeen: new Date() }, $inc: { fAssists: 1 } },
+            { upsert: true }
+        );
+    } catch(e) { console.error('❌ saveFutsalAssist:', e.message); }
+}
+
+async function saveFutsalWin(auth, name) {
+    await ensureConnected();
+    if (!db || !auth) return;
+    try {
+        await db.collection('players').updateOne(
+            { auth },
+            { $set: { name, lastSeen: new Date() }, $inc: { fWins: 1 } },
+            { upsert: true }
+        );
+    } catch(e) { console.error('❌ saveFutsalWin:', e.message); }
+}
+
+async function saveFutsalLoss(auth, name) {
+    await ensureConnected();
+    if (!db || !auth) return;
+    try {
+        await db.collection('players').updateOne(
+            { auth },
+            { $set: { name, lastSeen: new Date() }, $inc: { fLosses: 1 } },
+            { upsert: true }
+        );
+    } catch(e) { console.error('❌ saveFutsalLoss:', e.message); }
+}
+
+async function saveFutsalGame(auth, name) {
+    await ensureConnected();
+    if (!db || !auth) return;
+    try {
+        await db.collection('players').updateOne(
+            { auth },
+            { $set: { name, lastSeen: new Date() }, $inc: { fGames: 1 } },
+            { upsert: true }
+        );
+    } catch(e) { console.error('❌ saveFutsalGame:', e.message); }
+}
+
+async function getFutsalStats(auth) {
+    await ensureConnected();
+    if (!db || !auth) return null;
+    try {
+        var doc = await db.collection('players').findOne({ auth });
+        if (doc && doc._id) doc._id = doc._id.toString();
+        return doc;
+    } catch(e) { console.error('❌ getFutsalStats:', e.message); return null; }
+}
+
+async function getFutsalTop(field, limit) {
+    if (!db) return [];
+    try {
+        var filter = {};
+        filter[field] = { $gt: 0 };
+        var docs = await db.collection('players').find(filter).sort({ [field]: -1 }).limit(limit || 5).toArray();
+        docs.forEach(function(d) { if (d._id) d._id = d._id.toString(); });
+        return docs;
+    } catch(e) { console.error('❌ getFutsalTop:', e.message); return []; }
+}
+
 async function getLatestBackup() {
     if (!db) return null;
     try {
@@ -670,4 +754,4 @@ async function close() {
     }
 }
 
-module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, close };
+module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close };
