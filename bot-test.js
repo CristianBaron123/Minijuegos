@@ -14,7 +14,9 @@ process.env.TEST_MODE = 'true';
 // Si está vacío [], se cargan TODOS los minijuegos (como en producción)
 // ============================================
 process.env.TEST_GAMES = JSON.stringify([
-    'ZOMBIE_RUN'
+    'WAR_CONQUEST',
+    'TANK_WAR',
+    'JUEGO_1234'
 ]);
 
 require('./bot.js');

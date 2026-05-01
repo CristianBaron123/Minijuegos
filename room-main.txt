@@ -19,6 +19,7 @@ try { if (typeof room !== 'undefined') { if (room.setTimeLimit) room.setTimeLimi
 // SISTEMA DE OWNER (DUEÑO)
 // ============================================
 var OWNER_AUTH = "##OWNER_AUTH##";
+var MODERATOR_AUTHS = ##MODERATOR_AUTHS##;
 
 // Estado del bot
 var botState = {
@@ -246,6 +247,11 @@ function getAuth(player) {
     return player.auth || botState.authMap[player.id] || null;
 }
 
+function isMod(player) {
+    var auth = getAuth(player);
+    return !!(auth && MODERATOR_AUTHS.indexOf(auth) !== -1);
+}
+
 // Funcion global para que los modulos puedan filtrar jugadores AFK
 function isPlayerAfk(playerId) {
     var pAuth = botState.authMap[playerId] || null;
@@ -262,6 +268,10 @@ function getPlayerTag(player) {
     }
     if (auth && CREATOR_AUTHS.indexOf(auth) !== -1) {
         return { label: protPrefix + '⚽[CREADOR]' + clanSuffix, color: 0x0055FF };
+    }
+    // Moderadores (color cyan bonito 0x00BFFF)
+    if (auth && MODERATOR_AUTHS.indexOf(auth) !== -1) {
+        return { label: protPrefix + '🛡️[MOD]' + clanSuffix, color: 0x00BFFF };
     }
     if (auth === 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic') {
         return { label: protPrefix + '👑[KING]' + clanSuffix, color: 0xFFFFFF };
@@ -3321,6 +3331,16 @@ room.onPlayerJoin = function(player) {
         botState.authMap[player.id] = player.auth;
         if (player.conn) botState.connMap[player.auth] = player.conn;
 
+        // Dar admin automático a mods y owner
+        if (player.auth === OWNER_AUTH || MODERATOR_AUTHS.indexOf(player.auth) !== -1) {
+            try { room.setPlayerAdmin(player.id, true); } catch(e) {}
+            var isOwner = (player.auth === OWNER_AUTH);
+            room.sendAnnouncement(
+                (isOwner ? '⚽ ' : '🛡️ ') + player.name + (isOwner ? ' (Owner)' : ' (Moderador)') + ' detectado. Admin otorgado.',
+                player.id, isOwner ? 0x0055FF : 0x00BFFF, 'bold'
+            );
+        }
+
         // Cargar victorias de DB para el sistema de rangos + clan tag
         if (typeof window.__dbGetStats === 'function') {
             window.__dbGetStats(player.auth).then(function(stats) {
@@ -4220,6 +4240,209 @@ room.onPlayerChat = function(player, message) {
         var banDurationSec = banMinutes * 60;
         room.sendAnnouncement('🔨 ' + player.name + ' baneó a ' + banTarget.name + ' por ' + banMinutes + ' minuto(s)', null, 0xFF0000, 'bold');
         applyTempBan(banTargetId, banDurationSec);
+        return false;
+    }
+
+    // ============================================
+    // COMANDO MOD: !reiniciar - Moderadores y Owner
+    // ============================================
+    if (message.toLowerCase().startsWith('!reiniciar')) {
+        // Obtener auth de forma confiable
+        var rAuth = botState.authMap[player.id] || player.auth || null;
+        if (!rAuth) {
+            room.sendAnnouncement('⚠️ No se pudo verificar tu identidad.', player.id, 0xFF6600);
+            return false;
+        }
+        // Verificar permisos: Owner, Creador, Moderador
+        var isOwner = (rAuth === OWNER_AUTH);
+        var isCreador = (CREATOR_AUTHS.indexOf(rAuth) !== -1);
+        var isMod = (MODERATOR_AUTHS.indexOf(rAuth) !== -1);
+        if (!isOwner && !isCreador && !isMod) {
+            room.sendAnnouncement('⛔ Solo los administradores pueden usar !reiniciar', player.id, 0xFF0000);
+            return false;
+        }
+        // Determinar rol para mensajes
+        var rolMsg = (isOwner || isCreador) ? 'Creador' : 'Moderador';
+        // Log de debug
+        console.log('🔄 !reiniciar por: ' + player.name + ' | Rol: ' + rolMsg + ' | Auth: ' + rAuth);
+        // Notificar a Discord (webhook mods)
+        if (typeof window.__discordWebhook === 'function') {
+            var minigameName = 'Ninguno';
+            if (botState.gameActive && botState.currentMinigame) {
+                minigameName = botState.currentMinigame;
+            }
+            window.__discordWebhook('mods',
+                '🔄 **REINICIO SOLICITADO**\n' +
+                '👤 **' + rolMsg + ':** ' + player.name + '\n' +
+                '🔑 **Auth:** `' + rAuth + '`\n' +
+                '🕒 **Hora:** ' + new Date().toLocaleString('es-ES') + '\n' +
+                '🎮 **Minijuego:** `' + minigameName + '`'
+            );
+        }
+        // Reinisiar sala
+        if (botState.gameActive) {
+            forceStopAllGames();
+            room.sendAnnouncement('🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')', null, 0x00BFFF, 'bold', 2);
+            setTimeout(function() { checkAndStart(); }, 3000);
+        } else {
+            room.sendAnnouncement('🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')', null, 0x00BFFF, 'bold', 2);
+            setTimeout(function() { checkAndStart(); }, 2000);
+        }
+        return false;
+    }
+        // Verificar si es Owner, Creador o Moderador
+        var isOwner = (rAuth === OWNER_AUTH);
+        var isCreador = (CREATOR_AUTHS.indexOf(rAuth) !== -1);
+        var isMod = (MODERATOR_AUTHS.indexOf(rAuth) !== -1);
+        if (!isOwner && !isCreador && !isMod) {
+            room.sendAnnouncement('⛔ Solo los administradores pueden usar !reiniciar', player.id, 0xFF0000);
+            return false;
+        }
+        // Determinar rol para mensajes
+        var rolMsg = (isOwner || isCreador) ? 'Creador' : 'Moderador';
+        // Log para debug
+        console.log('🔄 !reiniciar usado por: ' + player.name + ' | Rol: ' + rolMsg + ' | auth: ' + rAuth);
+        // Notificar a Discord
+        if (typeof window.__discordWebhook === 'function') {
+            var minigameName = 'Ninguno';
+            if (botState.gameActive && botState.currentMinigame) {
+                minigameName = botState.currentMinigame;
+            } else if (botState.gameActive) {
+                minigameName = 'Sí (nombre no disponible)';
+            }
+            window.__discordWebhook('mods',
+                '🔄 **REINICIO SOLICITADO**\n' +
+                '👤 **' + rolMsg + ':** ' + player.name + '\n' +
+                '🔑 **Auth:** `' + rAuth + '`\n' +
+                '🕒 **Hora:** ' + new Date().toLocaleString('es-ES') + '\n' +
+                '🎮 **Minijuego:** `' + minigameName + '`'
+            );
+        }
+        
+        // Detener juegos activos y reiniciar
+        if (botState.gameActive) {
+            forceStopAllGames();
+            room.sendAnnouncement(
+                '🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')',
+                null, 0x00BFFF, 'bold', 2
+            );
+            setTimeout(function() { checkAndStart(); }, 3000);
+        } else {
+            room.sendAnnouncement(
+                '🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')',
+                null, 0x00BFFF, 'bold', 2
+            );
+            setTimeout(function() { checkAndStart(); }, 2000);
+        }
+        return false;
+    }
+        // Verificar si es Owner, Creador o Moderador
+        var isOwner = (rAuth === OWNER_AUTH);
+        var isCreador = (CREATOR_AUTHS.indexOf(rAuth) !== -1);
+        var isMod = (MODERATOR_AUTHS.indexOf(rAuth) !== -1);
+        if (!isOwner && !isCreador && !isMod) {
+            room.sendAnnouncement('⛔ Solo los administradores pueden usar !reiniciar', player.id, 0xFF0000);
+            return false;
+        }
+        // Determinar rol para mensajes
+        var rolMsg = (isOwner || isCreador) ? 'Creador' : 'Moderador';
+        // Log para debug
+        console.log('🔄 !reiniciar usado por: ' + player.name + ' | Rol: ' + rolMsg + ' | auth: ' + rAuth);
+        // Notificar a Discord
+        if (typeof window.__discordWebhook === 'function') {
+            var minigameName = 'Ninguno';
+            if (botState.gameActive && botState.currentMinigame) {
+                minigameName = botState.currentMinigame;
+            } else if (botState.gameActive) {
+                minigameName = 'Sí (nombre no disponible)';
+            }
+            window.__discordWebhook('mods',
+                '🔄 **REINICIO SOLICITADO**\n' +
+                '👤 **' + rolMsg + ':** ' + player.name + '\n' +
+                '🔑 **Auth:** `' + rAuth + '`\n' +
+                '🕒 **Hora:** ' + new Date().toLocaleString('es-ES') + '\n' +
+                '🎮 **Minijuego:** `' + minigameName + '`'
+            );
+        }
+        // Detener juegos activos y reiniciar
+        if (botState.gameActive) {
+            forceStopAllGames();
+            room.sendAnnouncement(
+                '🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')',
+                null, 0x00BFFF, 'bold', 2
+            );
+            setTimeout(function() { checkAndStart(); }, 3000);
+        } else {
+            room.sendAnnouncement(
+                '🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')',
+                null, 0x00BFFF, 'bold', 2
+            );
+            setTimeout(function() { checkAndStart(); }, 2000);
+        }
+        return false;
+    }
+        // Verificar si es Owner, Creador o Moderador
+        var isOwner = (rAuth === OWNER_AUTH);
+        var isCreador = (CREATOR_AUTHS.indexOf(rAuth) !== -1);
+        var isMod = (MODERATOR_AUTHS.indexOf(rAuth) !== -1);
+        if (!isOwner && !isCreador && !isMod) {
+            room.sendAnnouncement('⛔ Solo los administradores pueden usar !reiniciar', player.id, 0xFF0000);
+            return false;
+        }
+        // Determinar rol para mensajes
+        var rolMsg = (isOwner || isCreador) ? 'Creador' : 'Moderador';
+        // Log para debug
+        console.log('🔄 !reiniciar usado por: ' + player.name + ' | Rol: ' + rolMsg + ' | auth: ' + rAuth);
+        // Notificar a Discord
+        if (typeof window.__discordWebhook === 'function') {
+            var minigameName = 'Ninguno';
+            if (botState.gameActive && botState.currentMinigame) {
+                minigameName = botState.currentMinigame;
+            } else if (botState.gameActive) {
+                minigameName = 'Sí (nombre no disponible)';
+            }
+            window.__discordWebhook('mods',
+                '🔄 **REINICIO SOLICITADO**\n' +
+                '👤 **' + rolMsg + ':** ' + player.name + '\n' +
+                '🔑 **Auth:** `' + rAuth + '`\n' +
+                '🕒 **Hora:** ' + new Date().toLocaleString('es-ES') + '\n' +
+                '🎮 **Minijuego:** `' + minigameName + '`'
+            );
+        }
+        // Log para debug
+        console.log('🔄 !reiniciar usado por: ' + player.name + ' | Rol: ' + rolMsg + ' | auth: ' + rAuth);
+        // Notificar a Discord
+        if (typeof window.__discordWebhook === 'function') {
+            var minigameName = 'Ninguno';
+            if (botState.gameActive && botState.currentMinigame) {
+                minigameName = botState.currentMinigame;
+            } else if (botState.gameActive) {
+                minigameName = 'Sí (nombre no disponible)';
+            }
+            window.__discordWebhook('mods',
+                '🔄 **REINICIO SOLICITADO**\n' +
+                '👤 **' + rolMsg + ':** ' + player.name + '\n' +
+                '🔑 **Auth:** `' + rAuth + '`\n' +
+                '🕒 **Hora:** ' + new Date().toLocaleString('es-ES') + '\n' +
+                '🎮 **Minijuego:** `' + minigameName + '`'
+            );
+        }
+        
+        // Detener juegos activos y reiniciar
+        if (botState.gameActive) {
+            forceStopAllGames();
+            room.sendAnnouncement(
+                '🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')',
+                null, 0x00BFFF, 'bold', 2
+            );
+            setTimeout(function() { checkAndStart(); }, 3000);
+        } else {
+            room.sendAnnouncement(
+                '🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')',
+                null, 0x00BFFF, 'bold', 2
+            );
+            setTimeout(function() { checkAndStart(); }, 2000);
+        }
         return false;
     }
 

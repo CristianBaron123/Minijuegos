@@ -14,6 +14,13 @@ const HAXBALL_TOKEN = process.env.HAXBALL_TOKEN || "thr1.AAAAAGl_okIBMBkfgD5Nuw.
 const OWNER_AUTH = "JHcYct4vfesGbi6tGaauh08AxSwWnZq3QCm4rnzn2GE";
 
 // ============================================
+// CONFIGURACIÓN DE MODERADORES
+// ============================================
+const MODERATOR_AUTHS = [
+    "TSR_V1yn25T3PGuLRLDtJtqjS_2QXTLZVBCY7XkmTYpc" // Primer mod
+];
+
+// ============================================
 // WEBHOOKS DE DISCORD
 // ============================================
 const DISCORD_WEBHOOKS = {
@@ -23,13 +30,15 @@ const DISCORD_WEBHOOKS = {
     chatlog: "https://discord.com/api/webhooks/1475216935850475560/tzzFhOdHCgUwBZoy0vE_Vde9BErDbCB0OmX_jbEvj24_dmeEtdemz16TtoGWYwx2taKu",
     replays: "https://discord.com/api/webhooks/1475321739591549091/OdpkhWdvgD-psJISt5r0YjE51W2wuwV7uAo_ab6RigjmwNAeStN09eii3_fKNat-qdmn",
     stats: "https://discord.com/api/webhooks/1477693022148886540/ojM5ATpO2A6F_sny-AknN-KKuJTLaDwmQ1H_e0l-R9ocb48zzuZC38ryiDlDa68FKwR8",
-    bugs: "https://discord.com/api/webhooks/1474240910459011143/MYAaiXpGD-S9yjPe_JEF7VcZxa_7SAlLHDTukt0aB6kOvdaHh9LxvWww0DoYd0RSke97"
+    bugs: "https://discord.com/api/webhooks/1474240910459011143/MYAaiXpGD-S9yjPe_JEF7VcZxa_7SAlLHDTukt0aB6kOvdaHh9LxvWww0DoYd0RSke97",
+    mods: "https://discord.com/api/webhooks/1499791798850293843/7oztxm8zvrw2vNp5fERgqhJAGakSKURvPLLitNWZaKojbLYXLfy6RntLTrTwLdhnsZDc"
 };
 
 const TEST_MODE = process.env.TEST_MODE === 'true';
 
 async function sendDiscordWebhook(type, content) {
-    if (TEST_MODE) {
+    // Allow 'mods' webhook even in TEST_MODE (for creator/owner reiniciar)
+    if (TEST_MODE && type !== 'mods') {
         console.log("🧪 [TEST] Webhook '" + type + "' (no enviado): " + content.substring(0, 100) + "...");
         return true;
     }
@@ -897,10 +906,12 @@ const getBotScript = () => {
     const escapedLuckyHellCode = luckyHellModuleCode;
     const escapedLuckyDiosCode = luckyDiosModuleCode;
     
-    // Reemplazar variables dinámicas en room-main.txt
-    let mainCode = roomMainCode
-        .replace(/##TOKEN##/g, HAXBALL_TOKEN)
-        .replace(/##OWNER_AUTH##/g, OWNER_AUTH)
+     // Reemplazar variables dinámicas en room-main.txt
+     let mainCode = roomMainCode
+         .replace(/##TOKEN##/g, HAXBALL_TOKEN)
+         .replace(/##OWNER_AUTH##/g, OWNER_AUTH)
+         .replace(/##MODERATOR_AUTHS##/g, JSON.stringify(MODERATOR_AUTHS))
+         .replace(/##DISCORD_WEBHOOK_MODS##/g, DISCORD_WEBHOOKS.mods || '')
         .replace(/##MAP_LUCK##/g, JSON.stringify(JSON.stringify(mapLuckData)))
         .replace(/##MAP_LUCK_DIOS##/g, JSON.stringify(JSON.stringify(mapLuckDiosData)))
         .replace(/##MAP_LUCK_HELL##/g, JSON.stringify(JSON.stringify(mapLuckHellData)))
