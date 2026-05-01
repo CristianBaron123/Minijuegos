@@ -1,7 +1,7 @@
 // ============================================
 // MINIJUEGO: SPACE VORTEX - 1v1
 // Se mueven rapido y descontrolado
-// Primero a 3 goles gana
+// Gol gana. Si no hay gol en 2 min, gana el que tenga mas goles.
 // ============================================
 
 var mapData = null;
@@ -14,13 +14,15 @@ var gameState = {
     prevOnGoal: null,
     onGameEnd: null,
     goalEnabled: false,
-    scores: { 1: 0, 2: 0 }
+    scores: { 1: 0, 2: 0 },
+    gameTimer: null,
+    timeWarnings: {}
 };
 
 var config = {
     explanationMs: 5000,
     graceMs: 3000,
-    goalsToWin: 3
+    gameDurationMs: 120000
 };
 
 function start(room, player1, player2, onGameEnd) {
@@ -62,8 +64,8 @@ function start(room, player1, player2, onGameEnd) {
         room.sendAnnouncement(
             '\n📋 INSTRUCCIONES:\n' +
             '🌀 Te mueves rapido y descontrolado!\n' +
-            '⚽ Mete gol al arco contrario\n' +
-            '🏆 Primero a ' + config.goalsToWin + ' goles GANA!\n\n' +
+            '⚽ METE GOL Y GANAS!\n' +
+            '⏰ Si no hay gol en 2 min, gana el que tenga mas goles\n\n' +
             '⏱️ Comienza en 5s...',
             null, 0xFFFF00, 'bold', 2
         );
@@ -73,7 +75,8 @@ function start(room, player1, player2, onGameEnd) {
             try { room.pauseGame(false); } catch(e) {}
             gameState.chatBlocked = false;
             gameState.gameStartTime = Date.now();
-            room.sendAnnouncement('🟢 COMIENZA!', null, 0x00FF00, 'bold', 2);
+            gameState.timeWarnings = {};
+            room.sendAnnouncement('🟢 COMIENZA! ⚽ GOL GANA!', null, 0x00FF00, 'bold', 2);
 
             gameState.prevOnGoal = room.onTeamGoal;
             room.onTeamGoal = function(team) {
@@ -81,22 +84,47 @@ function start(room, player1, player2, onGameEnd) {
                 if (team === 1 || team === 2) {
                     gameState.scores[team]++;
                     room.sendAnnouncement('⚽ Gol del equipo ' + (team === 1 ? '🔴' : '🔵') + ' — ' + gameState.scores[1] + ' : ' + gameState.scores[2], null, 0x00FF00, 'bold');
-                    if (gameState.scores[team] >= config.goalsToWin) {
-                        var winner = null;
-                        for (var i = 0; i < gameState.players.length; i++) {
-                            if ((i === 0 && team === 1) || (i === 1 && team === 2)) {
-                                winner = gameState.players[i];
-                                break;
-                            }
+                    var winner = null;
+                    for (var i = 0; i < gameState.players.length; i++) {
+                        if ((i === 0 && team === 1) || (i === 1 && team === 2)) {
+                            winner = gameState.players[i];
+                            break;
                         }
-                        if (winner) declareWinner(room, winner, '⚽ Anoto ' + config.goalsToWin + ' goles!');
                     }
+                    if (winner) declareWinner(room, winner, '⚽ GOL GANA!');
                 }
             };
 
             setTimeout(function() {
                 gameState.goalEnabled = true;
             }, config.graceMs);
+
+            gameState.gameTimer = setTimeout(function() {
+                if (!gameState.active) return;
+                if (gameState.scores[1] > gameState.scores[2]) {
+                    declareWinner(room, gameState.players[0], '⏰ Tiempo! Mas goles (' + gameState.scores[1] + '-' + gameState.scores[2] + ')');
+                } else if (gameState.scores[2] > gameState.scores[1]) {
+                    declareWinner(room, gameState.players[1], '⏰ Tiempo! Mas goles (' + gameState.scores[1] + '-' + gameState.scores[2] + ')');
+                } else {
+                    room.sendAnnouncement('⏰ Tiempo agotado! Empate ' + gameState.scores[1] + '-' + gameState.scores[2] + '. Muerte subita!', null, 0xFFFF00, 'bold', 2);
+                }
+            }, config.gameDurationMs);
+
+            setTimeout(function() {
+                if (!gameState.active) return;
+                if (!gameState.timeWarnings['60']) {
+                    gameState.timeWarnings['60'] = true;
+                    room.sendAnnouncement('⏰ 1 minuto restante!', null, 0xFFFF00, 'bold');
+                }
+            }, config.gameDurationMs - 60000);
+
+            setTimeout(function() {
+                if (!gameState.active) return;
+                if (!gameState.timeWarnings['30']) {
+                    gameState.timeWarnings['30'] = true;
+                    room.sendAnnouncement('⏰ 30 segundos!', null, 0xFF6600, 'bold');
+                }
+            }, config.gameDurationMs - 30000);
         }, config.explanationMs);
     }, 1500);
 }
@@ -105,6 +133,7 @@ function declareWinner(room, winner, reason) {
     if (!gameState.active) return;
     gameState.active = false;
     gameState.goalEnabled = false;
+    if (gameState.gameTimer) { clearTimeout(gameState.gameTimer); gameState.gameTimer = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e) {}
 
     var elapsed = '';
@@ -125,11 +154,13 @@ function declareWinner(room, winner, reason) {
 function stop(room) {
     gameState.active = false;
     gameState.goalEnabled = false;
+    if (gameState.gameTimer) { clearTimeout(gameState.gameTimer); gameState.gameTimer = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e) {}
     gameState.players = [];
     gameState.chatBlocked = false;
     gameState.onGameEnd = null;
     gameState.scores = { 1: 0, 2: 0 };
+    gameState.timeWarnings = {};
     try { room.stopGame(); } catch(e) {}
 }
 

@@ -43,7 +43,7 @@ function start(room, onGameEnd) {
 
     try { room.setCustomStadium(mapData); } catch(e) { console.error('[WAR_CONQUEST] Error cargando mapa', e.message); if (onGameEnd) onGameEnd(null); return; }
 
-    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
     var minPlayers = isTestMode() ? 2 : 6;
     if (players.length < minPlayers) { room.sendAnnouncement('⚠️ Se necesitan al menos 6 jugadores para War of Conquest (3v3)', null, 0xFF6600); if (onGameEnd) onGameEnd(null); return; }
 

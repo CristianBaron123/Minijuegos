@@ -24,7 +24,7 @@ var config = {
     checkMs: 100,
     explanationMs: 5000,
     eliminationY: -420,
-    maxTimeMs: 240000
+    maxTimeMs: 180000
 };
 
 function start(room, onGameEnd) {
@@ -78,7 +78,7 @@ function start(room, onGameEnd) {
 
             gameState.checkInterval = setInterval(function() { checkPlayers(room); }, config.checkMs);
 
-            // Limite de 4 minutos
+            // Limite de 3 minutos
             gameState.timeoutTimer = setTimeout(function() {
                 if (!gameState.active) return;
                 room.sendAnnouncement('⏰ Tiempo agotado! Empate - nadie gana.', null, 0xFFFF00, 'bold');
@@ -86,12 +86,6 @@ function start(room, onGameEnd) {
                 stop(room);
                 if (cb) cb(null);
             }, config.maxTimeMs);
-
-            // Aviso a la mitad
-            setTimeout(function() {
-                if (!gameState.active) return;
-                room.sendAnnouncement('⏰ Quedan 2 minutos!', null, 0xFFFF00, 'bold');
-            }, config.maxTimeMs / 2);
 
             // Aviso 30s
             setTimeout(function() {
@@ -117,10 +111,18 @@ function checkPlayers(room) {
             continue;
         }
 
+        // Eliminado si esta en espectador (team 0)
+        if (player.team === 0) {
+            if (gameState.eliminated.indexOf(p.id) === -1) {
+                gameState.eliminated.push(p.id);
+            }
+            continue;
+        }
+
         var pos = player.position;
         if (!pos) { alivePlayers.push(p); continue; }
 
-        if (player.team === 0 || pos.y <= config.eliminationY) {
+        if (pos.y <= config.eliminationY) {
             if (gameState.eliminated.indexOf(p.id) === -1) {
                 gameState.eliminated.push(p.id);
                 try { room.setPlayerTeam(p.id, 0); } catch(e){}

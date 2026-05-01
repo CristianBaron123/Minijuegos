@@ -10,14 +10,16 @@ var gameState = {
     active: false,
     checkInterval: null,
     players: [],
+    eliminated: [],
     chatBlocked: false,
-    hasBeenInBounds: {}
+    hasBeenInBounds: {},
+    callback: null
 };
 
 var config = {
     minPlayers: 2,
     bounds: 377,
-    checkMs: 500
+    checkMs: 100
 };
 
 function isOutside(x, y) {
@@ -28,6 +30,8 @@ function isOutside(x, y) {
 function start(room, onEnd) {
     if (gameState.active) return;
     gameState.active = true;
+    gameState.callback = onEnd || null;
+    gameState.eliminated = [];
 
     try {
         if (!mapData) {
@@ -39,10 +43,9 @@ function start(room, onEnd) {
         console.error('❌ SPACE_MELEE: fallo al cargar mapa', e && e.message);
     }
 
-    // Mezclar equipos y preparar la pausa de instrucciones
     try { shuffleTeams(room); } catch (e) {}
 
-    gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0; });
+    gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0 && p.team !== 0; }).map(function(p) { return { id: p.id, name: p.name }; });
     gameState.hasBeenInBounds = {};
 
     room.sendAnnouncement('🎲 Minijuego: SPACE MELEE\n👥 Jugadores: ' + gameState.players.length + '\n⏱️ Iniciando en 3 segundos...', null, 0x00BFFF, 'bold', 2);
@@ -51,7 +54,6 @@ function start(room, onEnd) {
         room.startGame();
         room.pauseGame(true);
 
-        // Bloquear chat durante la explicación
         gameState.chatBlocked = true;
 
         room.sendAnnouncement('\n📋 INSTRUCCIONES:\n🌌 Estás dentro de la galaxia. Tu objetivo es evitar salir del círculo.\n🪐 Puedes usar los planetas para rebotar.\n🏆 El último en pie gana.\n\n⏱️ Comienza en 3s...', null, 0xFFFF00, 'bold', 2);
@@ -63,7 +65,6 @@ function start(room, onEnd) {
         }, 8000);
     }, 1500);
 
-    // Inicio de comprobación periódica
     setTimeout(function(){
         gameState.checkInterval = setInterval(function(){ checkPlayers(room, onEnd); }, config.checkMs);
     }, 9500);
@@ -72,45 +73,65 @@ function start(room, onEnd) {
 function checkPlayers(room, onEnd) {
     if (!gameState.active) return;
 
-    var players = room.getPlayerList().filter(function(p){ return p.id !== 0 && p.team !== 0; });
+    var alivePlayers = [];
 
-    players.forEach(function(p){
-        if (!p) return;
+    for (var i = 0; i < gameState.players.length; i++) {
+        var p = gameState.players[i];
+        if (gameState.eliminated.indexOf(p.id) !== -1) continue;
+
+        var player = room.getPlayer(p.id);
+        if (!player) {
+            gameState.eliminated.push(p.id);
+            room.sendAnnouncement('❌ ' + p.name + ' se desconectó', null, 0xFF6600);
+            continue;
+        }
+
+        if (player.team === 0) {
+            if (gameState.eliminated.indexOf(p.id) === -1) {
+                gameState.eliminated.push(p.id);
+            }
+            continue;
+        }
+
         try {
-            var x = (typeof p.x === 'number') ? p.x : (p.position && p.position.x) || 0;
-            var y = (typeof p.y === 'number') ? p.y : (p.position && p.position.y) || 0;
-
-            if (p.team === 0) return;
+            var x = (typeof player.x === 'number') ? player.x : (player.position && player.position.x) || 0;
+            var y = (typeof player.y === 'number') ? player.y : (player.position && player.position.y) || 0;
 
             if (isOutside(x, y)) {
-                // Protección de spawn: no eliminar si nunca estuvo dentro
-                if (!gameState.hasBeenInBounds[p.id]) return;
-                try {
-                    room.setPlayerTeam(p.id, 0);
-                    room.sendAnnouncement('❌ ' + p.name + ' eliminado (salió del área)', null, 0xFF0000);
-                } catch(e) {}
+                if (!gameState.hasBeenInBounds[p.id]) { alivePlayers.push(p); continue; }
+                if (gameState.eliminated.indexOf(p.id) === -1) {
+                    gameState.eliminated.push(p.id);
+                    try {
+                        room.setPlayerTeam(p.id, 0);
+                        var remaining = gameState.players.length - gameState.eliminated.length;
+                        room.sendAnnouncement('❌ ' + p.name + ' eliminado (salió del área)! (' + remaining + ' restantes)', null, 0xFF6600);
+                    } catch(e) {}
+                }
             } else {
                 gameState.hasBeenInBounds[p.id] = true;
+                alivePlayers.push(p);
             }
-        } catch(e) {}
-    });
-
-    var alive = room.getPlayerList().filter(function(p){ return p.id !== 0 && p.team !== 0; });
-
-    if (alive.length <= 1) {
-        if (gameState.checkInterval) {
-            clearInterval(gameState.checkInterval);
-            gameState.checkInterval = null;
-        }
-        gameState.active = false;
-        if (alive.length === 1) {
-            room.sendAnnouncement('\n🏆 ¡' + alive[0].name.toUpperCase() + ' HA GANADO! 🏆', null, 0xFFD700, 'bold', 2);
-            setTimeout(function(){ onEnd && onEnd(alive[0]); }, 1000);
-        } else {
-            room.sendAnnouncement('❌ No hay ganador - todos fueron eliminados', null, 0xFF0000);
-            setTimeout(function(){ onEnd && onEnd(null); }, 1000);
-        }
+        } catch(e) { alivePlayers.push(p); }
     }
+
+    if (alivePlayers.length === 1) {
+        declareWinner(room, alivePlayers[0], onEnd);
+    } else if (alivePlayers.length === 0 && gameState.eliminated.length > 0) {
+        room.sendAnnouncement('❌ No hay ganador - todos fueron eliminados', null, 0xFF0000);
+        stop(room);
+        if (onEnd) onEnd(null);
+    }
+}
+
+function declareWinner(room, winner, onEnd) {
+    gameState.active = false;
+    if (gameState.checkInterval) {
+        clearInterval(gameState.checkInterval);
+        gameState.checkInterval = null;
+    }
+
+    room.sendAnnouncement('\n🏆 ¡' + winner.name.toUpperCase() + ' HA GANADO SPACE MELEE! 🏆', null, 0xFFD700, 'bold', 2);
+    setTimeout(function(){ if (onEnd) onEnd(winner); }, 3000);
 }
 
 function stop(room) {
@@ -137,10 +158,12 @@ function shuffleTeams(room) {
 }
 
 function onPlayerLeave(room, player) {
-    // no-op adicional
+    if (gameState.active && gameState.eliminated.indexOf(player.id) === -1) {
+        gameState.eliminated.push(player.id);
+    }
 }
 
-function onPlayerChat(player) {
+function onPlayerChat(player, message) {
     if (gameState.chatBlocked) return false;
     return true;
 }

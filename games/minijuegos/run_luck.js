@@ -32,7 +32,7 @@ function start(room, onGameEnd) {
 
     shuffleTeams(room);
 
-    var activePlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    var activePlayers = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
     gameState.players = activePlayers.map(function(p) { return { id: p.id, name: p.name }; });
 
     room.sendAnnouncement(
@@ -77,7 +77,12 @@ function checkPlayers(room) {
 
         var player = room.getPlayer(p.id);
         if (!player) { gameState.eliminated.push(p.id); continue; }
-        if (player.team === 0) { gameState.eliminated.push(p.id); continue; }
+        if (player.team === 0) {
+            if (gameState.eliminated.indexOf(p.id) === -1) {
+                gameState.eliminated.push(p.id);
+            }
+            continue;
+        }
 
         var py = (typeof player.y === 'number') ? player.y : (player.position && typeof player.position.y === 'number' ? player.position.y : null);
         if (py === null) { alivePlayers.push(p); continue; }
@@ -137,8 +142,12 @@ function shuffleTeams(room) {
 }
 
 function isActive() { return gameState.active; }
-function onPlayerChat(player) { if (gameState.chatBlocked) return false; return true; }
-function onPlayerLeave(player) {}
+function onPlayerChat(player, message) { if (gameState.chatBlocked) return false; return true; }
+function onPlayerLeave(room, player) {
+    if (gameState.active && gameState.eliminated.indexOf(player.id) === -1) {
+        gameState.eliminated.push(player.id);
+    }
+}
 
 module.exports = {
     start: start,
