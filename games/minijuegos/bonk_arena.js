@@ -10,8 +10,9 @@ var gameState = {
     active: false,
     players: [],
     eliminated: [],
-    prevPositions: {},  // { playerId: {x, y} } para detectar teletransporte
+    prevPositions: {},
     checkInterval: null,
+    timeoutTimer: null,
     chatBlocked: false,
     gameStartTime: null,
     firstEliminated: null
@@ -21,11 +22,8 @@ var config = {
     minPlayers: 2,
     checkMs: 100,
     explanationMs: 5000,
-    // Mapa: 650x380 → campo ±650 x ±380
-    // Cuando un jugador toca los circulos KO o cae, se teletransporta
-    // Detectamos eliminacion por salto brusco de posicion (>100 unidades)
-    // o por estar fuera de los limites visibles
-    teleportThreshold: 120, // salto de posicion = teletransportado = eliminado
+    maxTimeMs: 180000,
+    teleportThreshold: 120,
     bounds: { minX: -630, maxX: 630, minY: -370, maxY: 370 }
 };
 
@@ -80,6 +78,18 @@ function start(room, onGameEnd) {
 
     setTimeout(function() {
         gameState.checkInterval = setInterval(function() { checkPlayers(room, onGameEnd); }, config.checkMs);
+
+        gameState.timeoutTimer = setTimeout(function() {
+            if (!gameState.active) return;
+            room.sendAnnouncement('⏰ Tiempo agotado! Empate - nadie gana.', null, 0xFFFF00, 'bold', 2);
+            stop(room);
+            if (onGameEnd) onGameEnd(null);
+        }, config.maxTimeMs);
+
+        setTimeout(function() {
+            if (!gameState.active) return;
+            room.sendAnnouncement('⏰ Quedan 30 segundos!', null, 0xFF6600, 'bold');
+        }, config.maxTimeMs - 30000);
     }, 8500);
 }
 
@@ -158,6 +168,7 @@ function checkPlayers(room, onGameEnd) {
 function declareWinner(room, winner, onGameEnd) {
     gameState.active = false;
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+    if (gameState.timeoutTimer) { clearTimeout(gameState.timeoutTimer); gameState.timeoutTimer = null; }
 
     room.sendAnnouncement(
         '\n🏆 ¡' + winner.name.toUpperCase() + ' HA GANADO BONK ARENA! 🏆',
@@ -181,6 +192,7 @@ function shuffleTeams(room) {
 function stop(room) {
     gameState.active = false;
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+    if (gameState.timeoutTimer) { clearTimeout(gameState.timeoutTimer); gameState.timeoutTimer = null; }
     gameState.players = [];
     gameState.eliminated = [];
     gameState.prevPositions = {};

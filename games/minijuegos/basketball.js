@@ -29,7 +29,7 @@ function start(room, onGameEnd) {
 
     try { room.setCustomStadium(mapData); } catch(e) { console.error('[BASKETBALL] Error cargando mapa', e.message); if (onGameEnd) onGameEnd(null); return; }
 
-    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
     if (players.length < 2) { room.sendAnnouncement('⚠️ No hay suficientes jugadores para BASKETBALL', null, 0xFF6600); if (onGameEnd) onGameEnd(null); return; }
 
     gameState.active = true;

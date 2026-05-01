@@ -93,11 +93,18 @@ function checkPlayers(room) {
             continue;
         }
 
+        // Eliminado si esta en espectador (team 0)
+        if (player.team === 0) {
+            if (gameState.eliminated.indexOf(p.id) === -1) {
+                gameState.eliminated.push(p.id);
+            }
+            continue;
+        }
+
         var pos = player.position;
         if (!pos) { alivePlayers.push(p); continue; }
 
-        // Eliminado si esta en espectador (team 0) o si cayo al vacio
-        if (player.team === 0 || pos.y <= config.eliminationY) {
+        if (pos.y <= config.eliminationY) {
             if (gameState.eliminated.indexOf(p.id) === -1) {
                 gameState.eliminated.push(p.id);
                 try { room.setPlayerTeam(p.id, 0); } catch(e){}

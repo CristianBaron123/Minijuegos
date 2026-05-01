@@ -11,6 +11,7 @@ var gameState = {
     players: [],
     eliminated: [],
     checkInterval: null,
+    timeoutTimer: null,
     chatBlocked: false,
     gameStartTime: null,
     callback: null
@@ -20,7 +21,8 @@ var config = {
     minPlayers: 2,
     checkMs: 100,
     explanationMs: 5000,
-    eliminationY: -480
+    eliminationY: -480,
+    maxTimeMs: 180000
 };
 
 function start(room, onGameEnd) {
@@ -72,6 +74,19 @@ function start(room, onGameEnd) {
             room.sendAnnouncement('🟢 COMIENZA BONK SUMMER!', null, 0x00FF00, 'bold', 2);
 
             gameState.checkInterval = setInterval(function() { checkPlayers(room); }, config.checkMs);
+
+            gameState.timeoutTimer = setTimeout(function() {
+                if (!gameState.active) return;
+                room.sendAnnouncement('⏰ Tiempo agotado! Empate - nadie gana.', null, 0xFFFF00, 'bold', 2);
+                var cb = gameState.callback;
+                stop(room);
+                if (cb) cb(null);
+            }, config.maxTimeMs);
+
+            setTimeout(function() {
+                if (!gameState.active) return;
+                room.sendAnnouncement('⏰ Quedan 30 segundos!', null, 0xFF6600, 'bold');
+            }, config.maxTimeMs - 30000);
         }, config.explanationMs);
     }, 1500);
 }
@@ -90,6 +105,16 @@ function checkPlayers(room) {
             gameState.eliminated.push(p.id);
             var rem = gameState.players.length - gameState.eliminated.length;
             room.sendAnnouncement('❌ ' + p.name + ' se desconecto! (' + rem + ' restantes)', null, 0xFF6600);
+            continue;
+        }
+
+        if (player.team === 0) {
+            if (gameState.eliminated.indexOf(p.id) === -1) {
+                gameState.eliminated.push(p.id);
+                try { room.setPlayerTeam(p.id, 0); } catch(e){}
+                var remaining = gameState.players.length - gameState.eliminated.length;
+                room.sendAnnouncement('❌ ' + p.name + ' eliminado! (' + remaining + ' restantes)', null, 0xFF6600);
+            }
             continue;
         }
 
@@ -118,6 +143,7 @@ function checkPlayers(room) {
 function declareWinner(room, winner) {
     gameState.active = false;
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+    if (gameState.timeoutTimer) { clearTimeout(gameState.timeoutTimer); gameState.timeoutTimer = null; }
 
     room.sendAnnouncement(
         '\n🏆 ' + winner.name.toUpperCase() + ' HA GANADO BONK SUMMER! 🏆',
@@ -142,6 +168,7 @@ function shuffleTeams(room) {
 function stop(room) {
     gameState.active = false;
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+    if (gameState.timeoutTimer) { clearTimeout(gameState.timeoutTimer); gameState.timeoutTimer = null; }
     gameState.players = [];
     gameState.eliminated = [];
     gameState.chatBlocked = false;
