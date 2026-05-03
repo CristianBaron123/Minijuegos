@@ -54,41 +54,55 @@ function assignGoals(room) {
     var goals = gameState.goalCenters;
     if (goals.length === 0 || alive.length === 0) return;
 
-    // Invalidar índices fuera de rango
+    var claimed = {};
+
+    function closestFreeGoal(playerX, playerY) {
+        var best = -1, bestDist = 999999;
+        for (var i = 0; i < goals.length; i++) {
+            if (claimed[i]) continue;
+            var dx = playerX - goals[i].x;
+            var dy = playerY - goals[i].y;
+            var d = Math.sqrt(dx * dx + dy * dy);
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        return best;
+    }
+
+    var playersWithPos = [];
     for (var k = 0; k < alive.length; k++) {
-        if (gameState.players[alive[k]].goalIndex >= goals.length) {
-            gameState.players[alive[k]].goalIndex = -1;
+        var pid = alive[k];
+        var pos = null;
+        try { var pp = room.getPlayerDiscProperties(pid); if (pp) pos = { x: pp.x, y: pp.y }; } catch(e) {}
+        playersWithPos.push({ id: pid, x: pos ? pos.x : 0, y: pos ? pos.y : 0 });
+    }
+
+    for (var j = 0; j < playersWithPos.length; j++) {
+        var pw = playersWithPos[j];
+        var gi = closestFreeGoal(pw.x, pw.y);
+        if (gi >= 0) {
+            gameState.players[pw.id].goalIndex = gi;
+            claimed[gi] = true;
         }
     }
 
-    // Recopilar índices ya usados
-    var used = {};
-    for (var k2 = 0; k2 < alive.length; k2++) {
-        var gi = gameState.players[alive[k2]].goalIndex;
-        if (gi >= 0) used[gi] = true;
-    }
-
-    // Asignar índices libres a los sin goal
-    var next = 0;
-    for (var k3 = 0; k3 < alive.length; k3++) {
-        var pid = alive[k3];
-        if (gameState.players[pid].goalIndex < 0) {
-            while (used[next] || next >= goals.length) next++;
-            if (next < goals.length) {
-                gameState.players[pid].goalIndex = next;
-                used[next] = true;
-            }
-        }
-    }
-
-    // Teleportar cada jugador frente a su portería
-    for (var j = 0; j < alive.length; j++) {
-        var pid2 = alive[j];
+    for (var m = 0; m < alive.length; m++) {
+        var pid2 = alive[m];
         var gi2 = gameState.players[pid2].goalIndex;
         if (gi2 < 0 || gi2 >= goals.length) continue;
         var gx = goals[gi2].x;
         var gy = goals[gi2].y;
-        try { room.setPlayerDiscProperties(pid2, { x: Math.round(gx * 0.7), y: Math.round(gy * 0.7), xspeed: 0, yspeed: 0 }); } catch(e) {}
+        try {
+            var curPos = null;
+            try { var cp = room.getPlayerDiscProperties(pid2); if (cp) curPos = { x: cp.x, y: cp.y }; } catch(e2) {}
+            if (curPos) {
+                var cdx = curPos.x - gx;
+                var cdy = curPos.y - gy;
+                var cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+                if (cdist > 100) {
+                    room.setPlayerDiscProperties(pid2, { x: Math.round(gx * 0.7), y: Math.round(gy * 0.7), xspeed: 0, yspeed: 0 });
+                }
+            }
+        } catch(e) {}
     }
 }
 
@@ -158,7 +172,11 @@ function checkRemaining(room) {
 
             room.sendAnnouncement('⚡ ' + aliveList.length + ' jugadores restantes! Defiende donde apareces', null, 0xFFFF00, 'bold', 2);
             try { room.startGame(); } catch(e) {}
-            setTimeout(function() { assignGoals(room); }, 500);
+            try { room.pauseGame(true); } catch(e) {}
+            setTimeout(function() {
+                assignGoals(room);
+                try { room.pauseGame(false); } catch(e) {}
+            }, 1500);
         }, 1500);
     }
 }
@@ -174,7 +192,7 @@ function start(room, onGameEnd) {
         return;
     }
 
-    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
     if (players.length < 3) {
         room.sendAnnouncement('⚠️ Se necesitan al menos 3 jugadores para Buho', null, 0xFF6600);
         if (onGameEnd) onGameEnd(null);
@@ -232,7 +250,7 @@ function start(room, onGameEnd) {
         setTimeout(function() {
             try { room.pauseGame(false); } catch(e) {}
         }, 3000);
-    }, 500);
+    }, 1500);
 }
 
 function stop(room) {
@@ -259,6 +277,13 @@ function onTeamGoal(room, team) {
     if (!ballPos) ballPos = gameState.lastBallPos;
     if (!ballPos) {
         console.log('[BUHO] onTeamGoal: sin posición de bola');
+        room.sendAnnouncement('⚠️ Error: no se detectó posición de la bola', null, 0xFF0000);
+        return;
+    }
+
+    if (gameState.goalCenters.length === 0) {
+        console.log('[BUHO] onTeamGoal: goalCenters vacío! mapSize=' + gameState.currentMapSize);
+        room.sendAnnouncement('⚠️ Error: goalCenters no cargados para mapa ' + gameState.currentMapSize, null, 0xFF0000);
         return;
     }
 
@@ -285,7 +310,10 @@ function onTeamGoal(room, team) {
         }
     }
     if (ownerId === null) {
-        console.log('[BUHO] onTeamGoal: goal ' + closest + ' sin dueño vivo');
+        console.log('[BUHO] onTeamGoal: goal ' + closest + ' sin dueño vivo. goalIndex de jugadores:');
+        for (var id2 in gameState.players) {
+            console.log('  ' + id2 + ': goalIndex=' + gameState.players[id2].goalIndex + ' alive=' + gameState.players[id2].alive);
+        }
         return;
     }
 
