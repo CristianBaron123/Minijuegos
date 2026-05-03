@@ -1,5 +1,5 @@
 var roomConfig = {
-    roomName: "🎮🎮🎮| Minijuegos_Isagi v1.9 🎮",
+    roomName: "🎮🎮🎮| Minijuegos_Isagi v2.1 🎮",
     maxPlayers: 30,
     public: true,
     token: "##TOKEN##",
@@ -3485,7 +3485,7 @@ room.onPlayerJoin = function(player) {
 
     room.sendAnnouncement(
         "👋 Bienvenido " + player.name + "!\n" +
-        "🎮 Sala de Minijuegos v1.9 - Los juegos inician automaticamente\n" +
+        "🎮 Sala de Minijuegos v2.1 - Los juegos inician automaticamente\n" +
         "💰 Gana dinero jugando minijuegos\n" +
         "🛡️ Crea o unete a un clan con !clan\n" +
         "📋 Escribe !ayuda para ver comandos\n" +
