@@ -17,7 +17,8 @@ const OWNER_AUTH = "JHcYct4vfesGbi6tGaauh08AxSwWnZq3QCm4rnzn2GE";
 // CONFIGURACIÓN DE MODERADORES
 // ============================================
 const MODERATOR_AUTHS = [
-    "TSR_V1yn25T3PGuLRLDtJtqjS_2QXTLZVBCY7XkmTYpc" // Primer mod
+    "TSR_V1yn25T3PGuLRLDtJtqjS_2QXTLZVBCY7XkmTYpc", // Primer mod
+    "2.4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk" // Segundo mod
 ];
 
 // ============================================
