@@ -760,29 +760,18 @@ if (fs.existsSync(buhoMapsDir)) {
             buhoMapsData[key] = content;
             try {
                 const parsed = JSON.parse(content);
-                if (parsed.goals && parsed.goals.length > 0) {
-                    // Los mapas BUHO tienen 4 segmentos por cada portería (4 segmentos × N jugadores)
-                    // Agrupar por posición Y similar para obtener el centro real de cada portería
-                    var goalMap = {};
-                    for (var gi = 0; gi < parsed.goals.length; gi++) {
-                        var g = parsed.goals[gi];
-                        var cx = Math.round((g.p0[0] + g.p1[0]) / 2);
-                        var cy = Math.round((g.p0[1] + g.p1[1]) / 2);
-                        // Agrupar por coordenada X (las porterías idénticas tienen la misma X)
-                        if (!goalMap[cx]) goalMap[cx] = [];
-                        goalMap[cx].push({ x: cx, y: cy });
-                    }
-                    // Tomar el promedio de Y para cada grupo X (el centro de la portería)
-                    var centers = [];
-                    var keys = Object.keys(goalMap).map(Number).sort(function(a,b) { return a - b; });
-                    for (var ki = 0; ki < keys.length; ki++) {
-                        var group = goalMap[keys[ki]];
-                        var avgY = Math.round(group.reduce(function(sum, p) { return sum + p.y; }, 0) / group.length);
-                        centers.push({ x: keys[ki], y: avgY });
-                    }
-                    buhoGoalCenters[key] = centers;
+                if (parsed.goals) {
+                    buhoGoalCenters[key] = parsed.goals.map(function(g) {
+                        return { x: Math.round((g.p0[0] + g.p1[0]) / 2), y: Math.round((g.p0[1] + g.p1[1]) / 2) };
+                    });
                 } else {
                     buhoGoalCenters[key] = [];
+                }
+                // Guardar spawn points para asignar porterías correctamente
+                if (parsed.redSpawnPoints && parsed.blueSpawnPoints) {
+                    if (!buhoSpawnPoints[key]) buhoSpawnPoints[key] = {};
+                    buhoSpawnPoints[key].red = parsed.redSpawnPoints;
+                    buhoSpawnPoints[key].blue = parsed.blueSpawnPoints;
                 }
             } catch(e) { buhoGoalCenters[key] = []; }
         }
