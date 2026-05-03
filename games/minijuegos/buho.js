@@ -54,37 +54,19 @@ function assignGoals(room) {
     var goals = gameState.goalCenters;
     if (goals.length === 0 || alive.length === 0) return;
 
-    var claimed = {};
-
-    function closestFreeGoal(playerX, playerY) {
-        var best = -1, bestDist = 999999;
-        for (var i = 0; i < goals.length; i++) {
-            if (claimed[i]) continue;
-            var dx = playerX - goals[i].x;
-            var dy = playerY - goals[i].y;
-            var d = Math.sqrt(dx * dx + dy * dy);
-            if (d < bestDist) { bestDist = d; best = i; }
-        }
-        return best;
+    // Resetear goalIndex de todos los jugadores vivos
+    for (var ri = 0; ri < alive.length; ri++) {
+        gameState.players[alive[ri]].goalIndex = -1;
     }
 
-    var playersWithPos = [];
-    for (var k = 0; k < alive.length; k++) {
-        var pid = alive[k];
-        var pos = null;
-        try { var pp = room.getPlayerDiscProperties(pid); if (pp) pos = { x: pp.x, y: pp.y }; } catch(e) {}
-        playersWithPos.push({ id: pid, x: pos ? pos.x : 0, y: pos ? pos.y : 0 });
+    // Asignar porterías según orden de spawn (más confiable que leer posiciones)
+    // Los jugadores se asignan a las porterías en orden: jugador 0 -> goal 0, jugador 1 -> goal 1, etc.
+    for (var i = 0; i < alive.length; i++) {
+        var goalIdx = i % goals.length;
+        gameState.players[alive[i]].goalIndex = goalIdx;
     }
 
-    for (var j = 0; j < playersWithPos.length; j++) {
-        var pw = playersWithPos[j];
-        var gi = closestFreeGoal(pw.x, pw.y);
-        if (gi >= 0) {
-            gameState.players[pw.id].goalIndex = gi;
-            claimed[gi] = true;
-        }
-    }
-
+    // Teletransportar jugadores a sus porterías (usar posición del goal * 0.7 para no spawnear sobre el arco)
     for (var m = 0; m < alive.length; m++) {
         var pid2 = alive[m];
         var gi2 = gameState.players[pid2].goalIndex;
@@ -92,18 +74,11 @@ function assignGoals(room) {
         var gx = goals[gi2].x;
         var gy = goals[gi2].y;
         try {
-            var curPos = null;
-            try { var cp = room.getPlayerDiscProperties(pid2); if (cp) curPos = { x: cp.x, y: cp.y }; } catch(e2) {}
-            if (curPos) {
-                var cdx = curPos.x - gx;
-                var cdy = curPos.y - gy;
-                var cdist = Math.sqrt(cdx * cdx + cdy * cdy);
-                if (cdist > 100) {
-                    room.setPlayerDiscProperties(pid2, { x: Math.round(gx * 0.7), y: Math.round(gy * 0.7), xspeed: 0, yspeed: 0 });
-                }
-            }
+            room.setPlayerDiscProperties(pid2, { x: Math.round(gx * 0.7), y: Math.round(gy * 0.7), xspeed: 0, yspeed: 0 });
         } catch(e) {}
     }
+
+    room.sendAnnouncement('🎯 ' + alive.length + ' jugadores asignados a sus porterías', null, 0x00FFFF);
 }
 
 function checkRemaining(room) {
@@ -277,13 +252,6 @@ function onTeamGoal(room, team) {
     if (!ballPos) ballPos = gameState.lastBallPos;
     if (!ballPos) {
         console.log('[BUHO] onTeamGoal: sin posición de bola');
-        room.sendAnnouncement('⚠️ Error: no se detectó posición de la bola', null, 0xFF0000);
-        return;
-    }
-
-    if (gameState.goalCenters.length === 0) {
-        console.log('[BUHO] onTeamGoal: goalCenters vacío! mapSize=' + gameState.currentMapSize);
-        room.sendAnnouncement('⚠️ Error: goalCenters no cargados para mapa ' + gameState.currentMapSize, null, 0xFF0000);
         return;
     }
 
