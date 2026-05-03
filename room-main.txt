@@ -2024,6 +2024,26 @@ function startBTL() {
     } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
 }
 
+function startCHARGE() {
+    botState.gameActive = true;
+    if (typeof CHARGE !== 'undefined') {
+        CHARGE.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
+function startRUN_MINI() {
+    botState.gameActive = true;
+    if (typeof RUN_MINI !== 'undefined') {
+        RUN_MINI.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
 function startBONK_SUMMER() {
     botState.gameActive = true;
     if (typeof BONK_SUMMER !== 'undefined') {
@@ -2544,6 +2564,13 @@ function excludeAFKFromGame() {
     if (botState.banVoteActive || botState.pendingBanVote) return;
     // En modo test no excluir por AFK
     if (typeof TEST_ONLY_GAMES !== 'undefined' && TEST_ONLY_GAMES && TEST_ONLY_GAMES.length > 0) return;
+    // No excluir en juegos de chat (trivia, impostor, pistolero, etc.)
+    try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) return; } catch(e){}
+    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) return; } catch(e){}
+    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) return; } catch(e){}
+    try { if (GOT && GOT.isActive && GOT.isActive()) return; } catch(e){}
+    try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) return; } catch(e){}
+    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) return; } catch(e){}
     // En zombie run los jugadores se mueven solos, no excluir
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) return; } catch(e){}
     var now = Date.now();
@@ -2666,6 +2693,7 @@ function forceStopAllGames() {
     try { if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) SPACEBOUNCE_POWER.stop(room); } catch(e){}
     try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) BASKETBALL.stop(room); } catch(e){}
     try { if (BTL && BTL.isActive && BTL.isActive()) BTL.stop(room); } catch(e){}
+    try { if (CHARGE && CHARGE.isActive && CHARGE.isActive()) CHARGE.stop(room); } catch(e){}
     try { if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) BONK_SUMMER.stop(room); } catch(e){}
     try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) BONK_WINTER.stop(room); } catch(e){}
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) ZOMBIE_RUN.stop(room); } catch(e){}
@@ -2784,6 +2812,7 @@ function checkAndStart() {
     try { if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BTL && BTL.isActive && BTL.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (CHARGE && CHARGE.isActive && CHARGE.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) anyModuleActive = true; } catch(e){}
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) anyModuleActive = true; } catch(e){}
@@ -3038,6 +3067,7 @@ function checkAndStart() {
             { name: 'SHAOLIN_SOCCER', module: SHAOLIN_SOCCER, displayName: 'SHAOLIN SOCCER', starter: startSHAOLIN_SOCCER },
             { name: 'BASKETBALL', module: BASKETBALL, displayName: 'BASKETBALL', starter: startBASKETBALL },
             { name: 'BTL', module: BTL, displayName: 'B.T.L', starter: startBTL },
+            { name: 'CHARGE', module: CHARGE, displayName: 'Charge', starter: startCHARGE },
             // { name: 'BONK_SUMMER', module: BONK_SUMMER, displayName: 'BONK SUMMER', starter: startBONK_SUMMER }, // DESACTIVADO temporalmente
             { name: 'BONK_WINTER', module: BONK_WINTER, displayName: 'BONK WINTER', starter: startBONK_WINTER },
             { name: 'RACING_GROUND', module: RACING_GROUND, displayName: 'RACING GROUND', starter: startRACING_GROUND },
@@ -3288,6 +3318,7 @@ function stopSoloEntertainment() {
 room.onTeamGoal = function(team) {
     if (BUHO && BUHO.isActive && BUHO.isActive()) {
         try { BUHO.onTeamGoal(room, team); } catch(e) {}
+        return;
     }
 };
 
@@ -3814,6 +3845,9 @@ room.onPlayerLeave = function(player) {
     }
     if (BTL && BTL.isActive && BTL.isActive()) {
         try { BTL.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (CHARGE && CHARGE.isActive && CHARGE.isActive()) {
+        try { CHARGE.onPlayerLeave(room, player); } catch(e){}
     }
     if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) {
         try { BONK_SUMMER.onPlayerLeave(room, player); } catch(e){}
@@ -4927,6 +4961,9 @@ room.onPlayerChat = function(player, message) {
     if (BTL && BTL.isActive && BTL.isActive()) {
         try { var btlR = BTL.onPlayerChat(player, message); if (btlR === false) return false; } catch(e){}
     }
+    if (CHARGE && CHARGE.isActive && CHARGE.isActive()) {
+        try { var chR = CHARGE.onPlayerChat(room, player, message); if (chR === false) return false; } catch(e){}
+    }
     if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) {
         try { var bsR = BONK_SUMMER.onPlayerChat(player, message); if (bsR === false) return false; } catch(e){}
     }
@@ -5884,7 +5921,7 @@ room.onPlayerChat = function(player, message) {
             {n:'RUN_REBOUND', d:'Run Rebound', s:startRUN_REBOUND}, {n:'MEADOWLANDS', d:'Meadowlands', s:startMEADOWLANDS},
             {n:'SPACEBOUNCE_POWER', d:'Spacebounce Power', s:startSPACEBOUNCE_POWER},
             {n:'SHAOLIN_SOCCER', d:'Shaolin Soccer', s:startSHAOLIN_SOCCER},
-            {n:'BASKETBALL', d:'Basketball', s:startBASKETBALL}, {n:'BTL', d:'B.T.L', s:startBTL},
+            {n:'BASKETBALL', d:'Basketball', s:startBASKETBALL}, {n:'BTL', d:'B.T.L', s:startBTL}, {n:'CHARGE', d:'Charge', s:startCHARGE},
             {n:'BONK_SUMMER', d:'Bonk Summer', s:startBONK_SUMMER}, {n:'BONK_WINTER', d:'Bonk Winter', s:startBONK_WINTER},
             {n:'SWING_CANNONS', d:'Swing Cannons', s:startSWING_CANNONS}, {n:'SURVIVAL_INSECT', d:'Survival Insect', s:startSURVIVAL_INSECT},
             {n:'RUN_LUCK', d:'Run Luck', s:startRUN_LUCK}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette', s:startPINBALL_ROULETTE},
@@ -7634,15 +7671,19 @@ room.onPlayerActivity = function(player) {
 setInterval(function() {
     if (botState.gamePaused) return;
     if (!botState.gameActive) return;
+
     // No kickear AFK en juegos basados en chat (no requieren movimiento)
-    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) return; } catch(e){}
-    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) return; } catch(e){}
-    try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) return; } catch(e){}
-    try { if (GOT && GOT.isActive && GOT.isActive()) return; } catch(e){}
-    try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) return; } catch(e){}
-    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) return; } catch(e){}
-    // En zombie run los jugadores se mueven solos por física, no presionan teclas
-    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) return; } catch(e){}
+    // Trivia, impostor, pistolero, GOT, number chairs, pinball, zombie run
+    var skipAFK = false;
+    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) skipAFK = true; } catch(e){}
+    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) skipAFK = true; } catch(e){}
+    try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) skipAFK = true; } catch(e){}
+    try { if (GOT && GOT.isActive && GOT.isActive()) skipAFK = true; } catch(e){}
+    try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) skipAFK = true; } catch(e){}
+    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) skipAFK = true; } catch(e){}
+    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) skipAFK = true; } catch(e){}
+    if (skipAFK) return;
+
     // No kickear AFK durante juicio público
     if (botState.banVoteActive) return;
 
