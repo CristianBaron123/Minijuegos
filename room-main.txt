@@ -82,6 +82,35 @@ var botState = {
     prestamistas: {'ElsEAjXg19qUkfr5kwGzv-v-N0Mh2cwyiFP1tBFLUbY': { name: 'Prestamista', totalPrestado: 0, totalGanado: 0 }},        // { auth: { name, totalPrestado, totalGanado } } - rol prestamista P2P
     prestamosP2P: {},        // { deudorAuth: { prestamistaAuth, prestamistaNombre, deudorNombre, monto, montoTotal, cuotaMonto, cuotasPagadas, cuotasTotales, deudaPendiente, impagos } }
     ofertasPrestamo: {},     // { targetAuth: { fromAuth, fromName, monto, cuotas, montoTotal, cuotaMonto, timestamp } }
+};
+
+// ============================================
+// FORMATO DE TEXTO CON UNICODE ESPECIAL
+// ============================================
+function formatText(text) {
+    if (!text) return text;
+    var map = {
+        'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ꜰ', 'G': 'ɢ', 'H': 'ʜ',
+        'I': 'ɪ', 'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ', 'P': 'ᴘ',
+        'Q': 'ǫ', 'R': 'ʀ', 'S': 'ꜱ', 'T': 'ᴛ', 'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x',
+        'Y': 'ʏ', 'Z': 'ᴢ',
+        'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ', 'g': 'ɢ', 'h': 'ʜ',
+        'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ',
+        'q': 'ǫ', 'r': 'ʀ', 's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x',
+        'y': 'ʏ', 'z': 'ᴢ',
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'
+    };
+    var result = '';
+    for (var i = 0; i < text.length; i++) {
+        result += map[text[i]] || text[i];
+    }
+    return result;
+}
+
+function sendFormatted(room, msg, target, color, style, duration) {
+    room.sendAnnouncement(formatText(msg), target, color, style, duration);
+}
     titanValues: {},         // { auth: { name, value } } - resultado de !titan (se resetea con !resetstats)
     titanTaken: [],          // [33, 34, 35] - valores únicos ya tomados en este ciclo
     dailyRewards: {},        // { auth: { lastClaim: timestamp, streak: N } } - recompensa diaria
@@ -261,37 +290,37 @@ function isPlayerAfk(playerId) {
 function getPlayerTag(player) {
     var auth = getAuth(player);
     var protPrefix = (auth && botState.protectionActive[auth]) ? '🛡️' : '';
-    var clanSuffix = (auth && botState.clanTags[auth]) ? ' [' + botState.clanTags[auth] + ']' : '';
+    var clanSuffix = (auth && botState.clanTags[auth]) ? ' [' + formatText(botState.clanTags[auth]) + ']' : '';
     // Prioridad: THE BEST > CREADOR > KING > GAY > MVP > RANGO
     if (auth === '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE') {
-        return { label: protPrefix + '⭐[The best]' + clanSuffix, color: 0x89CFF0 };
+        return { label: protPrefix + '⭐[' + formatText('The best') + ']' + clanSuffix, color: 0x89CFF0 };
     }
     if (auth && CREATOR_AUTHS.indexOf(auth) !== -1) {
-        return { label: protPrefix + '⚽[CREADOR]' + clanSuffix, color: 0x0055FF };
+        return { label: protPrefix + '⚽[' + formatText('CREADOR') + ']' + clanSuffix, color: 0x0055FF };
     }
     // Moderadores (color cyan bonito 0x00BFFF)
     if (auth && MODERATOR_AUTHS.indexOf(auth) !== -1) {
-        return { label: protPrefix + '🛡️[MOD]' + clanSuffix, color: 0x00BFFF };
+        return { label: protPrefix + '🛡️[' + formatText('MOD') + ']' + clanSuffix, color: 0x00BFFF };
     }
     if (auth === 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic') {
-        return { label: protPrefix + '👑[KING]' + clanSuffix, color: 0xFFFFFF };
+        return { label: protPrefix + '👑[' + formatText('KING') + ']' + clanSuffix, color: 0xFFFFFF };
     }
     if (auth === 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I') {
-        return { label: protPrefix + '🔴[LEO]' + clanSuffix, color: 0xFF0000 };
+        return { label: protPrefix + '🔴[' + formatText('LEO') + ']' + clanSuffix, color: 0xFF0000 };
     }
     if (auth === 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4') {
-        return { label: protPrefix + '🍀[JUST TGW]🍀' + clanSuffix, color: 0x228B22 };
+        return { label: protPrefix + '🍀[' + formatText('JUST TGW') + ']🍀' + clanSuffix, color: 0x228B22 };
     }
     if (auth) {
         var tag = botState.playerTags[auth];
         if (tag && tag.remaining > 0) {
             if (tag.type === 'GAY') {
-                return { label: protPrefix + '[GAY]' + clanSuffix, color: 0xFFC0CB };
+                return { label: protPrefix + '[' + formatText('GAY') + ']' + clanSuffix, color: 0xFFC0CB };
             }
         }
     }
     if (auth && botState.winStreaks[auth] >= 2) {
-        return { label: protPrefix + '[MVP]' + clanSuffix, color: 0xFFD700 };
+        return { label: protPrefix + '[' + formatText('MVP') + ']' + clanSuffix, color: 0xFFD700 };
     }
     // Sistema de rangos por victorias
     var wins = (auth && botState.winsCache[auth]) ? botState.winsCache[auth] : 0;
@@ -2312,11 +2341,11 @@ function loadLuckyMap(winner) {
         var oldRank = getRankByWins(oldWins);
         var newRank = getRankByWins(newWins);
         if (oldRank.label !== newRank.label) {
-            room.sendAnnouncement(
-                "🎖️ " + winner.name + " SUBIO DE RANGO!\n" +
-                oldRank.label + " → " + newRank.label,
-                null, newRank.color, "bold", 2
-            );
+                room.sendAnnouncement(
+                    "🎖️ " + formatText(winner.name) + " SUBIO DE RANGO!\n" +
+                    formatText(oldRank.label) + " → " + formatText(newRank.label),
+                    null, newRank.color, "bold", 2
+                );
         }
     }
 
@@ -2329,9 +2358,9 @@ function loadLuckyMap(winner) {
     botState.winStreaks[winnerAuth] = (botState.winStreaks[winnerAuth] || 0) + 1;
     var streak = botState.winStreaks[winnerAuth];
     if (streak >= 2) {
-        room.sendAnnouncement("🔥 " + winner.name + " lleva " + streak + " VICTORIAS SEGUIDAS! 🔥", null, 0xFF4500, "bold", 2);
+        room.sendAnnouncement("🔥 " + formatText(winner.name) + " lleva " + streak + " VICTORIAS SEGUIDAS! 🔥", null, 0xFF4500, "bold", 2);
     } else {
-        room.sendAnnouncement("⭐ " + winner.name + " — Racha: 1", null, 0xFFAA00);
+        room.sendAnnouncement("⭐ " + formatText(winner.name) + " — Racha: 1", null, 0xFFAA00);
     }
 
     // Guardar mejor racha en DB
@@ -2369,7 +2398,7 @@ function loadLuckyMap(winner) {
     if (winnerAuth && typeof window.__dbAddBalance === 'function') {
         try { window.__dbAddBalance(winnerAuth, winner.name, totalReward); } catch(e) {}
     }
-    var rewardMsg = "💰 " + winner.name + " gana " + formatMoney(totalReward);
+    var rewardMsg = "💰 " + formatText(winner.name) + " gana " + formatMoney(totalReward);
     if (dobleUsado) {
         rewardMsg += " (x2 DOBLE!)";
     }
@@ -2415,7 +2444,7 @@ function loadLuckyMap(winner) {
 
             room.sendAnnouncement(
                 "🍀 LUCKY MAP - MAPA DE LA SUERTE 🍀\n" +
-                "👑 Ganador: " + winner.name + (luckyPlayer.id !== winner.id ? ("\n🏴‍☠️ Lucky robado por: " + luckyPlayer.name) : "") + "\n" +
+                "👑 Ganador: " + formatText(winner.name) + (luckyPlayer.id !== winner.id ? ("\n🏴‍☠️ Lucky robado por: " + formatText(luckyPlayer.name)) : "") + "\n" +
                 "🎯 Cae en un color y descubre tu destino!",
                 null,
                 0xFFD700,
@@ -3119,9 +3148,9 @@ function checkAndStart() {
             if (chosen) {
                 selectedGame = chosen;
                 if (botState.chosenNextGame.isBites) {
-                    room.sendAnnouncement('💣 BITES THE DUST — Repitiendo: ' + chosen.displayName, null, 0xFF69B4, 'bold', 2);
+                    room.sendAnnouncement('💣 BITES THE DUST — Repitiendo: ' + formatText(chosen.displayName), null, 0xFF69B4, 'bold', 2);
                 } else {
-                    room.sendAnnouncement('🎯 ' + botState.chosenNextGame.playerName + ' eligió el próximo juego: ' + chosen.displayName, null, 0x00BFFF, 'bold', 2);
+                    room.sendAnnouncement('🎯 ' + formatText(botState.chosenNextGame.playerName) + ' eligió el próximo juego: ' + formatText(chosen.displayName), null, 0x00BFFF, 'bold', 2);
                 }
             }
             botState.chosenNextGame = null;
@@ -3462,7 +3491,7 @@ room.onPlayerJoin = function(player) {
     if (CREATOR_AUTHS.indexOf(player.auth) !== -1) {
         room.setPlayerAdmin(player.id, true);
         room.sendAnnouncement(
-            "👑 Bienvenido CREADOR! Admin activado automáticamente",
+            "👑 Bienvenido " + formatText("CREADOR") + "! Admin activado automáticamente",
             player.id,
             0xFFD700,
             "bold"
@@ -3492,7 +3521,7 @@ room.onPlayerJoin = function(player) {
     }
 
     room.sendAnnouncement(
-        "👋 Bienvenido " + player.name + "!\n" +
+        "👋 Bienvenido " + formatText(player.name) + "!\n" +
         "🎮 Sala de Minijuegos v2.1 - Los juegos inician automaticamente\n" +
         "💰 Gana dinero jugando minijuegos\n" +
         "🛡️ Crea o unete a un clan con !clan\n" +
@@ -5563,8 +5592,8 @@ room.onPlayerChat = function(player, message) {
                         }
                         __dbAddBalance(pauth, pname, -50000).then(function() {
                             botState.clanTags[pauth] = result.tag;
-                            room.sendAnnouncement('🛡️ Clan [' + result.tag + '] ' + result.name + ' creado! (-$50.000)', pid, 0x00FF00, 'bold');
-                            room.sendAnnouncement('🛡️ ' + pname + ' ha creado el clan [' + result.tag + ']!', null, 0x00BFFF);
+                            room.sendAnnouncement('🛡️ Clan [' + formatText(result.tag) + '] ' + result.name + ' creado! (-$50.000)', pid, 0x00FF00, 'bold');
+                            room.sendAnnouncement('🛡️ ' + formatText(pname) + ' ha creado el clan [' + formatText(result.tag) + ']!', null, 0x00BFFF);
                         });
                     });
                 });
@@ -5595,8 +5624,8 @@ room.onPlayerChat = function(player, message) {
                         room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600);
                         return;
                     }
-                    room.sendAnnouncement('📨 Invitacion enviada a ' + tname + ' para unirse a [' + result.clanTag + ']', pid, 0x00FF00);
-                    room.sendAnnouncement('📨 ' + player.name + ' te invita al clan [' + result.clanTag + '] ' + result.clanName + '!\nEscribe !clan aceptar para unirte.', tid, 0x00BFFF, 'bold');
+                    room.sendAnnouncement('📨 Invitacion enviada a ' + formatText(tname) + ' para unirse a [' + formatText(result.clanTag) + ']', pid, 0x00FF00);
+                    room.sendAnnouncement('📨 ' + formatText(player.name) + ' te invita al clan [' + formatText(result.clanTag) + '] ' + result.clanName + '!\nEscribe !clan aceptar para unirte.', tid, 0x00BFFF, 'bold');
                 });
             })(player.id, playerAuth, invTargetAuth, invTarget.name, invTarget.id);
             return false;
@@ -5610,8 +5639,8 @@ room.onPlayerChat = function(player, message) {
                         return;
                     }
                     botState.clanTags[pauth] = result.tag;
-                    room.sendAnnouncement('🛡️ Te uniste al clan [' + result.tag + '] ' + result.name + '!', pid, 0x00FF00, 'bold');
-                    room.sendAnnouncement('🛡️ ' + pname + ' se unio al clan [' + result.tag + ']!', null, 0x00BFFF);
+                    room.sendAnnouncement('🛡️ Te uniste al clan [' + formatText(result.tag) + '] ' + result.name + '!', pid, 0x00FF00, 'bold');
+                    room.sendAnnouncement('🛡️ ' + formatText(pname) + ' se unio al clan [' + formatText(result.tag) + ']!', null, 0x00BFFF);
                 });
             })(player.id, playerAuth, player.name);
             return false;
