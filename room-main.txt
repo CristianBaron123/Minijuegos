@@ -2562,17 +2562,25 @@ function loadLuckyMap(winner) {
 function excludeAFKFromGame() {
     // No excluir durante juicio público
     if (botState.banVoteActive || botState.pendingBanVote) return;
+    // Si hay un juego activo, no excluir a nadie
+    if (botState.gameActive) return;
+    // Verificar módulos activos (doble check)
+    var anyActive = false;
+    try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) anyActive = true; } catch(e){}
+    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) anyActive = true; } catch(e){}
+    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) anyActive = true; } catch(e){}
+    try { if (GOT && GOT.isActive && GOT.isActive()) anyActive = true; } catch(e){}
+    try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) anyActive = true; } catch(e){}
+    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) anyActive = true; } catch(e){}
+    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) anyActive = true; } catch(e){}
+    try { if (BUHO && BUHO.isActive && BUHO.isActive()) anyActive = true; } catch(e){}
+    try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) anyActive = true; } catch(e){}
+    try { if (CHARGE && CHARGE.isActive && CHARGE.isActive()) anyActive = true; } catch(e){}
+    try { if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) anyActive = true; } catch(e){}
+    try { if (WAR_CONQUEST && WAR_CONQUEST.isActive && WAR_CONQUEST.isActive()) anyActive = true; } catch(e){}
+    if (anyActive) return;
     // En modo test no excluir por AFK
     if (typeof TEST_ONLY_GAMES !== 'undefined' && TEST_ONLY_GAMES && TEST_ONLY_GAMES.length > 0) return;
-    // No excluir en juegos de chat (trivia, impostor, pistolero, etc.)
-    try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) return; } catch(e){}
-    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) return; } catch(e){}
-    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) return; } catch(e){}
-    try { if (GOT && GOT.isActive && GOT.isActive()) return; } catch(e){}
-    try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) return; } catch(e){}
-    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) return; } catch(e){}
-    // En zombie run los jugadores se mueven solos, no excluir
-    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) return; } catch(e){}
     var now = Date.now();
     var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
     players.forEach(function(p) {
