@@ -437,6 +437,14 @@ const mapSpaceBouncePowerData = fs.readFileSync(mapSpaceBouncePowerPath, 'utf8')
 const mapBtlPath = path.join(__dirname, 'Mapas', 'B.T.L-by-Serefli-Seref-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae180ad2466.hbs');
 const mapBtlData = fs.readFileSync(mapBtlPath, 'utf8');
 
+// Map: Charge
+const mapChargePath = path.join(__dirname, 'Mapas', 'Charge-2-by-Qua-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_630e6e67a8ef1.hbs');
+const mapChargeData = fs.readFileSync(mapChargePath, 'utf8');
+
+// Map: RUN-Mini-Pekka
+const mapRunMiniPath = path.join(__dirname, 'Mapas', 'RUN-Mini-Pekka-By-zer0ne-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0C_628048143a738.hbs');
+const mapRunMiniData = fs.readFileSync(mapRunMiniPath, 'utf8');
+
 // Map: Bonk Summer
 const mapBonkSummerPath = path.join(__dirname, 'Mapas', 'Bonk-Summer-by-Serefli-Seref-20-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae18e96d540.hbs');
 const mapBonkSummerData = fs.readFileSync(mapBonkSummerPath, 'utf8');
@@ -733,6 +741,11 @@ const racingGroundModuleCode = fs.readFileSync(racingGroundModulePath, 'utf8');
 const buhoModulePath = path.join(__dirname, 'games', 'minijuegos', 'buho.js');
 const buhoModuleCode = fs.readFileSync(buhoModulePath, 'utf8');
 
+const chargeModulePath = path.join(__dirname, 'games', 'minijuegos', 'charge.js');
+const chargeModuleCode = fs.readFileSync(chargeModulePath, 'utf8');
+const runMiniModulePath = path.join(__dirname, 'Mapas', 'RUN-Mini-Pekka-By-zer0ne-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0C_628048143a738.hbs');
+const runMiniModuleCode = fs.readFileSync(runMiniModulePath, 'utf8');
+
 // Cargar mapas Buho (2-MAN a 16-MAN + CAMPEON)
 const buhoMapsDir = path.join(__dirname, 'Buho', 'mapas');
 const buhoMapsData = {};
@@ -747,10 +760,27 @@ if (fs.existsSync(buhoMapsDir)) {
             buhoMapsData[key] = content;
             try {
                 const parsed = JSON.parse(content);
-                if (parsed.goals) {
-                    buhoGoalCenters[key] = parsed.goals.map(function(g) {
-                        return { x: Math.round((g.p0[0] + g.p1[0]) / 2), y: Math.round((g.p0[1] + g.p1[1]) / 2) };
-                    });
+                if (parsed.goals && parsed.goals.length > 0) {
+                    // Los mapas BUHO tienen 4 segmentos por cada portería (4 segmentos × N jugadores)
+                    // Agrupar por posición Y similar para obtener el centro real de cada portería
+                    var goalMap = {};
+                    for (var gi = 0; gi < parsed.goals.length; gi++) {
+                        var g = parsed.goals[gi];
+                        var cx = Math.round((g.p0[0] + g.p1[0]) / 2);
+                        var cy = Math.round((g.p0[1] + g.p1[1]) / 2);
+                        // Agrupar por coordenada X (las porterías idénticas tienen la misma X)
+                        if (!goalMap[cx]) goalMap[cx] = [];
+                        goalMap[cx].push({ x: cx, y: cy });
+                    }
+                    // Tomar el promedio de Y para cada grupo X (el centro de la portería)
+                    var centers = [];
+                    var keys = Object.keys(goalMap).map(Number).sort(function(a,b) { return a - b; });
+                    for (var ki = 0; ki < keys.length; ki++) {
+                        var group = goalMap[keys[ki]];
+                        var avgY = Math.round(group.reduce(function(sum, p) { return sum + p.y; }, 0) / group.length);
+                        centers.push({ x: keys[ki], y: avgY });
+                    }
+                    buhoGoalCenters[key] = centers;
                 } else {
                     buhoGoalCenters[key] = [];
                 }
@@ -876,6 +906,7 @@ const getBotScript = () => {
         const race02Module = transformModuleForBrowser(race02ModuleCode, mapRace02Data);
         const plumModule = transformModuleForBrowser(plumModuleCode, mapPlumData);
         const runRebound2Module = transformModuleForBrowser(runRebound2ModuleCode, mapRunRebound2Data);
+        const runMiniModule = transformModuleForBrowser(runMiniModuleCode, mapRunMiniData);
         const swingCannonsModule = transformModuleForBrowser(swingCannonsModuleCode, mapSwingCannonsData);
         const survivalInsectModule = transformModuleForBrowser(survivalInsectModuleCode, mapSurvivalInsectData);
         const runLuckModule = transformModuleForBrowser(runLuckModuleCode, mapRunLuckData);
@@ -886,6 +917,7 @@ const getBotScript = () => {
         const spaceBouncePowerModule = transformModuleForBrowser(spaceBouncePowerModuleCode, mapSpaceBouncePowerData);
         const basketballModule = transformModuleForBrowser(basketballModuleCode, mapBasketballData);
         const btlModule = transformModuleForBrowser(btlModuleCode, mapBtlData);
+        const chargeModule = transformModuleForBrowser(chargeModuleCode, mapChargeData);
         const bonkSummerModule = transformModuleForBrowser(bonkSummerModuleCode, mapBonkSummerData);
         const bonkWinterModule = transformModuleForBrowser(bonkWinterModuleCode, mapBonkWinterData);
         const zombieRunModule = transformModuleForBrowser(zombieRunModuleCode, mapZombieRunData);
@@ -1404,6 +1436,16 @@ var BASKETBALL = ` + basketballModule + `;
 // MÓDULO: B.T.L
 // ============================================
 var BTL = ` + btlModule + `;
+
+// ============================================
+// MÓDULO: CHARGE
+// ============================================
+var CHARGE = ` + chargeModule + `;
+
+// ============================================
+// MÓDULO: RUN MINI
+// ============================================
+var RUN_MINI = ` + runMiniModule + `;
 
 // ============================================
 // MÓDULO: BONK SUMMER
