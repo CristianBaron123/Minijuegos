@@ -237,10 +237,11 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         }
         if (playerIds.length < 2) { resolve(null); return; }
 
+        // No mover a espectador a jugadores que están en el torneo (gameState.players)
         var allP = room.getPlayerList();
         for (var ni = 0; ni < allP.length; ni++) {
             if (allP[ni].id === 0) continue;
-            if (playerIds.indexOf(allP[ni].id) === -1) {
+            if (playerIds.indexOf(allP[ni].id) === -1 && gameState.players.indexOf(allP[ni].id) === -1) {
                 try { room.setPlayerTeam(allP[ni].id, 0); } catch(e){}
             }
         }
