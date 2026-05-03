@@ -46,6 +46,7 @@ function getAlivePlayers() {
     for (var id in gameState.players) {
         if (gameState.players[id].alive) result.push(parseInt(id));
     }
+    result.sort(function(a, b) { return a - b; });
     return result;
 }
 
@@ -54,19 +55,13 @@ function assignGoals(room) {
     var goals = gameState.goalCenters;
     if (goals.length === 0 || alive.length === 0) return;
 
-    // Resetear goalIndex de todos los jugadores vivos
-    for (var ri = 0; ri < alive.length; ri++) {
-        gameState.players[alive[ri]].goalIndex = -1;
-    }
-
-    // Asignar porterías según orden de spawn (más confiable que leer posiciones)
-    // Los jugadores se asignan a las porterías en orden: jugador 0 -> goal 0, jugador 1 -> goal 1, etc.
+    // Asignar porterías por orden fijo del array goals (el mapa garantiza orden consistente)
+    // jugador en alive[0] -> portería 0, alive[1] -> portería 1, etc.
     for (var i = 0; i < alive.length; i++) {
-        var goalIdx = i % goals.length;
-        gameState.players[alive[i]].goalIndex = goalIdx;
+        gameState.players[alive[i]].goalIndex = i % goals.length;
     }
 
-    // Teletransportar jugadores a sus porterías (usar posición del goal * 0.7 para no spawnear sobre el arco)
+    // Teletransportar jugadores cerca de su portería (0.7 para no spawnear sobre el arco)
     for (var m = 0; m < alive.length; m++) {
         var pid2 = alive[m];
         var gi2 = gameState.players[pid2].goalIndex;
@@ -77,8 +72,6 @@ function assignGoals(room) {
             room.setPlayerDiscProperties(pid2, { x: Math.round(gx * 0.7), y: Math.round(gy * 0.7), xspeed: 0, yspeed: 0 });
         } catch(e) {}
     }
-
-    room.sendAnnouncement('🎯 ' + alive.length + ' jugadores asignados a sus porterías', null, 0x00FFFF);
 }
 
 function checkRemaining(room) {
