@@ -5938,6 +5938,8 @@ room.onPlayerChat = function(player, message) {
             {n:'BUHO', d:'Buho', s:startBUHO},
             {n:'JUEGO_1234', d:'Juego 1234', s:startJUEGO_1234},
             {n:'WAR_CONQUEST', d:'War of Conquest', s:startWAR_CONQUEST},
+            {n:'CHARGE', d:'Charge', s:startCHARGE},
+            {n:'RUN_MINI', d:'Run Mini', s:startRUN_MINI},
             {n:'TANK_WAR', d:'Tank War', s:startTANK_WAR}
         ];
         if (!escogerArg || escogerArg.toLowerCase() === 'lista') {
@@ -6082,6 +6084,8 @@ room.onPlayerChat = function(player, message) {
             {n:'BUHO', d:'Buho'},
             {n:'JUEGO_1234', d:'Juego 1234'},
             {n:'WAR_CONQUEST', d:'War of Conquest'},
+            {n:'CHARGE', d:'Charge'},
+            {n:'RUN_MINI', d:'Run Mini'},
             {n:'TANK_WAR', d:'Tank War'}
         ];
         if (!elegirArg || elegirArg.toLowerCase() === 'lista') {
