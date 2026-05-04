@@ -21,6 +21,27 @@ try { if (typeof room !== 'undefined') { if (room.setTimeLimit) room.setTimeLimi
 var OWNER_AUTH = "##OWNER_AUTH##";
 var MODERATOR_AUTHS = ##MODERATOR_AUTHS##;
 
+// ============================================
+// SISTEMA VIP (2 NIVELES) - CONFIGURAR AUTH MANUALMENTE
+// ============================================
+var VIP1_AUTHS = [
+    // Agregar auths de jugadores VIP 1 (separados por coma)
+    // Ejemplo: 'abc123', 'def456'
+];
+var VIP2_AUTHS = [
+    // Agregar auths de jugadores VIP 2 (separados por coma)
+    // VIP 2 tiene todos los beneficios de VIP 1 + extras
+    // Ejemplo: 'ghi789'
+];
+
+function getVIPLevel(player) {
+    var auth = getAuth(player);
+    if (!auth) return 0;
+    if (VIP2_AUTHS.indexOf(auth) !== -1) return 2;
+    if (VIP1_AUTHS.indexOf(auth) !== -1) return 1;
+    return 0;
+}
+
 // Estado del bot
 var botState = {
     gameActive: false,
@@ -302,6 +323,14 @@ function getPlayerTag(player) {
     if (auth && MODERATOR_AUTHS.indexOf(auth) !== -1) {
         return { label: protPrefix + '🛡️[' + formatText('MOD') + ']' + clanSuffix, color: 0x00BFFF };
     }
+    // VIP+ (nivel 2) - dorado
+    if (getVIPLevel({ auth: auth }) === 2) {
+        return { label: protPrefix + '🥇[' + formatText('VIP+') + ']' + clanSuffix, color: 0xFFD700 };
+    }
+    // VIP (nivel 1) - bronce
+    if (getVIPLevel({ auth: auth }) === 1) {
+        return { label: protPrefix + '🥉[' + formatText('VIP') + ']' + clanSuffix, color: 0xCD7F32 };
+    }
     if (auth === 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic') {
         return { label: protPrefix + '👑[' + formatText('KING') + ']' + clanSuffix, color: 0xFFFFFF };
     }
@@ -517,11 +546,16 @@ function bufferChatlog(line) {
 function shopBuy(playerAuth, playerName, playerId, cost, commandName, cooldownMs, callback) {
     if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', playerId, 0xFF6600); return; }
     var now = Date.now();
-    if (cooldownMs > 0) {
+    // VIP cooldown reducido: VIP 25%, VIP+ 50%
+    var vipLevel = getVIPLevel({ auth: playerAuth });
+    var finalCooldown = cooldownMs;
+    if (vipLevel === 1) finalCooldown = Math.floor(cooldownMs * 0.75);
+    if (vipLevel >= 2) finalCooldown = Math.floor(cooldownMs * 0.50);
+    if (finalCooldown > 0) {
         if (!botState.shopCooldowns[playerAuth]) botState.shopCooldowns[playerAuth] = {};
         var last = botState.shopCooldowns[playerAuth][commandName] || 0;
-        if (now - last < cooldownMs) {
-            var wait = Math.ceil((cooldownMs - (now - last)) / 1000);
+        if (now - last < finalCooldown) {
+            var wait = Math.ceil((finalCooldown - (now - last)) / 1000);
             room.sendAnnouncement('⏳ ' + commandName + ' en cooldown. Espera ' + wait + 's', playerId, 0xFF6600);
             return;
         }
@@ -534,7 +568,7 @@ function shopBuy(playerAuth, playerName, playerId, cost, commandName, cooldownMs
             return;
         }
         try { window.__dbAddBalance(playerAuth, playerName, -cost); } catch(e) {}
-        if (cooldownMs > 0) botState.shopCooldowns[playerAuth][commandName] = now;
+        if (finalCooldown > 0) botState.shopCooldowns[playerAuth][commandName] = now;
         callback();
     }).catch(function() { room.sendAnnouncement('❌ Error al verificar saldo.', playerId, 0xFF0000); });
 }
@@ -2395,6 +2429,16 @@ function loadLuckyMap(winner) {
         if (botState.activeEvent.type === 'double_money') { totalReward = totalReward * 2; eventoMulti = ' (⚡x2 EVENTO!)'; }
         if (botState.activeEvent.type === 'triple_money') { totalReward = totalReward * 3; eventoMulti = ' (⚡x3 EVENTO!)'; }
     }
+    // Bonus VIP: +15% VIP 1, +30% VIP 2
+    var vipLevel = getVIPLevel({ auth: winnerAuth });
+    var vipMulti = '';
+    if (vipLevel === 1) {
+        totalReward = Math.floor(totalReward * 1.15);
+        vipMulti = ' (+15% VIP)';
+    } else if (vipLevel === 2) {
+        totalReward = Math.floor(totalReward * 1.30);
+        vipMulti = ' (+30% VIP+)';
+    }
     if (winnerAuth && typeof window.__dbAddBalance === 'function') {
         try { window.__dbAddBalance(winnerAuth, winner.name, totalReward); } catch(e) {}
     }
@@ -2406,6 +2450,7 @@ function loadLuckyMap(winner) {
     if (marriageBonus) {
         rewardMsg += " (💍+10%)";
     }
+    if (vipMulti) rewardMsg += vipMulti;
     if (streakBonus > 0) {
         rewardMsg += " (+" + formatMoney(streakBonus) + " bonus racha x" + streak + ")";
     }
@@ -2434,13 +2479,30 @@ function loadLuckyMap(winner) {
     
     setTimeout(function() {
         stopReplay(); // Enviar replay del minijuego
-        room.stopGame();
+        try { room.stopGame(); } catch(e) {}
+        
+        // Verificar que el jugador siga en sala
+        var luckyCheck = room.getPlayer(luckyPlayer.id);
+        if (!luckyCheck || luckyCheck.team === 0) {
+            console.log('⚠️ Lucky player no disponible, saltando...');
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 3000);
+            return;
+        }
 
         try {
+            if (!mapLuck) throw new Error('mapLuck no disponible');
             room.setCustomStadium(mapLuck);
             room.startGame();
             startReplay('Lucky - ' + luckyPlayer.name);
             room.setTeamsLock(true);
+            console.log('✅ Lucky map cargado correctamente');
+        } catch(e) {
+            console.error('❌ Error cargando Lucky map:', e.message);
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 3000);
+            return;
+        }
 
             room.sendAnnouncement(
                 "🍀 LUCKY MAP - MAPA DE LA SUERTE 🍀\n" +
@@ -2471,7 +2533,12 @@ function loadLuckyMap(winner) {
                 isProtected: function(playerId) {
                     // Evento: no ban en lucky o proteccion total
                     if (botState.activeEvent && (botState.activeEvent.type === 'no_lucky_ban' || botState.activeEvent.type === 'protection_all')) return true;
+                    // VIP+ (nivel 2) inmune a efectos negativos del Lucky
                     var pAuth = botState.authMap[playerId] || null;
+                    if (pAuth && getVIPLevel({ auth: pAuth }) >= 2) {
+                        room.sendAnnouncement("🥇 " + (room.getPlayer(playerId) ? room.getPlayer(playerId).name : 'Jugador') + " es VIP+ - ¡INMUNE a efectos negativos!", null, 0xFFD700, "bold", 2);
+                        return true;
+                    }
                     if (pAuth && botState.protectionActive[pAuth]) {
                         delete botState.protectionActive[pAuth];
                         return true;
@@ -2895,12 +2962,13 @@ function checkAndStart() {
                 // Resolver inversion
                 var roll = Math.random() * 100;
                 var multiplier, resultMsg;
-                if (roll < 10) { multiplier = 0; resultMsg = '💥 QUIEBRA! Perdiste toda tu inversion'; }
-                else if (roll < 35) { multiplier = 0.5; resultMsg = '📉 Mala suerte... recuperas solo la mitad'; }
-                else if (roll < 65) { multiplier = 1.5; resultMsg = '📊 Ganancia moderada! x1.5'; }
-                else if (roll < 85) { multiplier = 2; resultMsg = '📈 Buena inversion! x2'; }
-                else if (roll < 95) { multiplier = 3; resultMsg = '🚀 Gran inversion! x3'; }
-                else { multiplier = 5; resultMsg = '💎 JACKPOT! x5!!'; }
+                if (roll < 15) { multiplier = 0; resultMsg = '💥 QUIEBRA! Perdiste toda tu inversion'; }
+                else if (roll < 40) { multiplier = 0.5; resultMsg = '📉 Mala suerte... recuperas solo la mitad'; }
+                else if (roll < 65) { multiplier = 1; resultMsg = '📊 Recuperas tu inversion (x1)'; }
+                else if (roll < 82) { multiplier = 1.5; resultMsg = '📈 Ganancia moderada! x1.5'; }
+                else if (roll < 92) { multiplier = 2; resultMsg = '🚀 Buena inversion! x2'; }
+                else if (roll < 97) { multiplier = 3; resultMsg = '🎰 Gran inversion! x3'; }
+                else { multiplier = 4; resultMsg = '💎 JACKPOT! x4!!'; }
                 var pago = Math.floor(inv.monto * multiplier);
                 if (pago > 0) {
                     try { window.__dbAddBalance(invAuth, inv.name, pago); } catch(e) {}
@@ -3273,6 +3341,17 @@ function checkAndStart() {
             });
             botState.spectatorNext = {};
         }
+        // VIP+: dar protección gratis al iniciar juego (1 vez por juego)
+        var vipProtecGiven = {};
+        var allPlayersNow = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+        allPlayersNow.forEach(function(p) {
+            var pAuth = getAuth(p);
+            if (pAuth && getVIPLevel({ auth: pAuth }) >= 2 && !vipProtecGiven[pAuth]) {
+                botState.protectionActive[pAuth] = true;
+                vipProtecGiven[pAuth] = true;
+                room.sendAnnouncement('🥇 ' + formatText(p.name) + ' recibe protección VIP+ gratis!', null, 0xFFD700);
+            }
+        });
         botState.startTimeout = setTimeout(function() {
             startReplay(selectedGame.displayName);
             selectedGame.starter();
@@ -5811,6 +5890,127 @@ room.onPlayerChat = function(player, message) {
             '  !impuesto ··· $12.000 - Cobrar $500 a todos',
             player.id, 0x00BFFF, 'bold'
         );
+        return false;
+    }
+
+    // ============================================
+    // SISTEMA VIP
+    // ============================================
+    if (message === '!vip') {
+        var vipNivel = getVIPLevel(player);
+        if (vipNivel === 0) {
+            room.sendAnnouncement(
+                '🎖️ SISTEMA VIP 🎖️\n\n' +
+                'Beneficios VIP ($8.000):\n' +
+                '  +15% extra de dinero al ganar\n' +
+                '  1 protección gratis por juego\n' +
+                '  Cooldown reducido 25% en tienda\n' +
+                '  Etiqueta [VIP] bronce\n\n' +
+                'Beneficios VIP+ ($20.000):\n' +
+                '  +30% extra en TODAS las ganancias\n' +
+                '  Inmunidad total en Lucky\n' +
+                '  Saltar Lucky 1 vez por juego\n' +
+                '  Elegir equipo !equipo [1/2]\n' +
+                '  Etiqueta [VIP+] oro\n\n' +
+                'Comandos:\n' +
+                '  !vip comprar - Comprar VIP ($8k)\n' +
+                '  !vip+ comprar - Comprar VIP+ ($20k)\n' +
+                '  !topvip - Top 5 jugadores VIP',
+                player.id, 0xFFD700
+            );
+        } else if (vipNivel === 1) {
+            room.sendAnnouncement(
+                '🥉 Eres VIP (Nivel 1)\n\n' +
+                'Beneficios activos:\n' +
+                '  +15% extra de dinero al ganar\n' +
+                '  1 protección gratis por juego\n' +
+                '  Cooldown reducido 25% en tienda\n\n' +
+                'Para subir a VIP+ ($20k):\n' +
+                '  !vip+ comprar\n' +
+                '  +30% extra en TODAS las ganancias\n' +
+                '  Inmunidad total en Lucky + más',
+                player.id, 0xCD7F32
+            );
+        } else if (vipNivel === 2) {
+            room.sendAnnouncement(
+                '🥇 Eres VIP+ (Nivel MÁXIMO)\n\n' +
+                'Beneficios activos:\n' +
+                '  +30% extra en TODAS las ganancias\n' +
+                '  Inmunidad total en Lucky\n' +
+                '  Saltar Lucky 1 vez por juego\n' +
+                '  Elegir equipo !equipo [1/2]\n' +
+                '  Cooldown reducido 50% en tienda\n\n' +
+                '¡Disfruta de todos los beneficios!',
+                player.id, 0xFFD700
+            );
+        }
+        return false;
+    }
+
+    if (message === '!vip comprar') {
+        var playerAuth = getAuth(player);
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        if (getVIPLevel(player) >= 1) { room.sendAnnouncement('⚠️ Ya eres VIP o VIP+', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, 8000, '!vip comprar', 0, function() {
+            VIP1_AUTHS.push(playerAuth);
+            room.sendAnnouncement('🥉 ' + formatText(player.name) + ' ahora es VIP! (+15% bonus)', null, 0xCD7F32, 'bold', 2);
+        });
+        return false;
+    }
+
+    if (message === '!vip+ comprar') {
+        var playerAuth = getAuth(player);
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        if (getVIPLevel(player) === 0) { room.sendAnnouncement('⚠️ Debes comprar VIP primero ($8k)', player.id, 0xFF6600); return false; }
+        if (getVIPLevel(player) >= 2) { room.sendAnnouncement('⚠️ Ya eres VIP+ máximo', player.id, 0xFF6600); return false; }
+        shopBuy(playerAuth, player.name, player.id, 20000, '!vip+ comprar', 0, function() {
+            // Remover de VIP1 y agregar a VIP2
+            var idx1 = VIP1_AUTHS.indexOf(playerAuth);
+            if (idx1 !== -1) VIP1_AUTHS.splice(idx1, 1);
+            VIP2_AUTHS.push(playerAuth);
+            room.sendAnnouncement('🥇 ' + formatText(player.name) + ' ahora es VIP+! (+30% bonus total)', null, 0xFFD700, 'bold', 2);
+        });
+        return false;
+    }
+
+    if (message === '!topvip') {
+        room.sendAnnouncement(
+            '🎖️ TOP 5 JUGADORES VIP\n\n' +
+            '🥇 VIP+: ' + VIP2_AUTHS.length + ' jugador(es)\n' +
+            '🥉 VIP: ' + VIP1_AUTHS.length + ' jugador(es)\n\n' +
+            'Usa !vip para ver beneficios',
+            player.id, 0xFFD700
+        );
+        return false;
+    }
+
+    // !equipo [1/2] - VIP+ puede elegir equipo (1 vez por juego)
+    if (message.startsWith('!equipo')) {
+        var playerAuth = getAuth(player);
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
+        if (getVIPLevel({ auth: playerAuth }) < 2) {
+            room.sendAnnouncement('⚠️ Solo VIP+ puede usar !equipo (comprar $20k)', player.id, 0xFF6600);
+            return false;
+        }
+        if (!botState.gameActive) {
+            room.sendAnnouncement('⚠️ Usa !equipo durante un minijuego activo', player.id, 0xFF6600);
+            return false;
+        }
+        var eqParts = message.split(' ');
+        if (eqParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !equipo [1/2]\nEjemplo: !equipo 1', player.id, 0xFFFF00);
+            return false;
+        }
+        var teamNum = parseInt(eqParts[1]);
+        if (teamNum !== 1 && teamNum !== 2) {
+            room.sendAnnouncement('⚠️ Equipo debe ser 1 (rojo) o 2 (azul)', player.id, 0xFF6600);
+            return false;
+        }
+        try { room.setPlayerTeam(player.id, teamNum); } catch(e) {}
+        room.sendAnnouncement('🥇 ' + formatText(player.name) + ' se movió al equipo ' + (teamNum === 1 ? 'ROJO' : 'AZUL'), null, 0xFFD700, 'bold');
+        // Cooldown de 2 min para VIP+
+        if (!botState.shopCooldowns[playerAuth]) botState.shopCooldowns[playerAuth] = {};
+        botState.shopCooldowns[playerAuth]['!equipo'] = Date.now() + 120000;
         return false;
     }
 
