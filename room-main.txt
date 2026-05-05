@@ -2689,18 +2689,16 @@ function excludeAFKFromGame() {
     if (typeof TEST_ONLY_GAMES !== 'undefined' && TEST_ONLY_GAMES && TEST_ONLY_GAMES.length > 0) return;
     var now = Date.now();
     var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+    // Resetear timers de AFK - jugadores que acaban de terminar un juego no deben ser penalizados
+    for (var ri = 0; ri < players.length; ri++) {
+        botState.afkLastActivity[players[ri].id] = now;
+    }
     players.forEach(function(p) {
         var auth = getAuth(p);
         // Excluir si uso !afk
         if (auth && botState.afkProtected[auth]) {
             try { room.setPlayerTeam(p.id, 0); } catch(e) {}
             return;
-        }
-        // Excluir si lleva 10+ segundos inactivo
-        var lastAct = botState.afkLastActivity[p.id];
-        if (lastAct && (now - lastAct) >= 10000) {
-            try { room.setPlayerTeam(p.id, 0); } catch(e) {}
-            room.sendAnnouncement('⚠️ ' + p.name + ' excluido del minijuego por inactividad.', null, 0xFF6600);
         }
     });
 }
@@ -7933,7 +7931,14 @@ setInterval(function() {
     try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) skipAFK = true; } catch(e){}
     try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) skipAFK = true; } catch(e){}
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) skipAFK = true; } catch(e){}
-    if (skipAFK) return;
+    if (skipAFK) {
+        var resetNow = Date.now();
+        var resetP = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+        for (var ri = 0; ri < resetP.length; ri++) {
+            botState.afkLastActivity[resetP[ri].id] = resetNow;
+        }
+        return;
+    }
 
     // No kickear AFK durante juicio público
     if (botState.banVoteActive) return;
