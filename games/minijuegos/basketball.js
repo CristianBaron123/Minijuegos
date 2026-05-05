@@ -111,6 +111,7 @@ function start(room, onGameEnd) {
             resolve({ team: team, winners: winners, losers: losers });
         }
     });
+    }
 }
 
 function stop(room) {
