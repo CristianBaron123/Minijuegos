@@ -945,7 +945,8 @@ const getBotScript = () => {
         .replace(/##MAP_COLLISION##/g, JSON.stringify(JSON.stringify(mapCollisionData)))
         .replace(/##MAP_SPOT_BONK##/g, JSON.stringify(JSON.stringify(mapSpotBonkData)))
         .replace(/##MAP_SPACE_MELEE##/g, JSON.stringify(JSON.stringify(mapSpaceMeleeData)))
-        .replace(/##MAP_CHAIRMIX##/g, JSON.stringify(JSON.stringify(mapChairMixData)));
+        .replace(/##MAP_CHAIRMIX##/g, JSON.stringify(JSON.stringify(mapChairMixData)))
+        .replace(/##MAP_PINBALL_ROULETTE##/g, JSON.stringify(JSON.stringify(mapPinballRouletteData)));
         
     // Inyectar todos los mapas de NumberChairs (v2-v21)
     var ncAllMapsObj = {};
