@@ -22,7 +22,7 @@ var config = {
     firstExplanationMs: 5000,
     matchTimeMs: 90000,
     goalsToWin: 3,
-    playersPerTeam: 3,
+    minPlayers: 2,
     oobBoundsX: 730,
     oobBoundsY: 255
 };
@@ -44,8 +44,8 @@ function start(room, onGameEnd) {
     try { room.setCustomStadium(mapData); } catch(e) { console.error('[TANK_WAR] Error cargando mapa', e.message); if (onGameEnd) onGameEnd(null); return; }
 
     var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
-    var minPlayers = isTestMode() ? 2 : 6;
-    if (players.length < minPlayers) { room.sendAnnouncement('⚠️ Se necesitan al menos 6 jugadores para Tank War (3v3)', null, 0xFF6600); if (onGameEnd) onGameEnd(null); return; }
+    var minPlayers = isTestMode() ? 2 : config.minPlayers;
+    if (players.length < minPlayers) { room.sendAnnouncement('⚠️ Se necesitan al menos 2 jugadores para Tank War', null, 0xFF6600); if (onGameEnd) onGameEnd(null); return; }
 
     gameState.active = true;
     gameState.players = players.map(function(p) { return p.id; });
@@ -150,75 +150,16 @@ function runTournament(room) {
 
             try { room.stopGame(); } catch(e){}
 
-            // Perdedores → espectadores
+            // Perdedores → eliminados (espectadores)
             for (var i = 0; i < result.losers.length; i++) {
                 var id = result.losers[i];
                 try { room.setPlayerTeam(id, 0); } catch(e){}
                 var idx = gameState.players.indexOf(id);
                 if (idx !== -1) gameState.players.splice(idx, 1);
-                gameState.spectatorPool.push(id);
             }
 
-            // Mitad de ganadores rota a espectadores
-            var winners = result.winners.slice();
-            var keepCount = Math.ceil(winners.length / 2);
-            for (var i = keepCount; i < winners.length; i++) {
-                try { room.setPlayerTeam(winners[i], 0); } catch(e){}
-                var idx = gameState.players.indexOf(winners[i]);
-                if (idx !== -1) gameState.players.splice(idx, 1);
-                gameState.spectatorPool.push(winners[i]);
-            }
-            winners = winners.slice(0, keepCount);
+            room.sendAnnouncement('❌ Equipo ' + (result.team === 1 ? '🔵' : '🔴') + ' eliminado! Quedan ' + gameState.players.length + ' jugadores', null, 0xFF6600);
 
-            // Ganadores que quedan → equipo 1
-            var team1 = winners.slice();
-            var team2 = [];
-            for (var i = 0; i < team1.length; i++) {
-                try { room.setPlayerTeam(team1[i], 1); } catch(e){}
-            }
-
-            gameState.spectatorPool = gameState.spectatorPool.filter(function(id) { return !!room.getPlayer(id); });
-            var target = isTestMode() ? 2 : config.playersPerTeam;
-
-            // Rellenar equipo 1 hasta target
-            while (team1.length < target && gameState.spectatorPool.length > 0) {
-                var rndIdx = Math.floor(Math.random() * gameState.spectatorPool.length);
-                var picked = gameState.spectatorPool.splice(rndIdx, 1)[0];
-                if (!room.getPlayer(picked)) continue;
-                team1.push(picked);
-                if (gameState.players.indexOf(picked) === -1) gameState.players.push(picked);
-                try { room.setPlayerTeam(picked, 1); } catch(e){}
-            }
-
-            // Construir equipo 2 desde espectadores
-            while (team2.length < target && gameState.spectatorPool.length > 0) {
-                var rndIdx = Math.floor(Math.random() * gameState.spectatorPool.length);
-                var picked = gameState.spectatorPool.splice(rndIdx, 1)[0];
-                if (!room.getPlayer(picked)) continue;
-                team2.push(picked);
-                if (gameState.players.indexOf(picked) === -1) gameState.players.push(picked);
-                try { room.setPlayerTeam(picked, 2); } catch(e){}
-            }
-
-            // Balance: si un equipo tiene más que el otro, mover espectador al menor
-            while (team1.length > team2.length && gameState.spectatorPool.length > 0) {
-                var rndIdx = Math.floor(Math.random() * gameState.spectatorPool.length);
-                var picked = gameState.spectatorPool.splice(rndIdx, 1)[0];
-                if (!room.getPlayer(picked)) continue;
-                team2.push(picked);
-                if (gameState.players.indexOf(picked) === -1) gameState.players.push(picked);
-                try { room.setPlayerTeam(picked, 2); } catch(e){}
-            }
-            while (team2.length > team1.length && gameState.spectatorPool.length > 0) {
-                var rndIdx = Math.floor(Math.random() * gameState.spectatorPool.length);
-                var picked = gameState.spectatorPool.splice(rndIdx, 1)[0];
-                if (!room.getPlayer(picked)) continue;
-                team1.push(picked);
-                if (gameState.players.indexOf(picked) === -1) gameState.players.push(picked);
-                try { room.setPlayerTeam(picked, 1); } catch(e){}
-            }
-
-            gameState.players = team1.concat(team2).filter(function(id) { return !!room.getPlayer(id); });
             gameState.firstRound = false;
 
             if (gameState.players.length < 2) {
@@ -249,8 +190,8 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         playerIds = validIds;
         if (playerIds.length < 2) { resolve(null); return; }
 
-        // Limitar a playersPerTeam por equipo (3v3)
-        var maxPlayers = (isTestMode() ? playerIds.length : config.playersPerTeam * 2);
+        // Limitar a jugadores disponibles (mitad por equipo)
+        var maxPlayers = playerIds.length;
         if (playerIds.length > maxPlayers) {
             var extras = playerIds.splice(maxPlayers);
             for (var ei = 0; ei < extras.length; ei++) {

@@ -93,11 +93,11 @@ function checkPlayers(room, onGameEnd) {
             return;
         }
 
-        var pos = player.position;
-        if (!pos) return;
+        var px = (typeof player.x === 'number') ? player.x : (player.position && typeof player.position.x === 'number' ? player.position.x : null);
+        var py = (typeof player.y === 'number') ? player.y : (player.position && typeof player.position.y === 'number' ? player.position.y : null);
+        if (px === null || py === null) return;
 
-        if (pos.x < config.minX || pos.x > config.maxX || pos.y < config.minY || pos.y > config.maxY) {
-            // Protección de spawn
+        if (px < config.minX || px > config.maxX || py < config.minY || py > config.maxY) {
             if (!gameState.hasBeenInBounds[p.id]) return;
             gameState.eliminated.push(p.id);
             try { room.setPlayerTeam(p.id, 0); } catch(e){}
@@ -119,14 +119,15 @@ function checkPlayers(room, onGameEnd) {
 }
 
 function declareWinner(room, winner, onGameEnd) {
-    gameState.active = false;
-    if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+    var cb = onGameEnd;
+    gameState.callback = null;
+    stop(room);
 
     room.sendAnnouncement(
         '\n🏆 ¡' + winner.name.toUpperCase() + ' HA GANADO WEB SURVIVAL III! 🏆',
         null, 0xFFD700, 'bold', 2
     );
-    setTimeout(function() { if (onGameEnd) onGameEnd(winner); }, 3000);
+    setTimeout(function() { if (cb) cb(winner); }, 3000);
 }
 
 function shuffleTeams(room) {
