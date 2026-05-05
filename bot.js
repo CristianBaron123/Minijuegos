@@ -443,7 +443,7 @@ const mapChargePath = path.join(__dirname, 'Mapas', 'Charge-2-by-Qua-\u029C\u1D0
 const mapChargeData = fs.readFileSync(mapChargePath, 'utf8');
 
 // Map: RUN-Mini-Pekka
-const mapRunMiniPath = path.join(__dirname, 'Mapas', 'RUN-Mini-Pekka-By-zer0ne-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0C_628048143a738.hbs');
+const mapRunMiniPath = path.join(__dirname, 'Mapas', 'RUN-Mini-Pekka-By-zer0ne-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_628048143a738.hbs');
 const mapRunMiniData = fs.readFileSync(mapRunMiniPath, 'utf8');
 
 // Map: Bonk Summer

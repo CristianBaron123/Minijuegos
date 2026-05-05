@@ -87,6 +87,8 @@ var botState = {
     afkWarned: {},      // { playerId: true } - si ya se le envió la advertencia de AFK
     // Anti-dodge: castigos pendientes para jugadores que se salen del Lucky
     luckyDodgers: {},  // { auth: { until: timestamp, reason: string } }
+    kickedByGame: {},  // { auth: true } - kickeados por el juego (anti-dodge)
+    tempBans: {},       // { auth: { until: timestamp, name: string } } - bans temporales por auth
     // Sistema !fix
     fixVotes: {},       // { playerId: timestamp } - votos activos
     fixCooldown: 0,     // timestamp hasta cuando no se puede usar !fix
@@ -103,6 +105,31 @@ var botState = {
     prestamistas: {'ElsEAjXg19qUkfr5kwGzv-v-N0Mh2cwyiFP1tBFLUbY': { name: 'Prestamista', totalPrestado: 0, totalGanado: 0 }},        // { auth: { name, totalPrestado, totalGanado } } - rol prestamista P2P
     prestamosP2P: {},        // { deudorAuth: { prestamistaAuth, prestamistaNombre, deudorNombre, monto, montoTotal, cuotaMonto, cuotasPagadas, cuotasTotales, deudaPendiente, impagos } }
     ofertasPrestamo: {},     // { targetAuth: { fromAuth, fromName, monto, cuotas, montoTotal, cuotaMonto, timestamp } }
+    activeEvent: null,
+    banVoteInterval: null,
+    banVoteTimeout: null,
+    bitesGlobalCooldown: 0,
+    bitesUsedThisGame: {},
+    chatlogBuffer: [],
+    chatlogTimer: null,
+    crashActive: null,
+    currentMinigame: null,
+    dailyRewards: {},
+    elegirCooldownGames: 0,
+    fixPlayerCooldowns: {},
+    gamesUntilEvent: 0,
+    impuestoCooldown: 0,
+    luckyPassLog: {},
+    luckyPassWarned: {},
+    marriageProposals: {},
+    marriages: [],
+    minigameStartTime: null,
+    powerCooldownGames: 0,
+    replayGameName: null,
+    replayRecording: null,
+    theWorldActive: false,
+    titanTaken: {},
+    titanValues: {}
 };
 
 // ============================================
@@ -902,7 +929,7 @@ room.onPlayerKicked = function(kickedPlayer, reason, ban, byPlayer) {
                 botState.lastKickBy[byPlayer.id] = now;
             }
         }
-    } catch (e) { console.error('[ROOM] onPlayerKicked error', e); }
+    } catch (e) { console.error('[ROOM] onPlayerKicked error ' + (e && e.message ? e.message : String(e))); }
 };
 
 
@@ -3596,9 +3623,7 @@ room.onPlayerJoin = function(player) {
     }
     
     // Kicks pendientes de Lucky DIOS (persisten aunque el juego haya terminado)
-    if (typeof LUCKY_DIOS !== 'undefined' && LUCKY_DIOS.onPlayerJoin) {
-        LUCKY_DIOS.onPlayerJoin(room, player);
-    }
+    try { if (typeof LUCKY_DIOS !== 'undefined' && LUCKY_DIOS.onPlayerJoin) LUCKY_DIOS.onPlayerJoin(room, player); } catch(e){}
 
     // Si Zombie Run está activo, meter al nuevo como zombie
     try { if (typeof ZOMBIE_RUN !== 'undefined' && ZOMBIE_RUN.onPlayerJoin) ZOMBIE_RUN.onPlayerJoin(room, player); } catch(e){}
@@ -3662,7 +3687,7 @@ room.onPlayerLeave = function(player) {
             // Limpiar flag de kick por juego
             delete botState.kickedByGame[dodgerAuth];
         }
-    } catch(e) { console.error('[ANTI-DODGE] error', e); }
+    } catch(e) { console.error('[ANTI-DODGE] error ' + (e && e.message ? e.message : String(e))); }
 
     delete botState.authMap[player.id];
 
