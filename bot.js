@@ -744,7 +744,7 @@ const buhoModuleCode = fs.readFileSync(buhoModulePath, 'utf8');
 
 const chargeModulePath = path.join(__dirname, 'games', 'minijuegos', 'charge.js');
 const chargeModuleCode = fs.readFileSync(chargeModulePath, 'utf8');
-const runMiniModulePath = path.join(__dirname, 'Mapas', 'RUN-Mini-Pekka-By-zer0ne-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0C_628048143a738.hbs');
+const runMiniModulePath = path.join(__dirname, 'games', 'minijuegos', 'run_mini.js');
 const runMiniModuleCode = fs.readFileSync(runMiniModulePath, 'utf8');
 
 // Cargar mapas Buho (2-MAN a 16-MAN + CAMPEON)
