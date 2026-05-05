@@ -657,6 +657,16 @@ try {
     mapChairMix = {};
 }
 
+// Parsear mapa PINBALL ROULETTE
+try {
+    mapPinballRoulette = JSON.parse(mapPinballRoulette);
+} catch(e) {
+    mapPinballRoulette = {};
+}
+if (typeof PINBALL_ROULETTE !== 'undefined') {
+    PINBALL_ROULETTE.setMapData(mapPinballRoulette);
+}
+
 // Parsear mapa COVID19
 try {
     mapCovid19 = JSON.parse(mapCovid19);
@@ -6716,7 +6726,7 @@ room.onPlayerChat = function(player, message) {
     if (message.startsWith('!inversion')) {
         var invParts = message.split(' ');
         if (invParts.length < 2) {
-            room.sendAnnouncement('📈 Usa: !inversion [monto]\nEjemplo: !inversion 10000\nTu plata se invierte y madura en 5 juegos.\nResultados posibles: perder todo, x0.5, x1.5, x2, x3 o x5 JACKPOT!', player.id, 0xFFFF00);
+            room.sendAnnouncement('📈 Usa: !inversion [monto]\nEjemplo: !inversion 10000\nTu plata se invierte y madura en 5 juegos.\nResultados posibles: perder todo, x0.5, x1, x1.5, x2, x3 o x4 JACKPOT!', player.id, 0xFFFF00);
             return false;
         }
         var invMonto = parseInt(invParts[1].replace(/\./g, ''));

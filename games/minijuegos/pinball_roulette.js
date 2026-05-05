@@ -132,10 +132,19 @@ function declareWinner(room, winner) {
     if (gameState.gameTimer) { clearTimeout(gameState.gameTimer); gameState.gameTimer = null; }
 
     room.sendAnnouncement(
-        '\n🏆 ' + winner.name.toUpperCase() + ' HA GANADO PINBALL ROULETTE! 🏆',
+        '\n🏆 ' + winner.name.toUpperCase() + ' HA GANADO PINBALL ROULETTE! 🏆\n⏳ Cargando Lucky en 3 segundos...',
         null, 0xFFD700, 'bold', 2
     );
-    setTimeout(function() { if (gameState.callback) gameState.callback(winner); }, 3000);
+    var cb = gameState.callback;
+    gameState.callback = null; // Limpiar para evitar doble llamada
+    setTimeout(function() {
+        if (cb && winner) {
+            console.log('✅ PINBALL_ROULETTE: Llamando callback con ganador ' + winner.name);
+            cb(winner);
+        } else {
+            console.error('❌ PINBALL_ROULETTE: Callback invalido o ganador nulo');
+        }
+    }, 3000);
 }
 
 function stop(room) {
