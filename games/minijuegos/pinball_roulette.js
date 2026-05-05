@@ -62,7 +62,7 @@ function start(room, onGameEnd) {
             '\n📋 INSTRUCCIONES:\n' +
             '🎰 ¡Cae por el pinball hasta llegar abajo!\n' +
             '⚠️ La suerte decidirá tu camino\n' +
-            '🏆 El primero en llegar al final GANA\n' +
+            '🏆 El primero en llegar al final GANA y va a LUCKY\n' +
             '⏰ Tienen 3 MINUTOS\n\n' +
             '⏱️ Comienza en 5s...',
             null, 0xFFFF00, 'bold', 2
@@ -127,22 +127,22 @@ function checkPlayers(room) {
 }
 
 function declareWinner(room, winner) {
-    gameState.active = false;
-    if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
-    if (gameState.gameTimer) { clearTimeout(gameState.gameTimer); gameState.gameTimer = null; }
+    var cb = gameState.callback;
+    gameState.callback = null;
+    stop(room);
 
     room.sendAnnouncement(
-        '\n🏆 ' + winner.name.toUpperCase() + ' HA GANADO PINBALL ROULETTE! 🏆\n⏳ Cargando Lucky en 3 segundos...',
+        '\n🏆 ' + winner.name.toUpperCase() + ' HA GANADO PINBALL ROULETTE! 🏆\n' +
+        '🍀 ¡Va directo a LUCKY! 🍀\n' +
+        '⏳ Cargando en 3 segundos...',
         null, 0xFFD700, 'bold', 2
     );
-    var cb = gameState.callback;
-    gameState.callback = null; // Limpiar para evitar doble llamada
     setTimeout(function() {
         if (cb && winner) {
             console.log('✅ PINBALL_ROULETTE: Llamando callback con ganador ' + winner.name);
             cb(winner);
         } else {
-            console.error('❌ PINBALL_ROULETTE: Callback invalido o ganador nulo');
+            console.error('❌ PINBALL_ROULETTE: Callback inválido o ganador nulo');
         }
     }, 3000);
 }
