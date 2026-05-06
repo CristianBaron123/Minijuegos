@@ -68,6 +68,8 @@ function start(room, onGameEnd) {
         room.pauseGame(true);
         gameState.chatBlocked = true;
 
+        repositionSpawns(room);
+
         room.sendAnnouncement(
             "📋 INSTRUCCIONES:\n" +
             "- Mantente dentro del cuadro señalado\n" +
@@ -210,6 +212,25 @@ function onPlayerChat(player) {
 }
 
 function isActive() { return gameState.active === true; }
+
+function repositionSpawns(room) {
+    var active = gameState.players;
+    var n = active.length;
+    if (n === 0) return;
+    var margin = 75;
+    var sMinX = config.minX + margin, sMaxX = config.maxX - margin;
+    var sMinY = config.minY + margin, sMaxY = config.maxY - margin;
+    var cols = Math.ceil(Math.sqrt(n));
+    var rows = Math.ceil(n / cols);
+    var cellW = (sMaxX - sMinX) / cols;
+    var cellH = (sMaxY - sMinY) / rows;
+    for (var i = 0; i < n; i++) {
+        var col = i % cols, row = Math.floor(i / cols);
+        var sx = Math.round(sMinX + cellW * (col + 0.5));
+        var sy = Math.round(sMinY + cellH * (row + 0.5));
+        try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
+    }
+}
 
 function getStats() {
     return { firstEliminated: gameState.firstEliminated };

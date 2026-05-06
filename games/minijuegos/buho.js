@@ -160,7 +160,7 @@ function start(room, onGameEnd) {
         return;
     }
 
-    var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
     if (players.length < 3) {
         room.sendAnnouncement('⚠️ Se necesitan al menos 3 jugadores para Buho', null, 0xFF6600);
         if (onGameEnd) onGameEnd(null);
