@@ -21,7 +21,8 @@ try { if (typeof room !== 'undefined') { if (room.setTimeLimit) room.setTimeLimi
 var OWNER_AUTH = "##OWNER_AUTH##";
 var MODERATOR_AUTHS = [
     "TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc",
-    "4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk"
+    "4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk",
+    "py-h0135hpGNwKNn_I7n00W04x4tc6k2THJv1-Xj2ik"
 ];
 
 // ============================================
