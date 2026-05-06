@@ -50,6 +50,8 @@ function start(room, onGameEnd) {
         try { room.pauseGame(true); } catch(e){}
         gameState.chatBlocked = true;
 
+        repositionSpawns(room);
+
         room.sendAnnouncement(
             '\n📋 INSTRUCCIONES:\n' +
             '💣 Esquiva los obstáculos y bolas!\n' +
@@ -166,6 +168,25 @@ function shuffleTeams(room) {
     for (var i = 0; i < playingCount; i++) {
         var team = (i % 2 === 0) ? 1 : 2;
         try { room.setPlayerTeam(players[i].id, team); } catch(e){}
+    }
+}
+
+function repositionSpawns(room) {
+    var active = gameState.players;
+    var n = active.length;
+    if (n === 0) return;
+    var margin = 90;
+    var sMinX = bounds.minX + margin, sMaxX = bounds.maxX - margin;
+    var sMinY = bounds.minY + margin, sMaxY = bounds.maxY - margin;
+    var cols = Math.ceil(Math.sqrt(n));
+    var rows = Math.ceil(n / cols);
+    var cellW = (sMaxX - sMinX) / cols;
+    var cellH = (sMaxY - sMinY) / rows;
+    for (var i = 0; i < n; i++) {
+        var col = i % cols, row = Math.floor(i / cols);
+        var sx = Math.round(sMinX + cellW * (col + 0.5));
+        var sy = Math.round(sMinY + cellH * (row + 0.5));
+        try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
     }
 }
 

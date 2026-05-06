@@ -58,6 +58,8 @@ function start(room, onGameEnd) {
             try { room.pauseGame(true); } catch(e){}
             gameState.chatBlocked = true;
 
+            repositionSpawns(room);
+
             room.sendAnnouncement('\n📋 INSTRUCCIONES:\n' +
                 '🔴 vs 🔵 - Empuja las pelotas al otro lado!\n' +
                 '💀 Si sales de tu zona, quedas eliminado\n' +
@@ -425,6 +427,36 @@ function onPlayerChat(room, player, message) {
 }
 
 function isActive() { return gameState.active; }
+
+function repositionSpawns(room) {
+    var red = [], blue = [];
+    for (var i = 0; i < gameState.players.length; i++) {
+        var p = room.getPlayer(gameState.players[i]);
+        if (!p) continue;
+        if (p.team === 1) red.push(p.id);
+        else if (p.team === 2) blue.push(p.id);
+    }
+    var rz = config.redZone, bz = config.blueZone;
+    var rm = 60, bm = 60;
+    function placeTeam(list, zone, margin) {
+        var n = list.length;
+        if (n === 0) return;
+        var sMinX = zone.minX + margin, sMaxX = zone.maxX - margin;
+        var sMinY = zone.minY + margin, sMaxY = zone.maxY - margin;
+        var cols = Math.ceil(Math.sqrt(n));
+        var rows = Math.ceil(n / cols);
+        var cellW = (sMaxX - sMinX) / cols;
+        var cellH = (sMaxY - sMinY) / rows;
+        for (var i = 0; i < n; i++) {
+            var col = i % cols, row = Math.floor(i / cols);
+            var sx = Math.round(sMinX + cellW * (col + 0.5));
+            var sy = Math.round(sMinY + cellH * (row + 0.5));
+            try { room.setPlayerDiscProperties(list[i], { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
+        }
+    }
+    placeTeam(red, rz, rm);
+    placeTeam(blue, bz, bm);
+}
 
 function shuffleTeams(room) {
     var ids = gameState.players.slice();

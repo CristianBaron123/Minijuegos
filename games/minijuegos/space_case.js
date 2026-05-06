@@ -58,6 +58,8 @@ function start(room, onGameEnd) {
         room.startGame();
         try { room.pauseGame(true); } catch(e) {}
 
+        repositionSpawns(room);
+
         gameState.chatBlocked = true;
 
         room.sendAnnouncement(
@@ -197,6 +199,26 @@ function onPlayerChat(player, message) {
 function setMapData(m) { mapData = m; }
 
 function isActive() { return gameState.active; }
+
+function repositionSpawns(room) {
+    var active = gameState.players;
+    var n = active.length;
+    if (n === 0) return;
+    var marginX = Math.round(config.boundsX * 0.25);
+    var marginY = Math.round(config.boundsY * 0.25);
+    var sMinX = -config.boundsX + marginX, sMaxX = config.boundsX - marginX;
+    var sMinY = -config.boundsY + marginY, sMaxY = config.boundsY - marginY;
+    var cols = Math.ceil(Math.sqrt(n));
+    var rows = Math.ceil(n / cols);
+    var cellW = (sMaxX - sMinX) / cols;
+    var cellH = (sMaxY - sMinY) / rows;
+    for (var i = 0; i < n; i++) {
+        var col = i % cols, row = Math.floor(i / cols);
+        var sx = Math.round(sMinX + cellW * (col + 0.5));
+        var sy = Math.round(sMinY + cellH * (row + 0.5));
+        try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
+    }
+}
 
 function getStats() {
     return null;

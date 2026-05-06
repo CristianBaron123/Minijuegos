@@ -43,7 +43,7 @@ function start(room, onGameEnd) {
 
     try { room.setCustomStadium(mapData); } catch(e) { console.error('[TANK_WAR] Error cargando mapa', e.message); if (onGameEnd) onGameEnd(null); return; }
 
-    var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
     var minPlayers = isTestMode() ? 2 : config.minPlayers;
     if (players.length < minPlayers) { room.sendAnnouncement('⚠️ Se necesitan al menos 2 jugadores para Tank War', null, 0xFF6600); if (onGameEnd) onGameEnd(null); return; }
 

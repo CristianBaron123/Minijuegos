@@ -54,6 +54,8 @@ function start(room, onEnd) {
         room.startGame();
         room.pauseGame(true);
 
+        repositionSpawns(room);
+
         gameState.chatBlocked = true;
 
         room.sendAnnouncement('\n📋 INSTRUCCIONES:\n🌌 Estás dentro de la galaxia. Tu objetivo es evitar salir del círculo.\n🪐 Puedes usar los planetas para rebotar.\n🏆 El último en pie gana.\n\n⏱️ Comienza en 3s...', null, 0xFFFF00, 'bold', 2);
@@ -143,6 +145,25 @@ function stop(room) {
     gameState.players = [];
     gameState.chatBlocked = false;
     try { room.stopGame(); } catch(e){}
+}
+
+function repositionSpawns(room) {
+    var active = gameState.players;
+    var n = active.length;
+    if (n === 0) return;
+    var b = config.bounds;
+    var margin = Math.round(b * 0.25);
+    var sMin = -b + margin, sMax = b - margin;
+    var cols = Math.ceil(Math.sqrt(n));
+    var rows = Math.ceil(n / cols);
+    var cellW = (sMax - sMin) / cols;
+    var cellH = (sMax - sMin) / rows;
+    for (var i = 0; i < n; i++) {
+        var col = i % cols, row = Math.floor(i / cols);
+        var sx = Math.round(sMin + cellW * (col + 0.5));
+        var sy = Math.round(sMin + cellH * (row + 0.5));
+        try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
+    }
 }
 
 function shuffleTeams(room) {

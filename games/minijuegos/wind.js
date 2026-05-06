@@ -51,6 +51,8 @@ function start(room, onGameEnd) {
         try { room.pauseGame(true); } catch(e){}
         gameState.chatBlocked = true;
 
+        repositionSpawns(room);
+
         room.sendAnnouncement(
             '\n📋 INSTRUCCIONES:\n' +
             '🌬️ ¡Salta de plataforma en plataforma!\n' +
@@ -179,6 +181,32 @@ function shuffleTeams(room) {
         try { room.setPlayerTeam(players[i].id, team); } catch(e){}
     }
     // Los demás quedan en espectador (team 0)
+}
+
+function repositionSpawns(room) {
+    var active = gameState.players;
+    var n = active.length;
+    if (n === 0) return;
+
+    var safeMinX = bounds.minX + 150;
+    var safeMaxX = bounds.maxX - 150;
+    var safeMinY = bounds.minY + 80;
+    var safeMaxY = bounds.maxY - 80;
+    var safeW = safeMaxX - safeMinX;
+    var safeH = safeMaxY - safeMinY;
+
+    var cols = Math.ceil(Math.sqrt(n));
+    var rows = Math.ceil(n / cols);
+    var cellW = safeW / cols;
+    var cellH = safeH / rows;
+
+    for (var i = 0; i < n; i++) {
+        var col = i % cols;
+        var row = Math.floor(i / cols);
+        var sx = Math.round(safeMinX + cellW * (col + 0.5));
+        var sy = Math.round(safeMinY + cellH * (row + 0.5));
+        try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
+    }
 }
 
 function isActive() { return gameState.active; }
