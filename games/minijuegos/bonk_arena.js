@@ -241,6 +241,6 @@ module.exports = {
     isActive: isActive,
     onPlayerLeave: onPlayerLeave,
     onPlayerChat: onPlayerChat,
-    getStats: getStats,
+    getStats: function() { return {}; },
     setMapData: function(jsonString) { mapData = jsonString; }
 };
