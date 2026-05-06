@@ -5,6 +5,11 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./db');
 
+// ============================================
+// VERSIÓN DEL BOT — Incrementar al subir cambios
+// ============================================
+const BOT_VERSION = '2.1.1';
+
 // Token de Haxball (puede venir de variable de entorno o hardcoded)
 const HAXBALL_TOKEN = process.env.HAXBALL_TOKEN || "thr1.AAAAAGl_okIBMBkfgD5Nuw._Rjq_nJJiH4";
 
@@ -951,6 +956,7 @@ const getBotScript = () => {
          .replace(/##OWNER_AUTH##/g, OWNER_AUTH)
          .replace(/##MODERATOR_AUTHS##/g, JSON.stringify(MODERATOR_AUTHS))
          .replace(/##DISCORD_WEBHOOK_MODS##/g, DISCORD_WEBHOOKS.mods || '')
+         .replace(/##BOT_VERSION##/g, BOT_VERSION)
         .replace(/##MAP_LUCK##/g, JSON.stringify(JSON.stringify(mapLuckData)))
         .replace(/##MAP_LUCK_DIOS##/g, JSON.stringify(JSON.stringify(mapLuckDiosData)))
         .replace(/##MAP_LUCK_HELL##/g, JSON.stringify(JSON.stringify(mapLuckHellData)))
