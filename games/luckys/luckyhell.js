@@ -136,9 +136,7 @@ const LUCKY_HELL = (function() {
 
     // Selection (for pass)
     function startSelection(room, effectType, effectData) {
-        // evitar iniciar selección si ya hay una en curso
         if (gameState.selection && gameState.selection.active) return;
-        try { lockTeamChanges(); } catch(e) {}
         gameState.selection.active = true;
         gameState.selection.explanation = true;
         gameState.selection.effect = { type: effectType, data: effectData };
@@ -155,9 +153,6 @@ const LUCKY_HELL = (function() {
             return;
         }
 
-        room.pauseGame(true);
-        if (gameState.currentPlayer) try { room.setPlayerTeam(gameState.currentPlayer.id, 0); } catch(e){}
-
         var parts = [];
         gameState.selection.playerList.forEach(function(p,i){ parts.push((i+1)+'.'+p.name); });
         var txt = '\n📋 JUGADORES: ' + parts.join('  |  ') + '\n\n📖 ' + (gameState.currentPlayer?gameState.currentPlayer.name:'GANADOR') + ', escribe el NÚMERO para PASAR';
@@ -166,7 +161,6 @@ const LUCKY_HELL = (function() {
 
         setTimeout(function(){
             gameState.selection.explanation = false;
-            room.pauseGame(false);
             room.sendAnnouncement('⏱️ ¡AHORA! Escribe el NÚMERO ('+(config.selectionTimeout/1000)+'s)', null, 0x00FF00, 'bold', 2);
 
             gameState.selection.reminderTimeout = setTimeout(function(){
@@ -190,9 +184,6 @@ const LUCKY_HELL = (function() {
         gameState.selection.playerList = [];
         if (gameState.selection.timeout) { clearTimeout(gameState.selection.timeout); gameState.selection.timeout = null; }
         if (gameState.selection.reminderTimeout) { clearTimeout(gameState.selection.reminderTimeout); gameState.selection.reminderTimeout = null; }
-        if (gameState.room) {
-            try { unlockTeamChanges(); gameState.room.pauseGame(false); if (gameState.currentPlayer) gameState.room.setPlayerTeam(gameState.currentPlayer.id,1); } catch(e){}
-        }
     }
 
     function handleSelectionInput(room, message) {
