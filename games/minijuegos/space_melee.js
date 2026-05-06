@@ -45,7 +45,7 @@ function start(room, onEnd) {
 
     try { shuffleTeams(room); } catch (e) {}
 
-    gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0 && p.team !== 0; }).map(function(p) { return { id: p.id, name: p.name }; });
+    gameState.players = room.getPlayerList().filter(function(p){ return p.id !== 0; }).map(function(p) { return { id: p.id, name: p.name }; });
     gameState.hasBeenInBounds = {};
 
     room.sendAnnouncement('🎲 Minijuego: SPACE MELEE\n👥 Jugadores: ' + gameState.players.length + '\n⏱️ Iniciando en 3 segundos...', null, 0x00BFFF, 'bold', 2);

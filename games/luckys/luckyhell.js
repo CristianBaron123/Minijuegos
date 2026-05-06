@@ -219,20 +219,18 @@ const LUCKY_HELL = (function() {
             case 'pass_hell':
                 if (gameState.callbacks && gameState.callbacks.onLuckyPass && gameState.currentPlayer) gameState.callbacks.onLuckyPass(gameState.currentPlayer.id, target.id);
                 room.sendAnnouncement('🔀 '+(gameState.currentPlayer?gameState.currentPlayer.name:'Jugador')+' le pasa LUCKY HELL a '+target.name, null, 0x00FF00, 'bold', 2);
+                var prevPlayer = gameState.currentPlayer;
+                gameState.currentPlayer = target;
                 setTimeout(function(){
-                    // Detener y recargar mapa, mover equipos: current -> espectador, target -> rojo
                     try { room.stopGame(); } catch(e){}
                     try { room.setCustomStadium(map); } catch(e){}
                     try { room.startGame(); } catch(e){}
 
-                    if (gameState.currentPlayer) {
-                        try { room.setPlayerTeam(gameState.currentPlayer.id, 0); } catch(e){}
+                    if (prevPlayer) {
+                        try { room.setPlayerTeam(prevPlayer.id, 0); } catch(e){}
                     }
                     try { room.setPlayerTeam(target.id, 1); } catch(e){}
 
-                    gameState.currentPlayer = target;
-
-                    // Reset detection/timers
                     resetDetection();
                     if (gameState.globalTimeout) { clearTimeout(gameState.globalTimeout); gameState.globalTimeout = null; }
                     gameState.globalTimeout = setTimeout(function(){ if (gameState.active) { room.sendAnnouncement('⏱️ Tiempo agotado en Lucky HELL!', null, 0xFF6600, 'bold'); stop(room); if (gameState.onGameEnd) gameState.onGameEnd(); } }, config.maxGameTime);

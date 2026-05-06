@@ -32,7 +32,7 @@ function start(room, onGameEnd) {
 
     shuffleTeams(room);
 
-    var activePlayers = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+    var activePlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
     gameState.players = activePlayers.map(function(p) { return { id: p.id, name: p.name }; });
 
     room.sendAnnouncement(

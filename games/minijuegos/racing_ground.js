@@ -115,7 +115,7 @@ function start(room, onGameEnd) {
             try { room.pauseGame(false); } catch(e) {}
 
             var now = Date.now();
-            var ps = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+            var ps = room.getPlayerList().filter(function(p) { return p.id !== 0; });
             ps.forEach(function(p) {
                 var pos = getPos(room, p.id);
                 gameState.racers[p.id] = {
@@ -164,7 +164,7 @@ function checkRace(room) {
     if (!gameState.active || !gameState.started) return;
 
     var now = Date.now();
-    var ps  = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+    var ps  = room.getPlayerList().filter(function(p) { return p.id !== 0; });
 
     ps.forEach(function(p) {
         var r = gameState.racers[p.id];

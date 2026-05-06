@@ -19,7 +19,10 @@ try { if (typeof room !== 'undefined') { if (room.setTimeLimit) room.setTimeLimi
 // SISTEMA DE OWNER (DUEÑO)
 // ============================================
 var OWNER_AUTH = "##OWNER_AUTH##";
-var MODERATOR_AUTHS = ##MODERATOR_AUTHS##;
+var MODERATOR_AUTHS = [
+    "TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc",
+    "4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk"
+];
 
 // ============================================
 // SISTEMA VIP (2 NIVELES) - CONFIGURAR AUTH MANUALMENTE
@@ -1391,6 +1394,24 @@ function startCOVID2() {
     }
 }
 
+function startCOVID_NAMAJUNAS() {
+    botState.gameActive = true;
+    if (typeof COVID_NAMAJUNAS !== 'undefined') {
+        COVID_NAMAJUNAS.start(room, function(winner) {
+            showGameStats(COVID_NAMAJUNAS);
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
+
 function startFIT_IN_TREN() {
     botState.gameActive = true;
     if (typeof FIT_IN_TREN !== 'undefined') {
@@ -2115,6 +2136,16 @@ function startRUN_MINI() {
     } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
 }
 
+function startEARN_EASILY() {
+    botState.gameActive = true;
+    if (typeof EARN_EASILY !== 'undefined') {
+        EARN_EASILY.start(room, function(winner) {
+            if (winner) { loadLuckyMap(winner); }
+            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+        });
+    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+}
+
 function startBONK_SUMMER() {
     botState.gameActive = true;
     if (typeof BONK_SUMMER !== 'undefined') {
@@ -2741,6 +2772,7 @@ function forceStopAllGames() {
     try { if (ANIMALCHAIRS_WHALE && ANIMALCHAIRS_WHALE.isActive && ANIMALCHAIRS_WHALE.isActive()) ANIMALCHAIRS_WHALE.stop(room); } catch(e){}
     try { if (BONK_BERU_HAX && BONK_BERU_HAX.isActive && BONK_BERU_HAX.isActive()) BONK_BERU_HAX.stop(room); } catch(e){}
     try { if (COVID2 && COVID2.isActive && COVID2.isActive()) COVID2.stop(room); } catch(e){}
+    try { if (COVID_NAMAJUNAS && COVID_NAMAJUNAS.isActive && COVID_NAMAJUNAS.isActive()) COVID_NAMAJUNAS.stop(room); } catch(e){}
     try { if (DOMINIC_SURVIVOR && DOMINIC_SURVIVOR.isActive && DOMINIC_SURVIVOR.isActive()) DOMINIC_SURVIVOR.stop(room); } catch(e){}
     try { if (AIR_HOCKEY && AIR_HOCKEY.isActive && AIR_HOCKEY.isActive()) AIR_HOCKEY.stop(room); } catch(e){}
     try { if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive && SURVIVOR_VOL17.isActive()) SURVIVOR_VOL17.stop(room); } catch(e){}
@@ -2798,6 +2830,8 @@ function forceStopAllGames() {
     try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) BASKETBALL.stop(room); } catch(e){}
     try { if (BTL && BTL.isActive && BTL.isActive()) BTL.stop(room); } catch(e){}
     try { if (CHARGE && CHARGE.isActive && CHARGE.isActive()) CHARGE.stop(room); } catch(e){}
+    try { if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) RUN_MINI.stop(room); } catch(e){}
+    try { if (EARN_EASILY && EARN_EASILY.isActive && EARN_EASILY.isActive()) EARN_EASILY.stop(room); } catch(e){}
     try { if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) BONK_SUMMER.stop(room); } catch(e){}
     try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) BONK_WINTER.stop(room); } catch(e){}
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) ZOMBIE_RUN.stop(room); } catch(e){}
@@ -2860,6 +2894,7 @@ function checkAndStart() {
     try { if (ANIMALCHAIRS_WHALE && ANIMALCHAIRS_WHALE.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BONK_BERU_HAX && BONK_BERU_HAX.isActive()) anyModuleActive = true; } catch(e){}
     try { if (COVID2 && COVID2.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (COVID_NAMAJUNAS && COVID_NAMAJUNAS.isActive()) anyModuleActive = true; } catch(e){}
     try { if (DOMINIC_SURVIVOR && DOMINIC_SURVIVOR.isActive()) anyModuleActive = true; } catch(e){}
     try { if (AIR_HOCKEY && AIR_HOCKEY.isActive()) anyModuleActive = true; } catch(e){}
     try { if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive()) anyModuleActive = true; } catch(e){}
@@ -2917,6 +2952,8 @@ function checkAndStart() {
     try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BTL && BTL.isActive && BTL.isActive()) anyModuleActive = true; } catch(e){}
     try { if (CHARGE && CHARGE.isActive && CHARGE.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) anyModuleActive = true; } catch(e){}
+    try { if (EARN_EASILY && EARN_EASILY.isActive && EARN_EASILY.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) anyModuleActive = true; } catch(e){}
     try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) anyModuleActive = true; } catch(e){}
     try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) anyModuleActive = true; } catch(e){}
@@ -3119,6 +3156,7 @@ function checkAndStart() {
             { name: 'ANIMALCHAIRS_WHALE', module: ANIMALCHAIRS_WHALE, displayName: 'ANIMALCHAIRS WHALE', starter: startANIMALCHAIRS_WHALE },
             { name: 'BONK_BERU_HAX', module: BONK_BERU_HAX, displayName: 'BONK GAME BY BERU (HAX)', starter: startBONK_BERU_HAX },
             { name: 'COVID2', module: COVID2, displayName: 'COVID-2 SURVIVAL', starter: startCOVID2 },
+            { name: 'COVID_NAMAJUNAS', module: COVID_NAMAJUNAS, displayName: 'COVID-19 SURVIVAL', starter: startCOVID_NAMAJUNAS },
             { name: 'FIT_IN_TREN', module: FIT_IN_TREN, displayName: 'FIT IN TREN', starter: startFIT_IN_TREN },
             { name: 'FITANIC', module: FITANIC, displayName: 'FITANIC', starter: startFITANIC },
             { name: 'FORTUNATE_RACE', module: FORTUNATE_RACE, displayName: 'FORTUNATE RACE', starter: startFORTUNATE_RACE },
@@ -3173,6 +3211,8 @@ function checkAndStart() {
             { name: 'BASKETBALL', module: BASKETBALL, displayName: 'BASKETBALL', starter: startBASKETBALL },
             { name: 'BTL', module: BTL, displayName: 'B.T.L', starter: startBTL },
             { name: 'CHARGE', module: CHARGE, displayName: 'Charge', starter: startCHARGE },
+            { name: 'RUN_MINI', module: RUN_MINI, displayName: 'RUN MINI', starter: startRUN_MINI },
+            { name: 'EARN_EASILY', module: EARN_EASILY, displayName: 'EARN EASILY', starter: startEARN_EASILY },
             // { name: 'BONK_SUMMER', module: BONK_SUMMER, displayName: 'BONK SUMMER', starter: startBONK_SUMMER }, // DESACTIVADO temporalmente
             { name: 'BONK_WINTER', module: BONK_WINTER, displayName: 'BONK WINTER', starter: startBONK_WINTER },
             { name: 'RACING_GROUND', module: RACING_GROUND, displayName: 'RACING GROUND', starter: startRACING_GROUND },
@@ -3792,6 +3832,9 @@ room.onPlayerLeave = function(player) {
     if (COVID2 && COVID2.isActive && COVID2.isActive()) {
         try { COVID2.onPlayerLeave(room, player); } catch(e){}
     }
+    if (COVID_NAMAJUNAS && COVID_NAMAJUNAS.isActive && COVID_NAMAJUNAS.isActive()) {
+        try { COVID_NAMAJUNAS.onPlayerLeave(room, player); } catch(e){}
+    }
     if (DOMINIC_SURVIVOR && DOMINIC_SURVIVOR.isActive && DOMINIC_SURVIVOR.isActive()) {
         try { DOMINIC_SURVIVOR.onPlayerLeave(room, player); } catch(e){}
     }
@@ -3986,6 +4029,12 @@ room.onPlayerLeave = function(player) {
     }
     if (TANK_WAR && TANK_WAR.isActive && TANK_WAR.isActive()) {
         try { TANK_WAR.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) {
+        try { RUN_MINI.onPlayerLeave(room, player); } catch(e){}
+    }
+    if (EARN_EASILY && EARN_EASILY.isActive && EARN_EASILY.isActive()) {
+        try { EARN_EASILY.onPlayerLeave(room, player); } catch(e){}
     }
 
     // Limpiar actividad AFK del jugador que sale
@@ -4212,9 +4261,9 @@ room.onPlayerTeamChange = function(changedPlayer, byPlayer) {
                 SPOT_BONK, CHAIRMIX, COVID19, GYMMIX, TRIVIA, SPACE_CASE, SPACE_MELEE,
                 FCT1, FIT_IN_GRAVEYARD, FUTBOL_CALLEJERO, GYM_COLORS, GYM9, MATRIX_FIT, RACE02, ZOMBIE_RUN,
                 AMERICAN_CARRYBALL, RING_SURVIVAL, BONK_ARENA, BONK_BERU,
-                ANIMALCHAIRS_WHALE, BONK_BERU_HAX, COVID2, DOMINIC_SURVIVOR, AIR_HOCKEY,
+                ANIMALCHAIRS_WHALE, BONK_BERU_HAX, COVID2, COVID_NAMAJUNAS, DOMINIC_SURVIVOR, AIR_HOCKEY,
                 FIT_IN_TREN, FITANIC, FORTUNATE_RACE, KAFA_TOPU, KAFA_TOPU_SHADOW,
-                KURU_KAFA_BONK, LASER_RACE, IMPOSTOR];
+                KURU_KAFA_BONK, LASER_RACE, IMPOSTOR, RUN_MINI, EARN_EASILY];
             _mods.forEach(function(m) {
                 try { if (m && m.isActive && m.isActive() && m.onPlayerLeave) m.onPlayerLeave(room, changedPlayer); } catch(e){}
             });
@@ -4644,6 +4693,12 @@ room.onPlayerChat = function(player, message) {
             if (result === false) return false;
         } catch(e){}
     }
+    if (COVID_NAMAJUNAS && COVID_NAMAJUNAS.isActive && COVID_NAMAJUNAS.isActive()) {
+        try {
+            var result = COVID_NAMAJUNAS.onPlayerChat(player, message);
+            if (result === false) return false;
+        } catch(e){}
+    }
     if (DOMINIC_SURVIVOR && DOMINIC_SURVIVOR.isActive && DOMINIC_SURVIVOR.isActive()) {
         try {
             var result = DOMINIC_SURVIVOR.onPlayerChat(player, message);
@@ -4922,6 +4977,12 @@ room.onPlayerChat = function(player, message) {
     }
     if (CHARGE && CHARGE.isActive && CHARGE.isActive()) {
         try { var chR = CHARGE.onPlayerChat(room, player, message); if (chR === false) return false; } catch(e){}
+    }
+    if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) {
+        try { var rmR = RUN_MINI.onPlayerChat(player, message); if (rmR === false) return false; } catch(e){}
+    }
+    if (EARN_EASILY && EARN_EASILY.isActive && EARN_EASILY.isActive()) {
+        try { var eeR = EARN_EASILY.onPlayerChat(player, message); if (eeR === false) return false; } catch(e){}
     }
     if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) {
         try { var bsR = BONK_SUMMER.onPlayerChat(player, message); if (bsR === false) return false; } catch(e){}
@@ -5976,6 +6037,7 @@ room.onPlayerChat = function(player, message) {
             {n:'RING_SURVIVAL', d:'Ring Survival', s:startRING_SURVIVAL}, {n:'BONK_ARENA', d:'Bonk Arena', s:startBONK_ARENA},
             {n:'BONK_BERU', d:'Bonk Beru', s:startBONK_BERU}, {n:'ANIMALCHAIRS_WHALE', d:'AnimalChairs Whale', s:startANIMALCHAIRS_WHALE},
             {n:'BONK_BERU_HAX', d:'Bonk Beru Hax', s:startBONK_BERU_HAX}, {n:'COVID2', d:'COVID-2', s:startCOVID2},
+            {n:'COVID_NAMAJUNAS', d:'COVID-19', s:startCOVID_NAMAJUNAS},
             {n:'FIT_IN_TREN', d:'Fit in Tren', s:startFIT_IN_TREN}, {n:'FITANIC', d:'Fitanic', s:startFITANIC},
             {n:'FORTUNATE_RACE', d:'Fortunate Race', s:startFORTUNATE_RACE}, {n:'KAFA_TOPU', d:'Kafa Topu', s:startKAFA_TOPU},
             {n:'KAFA_TOPU_SHADOW', d:'Kafa Topu Shadow', s:startKAFA_TOPU_SHADOW}, {n:'KURU_KAFA_BONK', d:'Kuru Kafa Bonk', s:startKURU_KAFA_BONK},
@@ -6012,6 +6074,7 @@ room.onPlayerChat = function(player, message) {
             {n:'WAR_CONQUEST', d:'War of Conquest', s:startWAR_CONQUEST},
             {n:'CHARGE', d:'Charge', s:startCHARGE},
             {n:'RUN_MINI', d:'Run Mini', s:startRUN_MINI},
+            {n:'EARN_EASILY', d:'Earn Easily', s:startEARN_EASILY},
             {n:'TANK_WAR', d:'Tank War', s:startTANK_WAR}
         ];
         if (!escogerArg || escogerArg.toLowerCase() === 'lista') {
@@ -6119,7 +6182,7 @@ room.onPlayerChat = function(player, message) {
             {n:'AMERICAN_CARRYBALL', d:'American Carryball'}, {n:'RING_SURVIVAL', d:'Ring Survival'},
             {n:'BONK_ARENA', d:'Bonk Arena'}, {n:'BONK_BERU', d:'Bonk Beru'},
             {n:'ANIMALCHAIRS_WHALE', d:'AnimalChairs Whale'}, {n:'BONK_BERU_HAX', d:'Bonk Beru Hax'},
-            {n:'COVID2', d:'COVID-2'}, {n:'FIT_IN_TREN', d:'Fit in Tren'},
+            {n:'COVID2', d:'COVID-2'}, {n:'COVID_NAMAJUNAS', d:'COVID-19'}, {n:'FIT_IN_TREN', d:'Fit in Tren'},
             {n:'FITANIC', d:'Fitanic'}, {n:'FORTUNATE_RACE', d:'Fortunate Race'},
             {n:'KAFA_TOPU', d:'Kafa Topu'}, {n:'KAFA_TOPU_SHADOW', d:'Kafa Topu Shadow'},
             {n:'KURU_KAFA_BONK', d:'Kuru Kafa Bonk'}, {n:'LASER_RACE', d:'Laser Race'},
@@ -6157,7 +6220,7 @@ room.onPlayerChat = function(player, message) {
             {n:'JUEGO_1234', d:'Juego 1234'},
             {n:'WAR_CONQUEST', d:'War of Conquest'},
             {n:'CHARGE', d:'Charge'},
-            {n:'RUN_MINI', d:'Run Mini'},
+            {n:'RUN_MINI', d:'Run Mini'}, {n:'EARN_EASILY', d:'Earn Easily'},
             {n:'TANK_WAR', d:'Tank War'}
         ];
         if (!elegirArg || elegirArg.toLowerCase() === 'lista') {
