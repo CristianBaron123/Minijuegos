@@ -28,6 +28,8 @@
         .btn-start:hover { background: #00a884; }
         .btn-stop { background: #e17055; color: #fff; }
         .btn-stop:hover { background: #d15a45; }
+        .btn-maintenance { background: #fdcb6e; color: #2d3436; }
+        .btn-maintenance:hover { background: #f0c040; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .sala-link { margin-bottom: 15px; }
         .sala-link a { color: #74b9ff; text-decoration: none; font-size: 13px; }
@@ -137,6 +139,27 @@
             setTimeout(fetchStatus, 1000);
         }
 
+        async function maintenanceSala(salaId) {
+            if (!confirm('Activar modo mantenimiento?\n\nSe kickearán todos los jugadores con aviso y luego se apagará la sala.')) return;
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '🔧 Kickeando...';
+            try {
+                const res = await fetch('/api/maintenance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ salaId })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    alert('✅ Mantenimiento completado. Ya puedes hacer git pull y reiniciar.');
+                } else {
+                    alert('❌ Error: ' + (data.error || 'Desconocido'));
+                }
+            } catch(e) { alert('Error: ' + e.message); }
+            setTimeout(fetchStatus, 1000);
+        }
+
         function toggleLogs(salaId) {
             logsVisible[salaId] = !logsVisible[salaId];
             render();
@@ -168,6 +191,7 @@
                         </div>
                         <div class="token-help">Obtener token: <a href="https://www.haxball.com/headlesstoken" target="_blank">haxball.com/headlesstoken</a> (expira cada ~24h)</div>
                     ` : `
+                        <button class="btn btn-maintenance" onclick="maintenanceSala('${id}')">🔧 Mantenimiento</button>
                         <button class="btn btn-stop" onclick="stopSala('${id}')">Apagar</button>
                     `}
                     <br>
