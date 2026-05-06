@@ -347,6 +347,16 @@ const LUCKY_HELL = (function() {
         try {
             if (!gameState.active || !player) return;
             if (gameState.currentPlayer && player.id === gameState.currentPlayer.id) {
+                if (gameState.selection && gameState.selection.active && gameState.selection.playerList.length > 0) {
+                    var randomTarget = gameState.selection.playerList[Math.floor(Math.random() * gameState.selection.playerList.length)];
+                    if (gameState.room) {
+                        gameState.room.sendAnnouncement('⚠️ ' + player.name + ' salió durante la selección. Se elige ALEATORIO: ' + randomTarget.name, null, 0xFF6600, 'bold');
+                    }
+                    try { cancelSelection(); } catch(e){}
+                    gameState.selection.effect = { type: 'pass_hell', data: null };
+                    executeSelectionEffect(gameState.room, randomTarget);
+                    return;
+                }
                 if (gameState.room) {
                     gameState.room.sendAnnouncement('⚠️ El jugador (' + player.name + ') salió. Finalizando Lucky HELL.', null, 0xFF6600, 'bold');
                 }

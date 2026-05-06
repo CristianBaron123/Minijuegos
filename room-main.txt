@@ -2841,6 +2841,7 @@ function forceStopAllGames() {
     try { if (WAR_CONQUEST && WAR_CONQUEST.isActive && WAR_CONQUEST.isActive()) WAR_CONQUEST.stop(room); } catch(e){}
     try { if (TANK_WAR && TANK_WAR.isActive && TANK_WAR.isActive()) TANK_WAR.stop(room); } catch(e){}
     try { room.stopGame(); } catch(e){}
+    room.onTeamGoal = buhoGoalHandler;
     botState.gameActive = false;
     if (botState.startTimeout) {
         clearTimeout(botState.startTimeout);
@@ -3155,8 +3156,8 @@ function checkAndStart() {
             { name: 'BONK_BERU', module: BONK_BERU, displayName: 'BONK GAME BY BERU', starter: startBONK_BERU },
             { name: 'ANIMALCHAIRS_WHALE', module: ANIMALCHAIRS_WHALE, displayName: 'ANIMALCHAIRS WHALE', starter: startANIMALCHAIRS_WHALE },
             { name: 'BONK_BERU_HAX', module: BONK_BERU_HAX, displayName: 'BONK GAME BY BERU (HAX)', starter: startBONK_BERU_HAX },
-            { name: 'COVID2', module: COVID2, displayName: 'COVID-2 SURVIVAL', starter: startCOVID2 },
-            { name: 'COVID_NAMAJUNAS', module: COVID_NAMAJUNAS, displayName: 'COVID-19 SURVIVAL', starter: startCOVID_NAMAJUNAS },
+            { name: 'COVID2', module: COVID2, displayName: 'COVID-2 Survival', starter: startCOVID2 },
+            { name: 'COVID_NAMAJUNAS', module: COVID_NAMAJUNAS, displayName: 'COVID Namajunas', starter: startCOVID_NAMAJUNAS },
             { name: 'FIT_IN_TREN', module: FIT_IN_TREN, displayName: 'FIT IN TREN', starter: startFIT_IN_TREN },
             { name: 'FITANIC', module: FITANIC, displayName: 'FITANIC', starter: startFITANIC },
             { name: 'FORTUNATE_RACE', module: FORTUNATE_RACE, displayName: 'FORTUNATE RACE', starter: startFORTUNATE_RACE },
@@ -3471,12 +3472,14 @@ function stopSoloEntertainment() {
 // EVENTOS GLOBALES DE HAXBALL (para BUHO)
 // ============================================
 
-room.onTeamGoal = function(team) {
+function buhoGoalHandler(team) {
     if (BUHO && BUHO.isActive && BUHO.isActive()) {
         try { BUHO.onTeamGoal(room, team); } catch(e) {}
         return;
     }
-};
+}
+
+room.onTeamGoal = buhoGoalHandler;
 
 room.onGameTick = function() {
     if (BUHO && BUHO.isActive && BUHO.isActive()) {
@@ -4474,7 +4477,13 @@ room.onPlayerChat = function(player, message) {
                 '🔑 **Auth:** `' + rAuth + '`\n' +
                 '🕒 **Hora:** ' + new Date().toLocaleString('es-ES') + '\n' +
                 '🎮 **Minijuego:** `' + minigameName + '`'
-            );
+            ).then(function(ok) {
+                if (!ok) console.log('❌ [REINICIAR] Webhook mods falló');
+            }).catch(function(e) {
+                console.log('❌ [REINICIAR] Webhook error: ' + (e.message || e));
+            });
+        } else {
+            console.log('⚠️ [REINICIAR] __discordWebhook no disponible');
         }
         // Reinisiar sala
         if (botState.gameActive) {
@@ -5458,6 +5467,7 @@ room.onPlayerChat = function(player, message) {
                 
                 // Detener juego y resetear mapa
                 room.stopGame();
+                room.onTeamGoal = buhoGoalHandler;
                 
                 // Mover todos los jugadores a espectadores
                 var players = room.getPlayerList();
@@ -6036,8 +6046,8 @@ room.onPlayerChat = function(player, message) {
             {n:'SPACE_CASE', d:'Space Case', s:startSPACE_CASE}, {n:'AMERICAN_CARRYBALL', d:'American Carryball', s:startAMERICAN_CARRYBALL},
             {n:'RING_SURVIVAL', d:'Ring Survival', s:startRING_SURVIVAL}, {n:'BONK_ARENA', d:'Bonk Arena', s:startBONK_ARENA},
             {n:'BONK_BERU', d:'Bonk Beru', s:startBONK_BERU}, {n:'ANIMALCHAIRS_WHALE', d:'AnimalChairs Whale', s:startANIMALCHAIRS_WHALE},
-            {n:'BONK_BERU_HAX', d:'Bonk Beru Hax', s:startBONK_BERU_HAX}, {n:'COVID2', d:'COVID-2', s:startCOVID2},
-            {n:'COVID_NAMAJUNAS', d:'COVID-19', s:startCOVID_NAMAJUNAS},
+            {n:'BONK_BERU_HAX', d:'Bonk Beru Hax', s:startBONK_BERU_HAX}, {n:'COVID2', d:'COVID-2 Survival', s:startCOVID2},
+            {n:'COVID_NAMAJUNAS', d:'COVID Namajunas', s:startCOVID_NAMAJUNAS},
             {n:'FIT_IN_TREN', d:'Fit in Tren', s:startFIT_IN_TREN}, {n:'FITANIC', d:'Fitanic', s:startFITANIC},
             {n:'FORTUNATE_RACE', d:'Fortunate Race', s:startFORTUNATE_RACE}, {n:'KAFA_TOPU', d:'Kafa Topu', s:startKAFA_TOPU},
             {n:'KAFA_TOPU_SHADOW', d:'Kafa Topu Shadow', s:startKAFA_TOPU_SHADOW}, {n:'KURU_KAFA_BONK', d:'Kuru Kafa Bonk', s:startKURU_KAFA_BONK},
@@ -6182,7 +6192,7 @@ room.onPlayerChat = function(player, message) {
             {n:'AMERICAN_CARRYBALL', d:'American Carryball'}, {n:'RING_SURVIVAL', d:'Ring Survival'},
             {n:'BONK_ARENA', d:'Bonk Arena'}, {n:'BONK_BERU', d:'Bonk Beru'},
             {n:'ANIMALCHAIRS_WHALE', d:'AnimalChairs Whale'}, {n:'BONK_BERU_HAX', d:'Bonk Beru Hax'},
-            {n:'COVID2', d:'COVID-2'}, {n:'COVID_NAMAJUNAS', d:'COVID-19'}, {n:'FIT_IN_TREN', d:'Fit in Tren'},
+            {n:'COVID2', d:'COVID-2 Survival'}, {n:'COVID_NAMAJUNAS', d:'COVID Namajunas'}, {n:'FIT_IN_TREN', d:'Fit in Tren'},
             {n:'FITANIC', d:'Fitanic'}, {n:'FORTUNATE_RACE', d:'Fortunate Race'},
             {n:'KAFA_TOPU', d:'Kafa Topu'}, {n:'KAFA_TOPU_SHADOW', d:'Kafa Topu Shadow'},
             {n:'KURU_KAFA_BONK', d:'Kuru Kafa Bonk'}, {n:'LASER_RACE', d:'Laser Race'},
