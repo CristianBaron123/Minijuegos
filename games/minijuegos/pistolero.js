@@ -71,7 +71,7 @@ function start(room, onGameEnd) {
     _room = room;
 
     // Excluir jugadores que fueron enviados a spec (AFK excluidos por el sistema global)
-    var allPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+    var allPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0; });
     if (allPlayers.length < config.minPlayers) {
         if (onGameEnd) onGameEnd(null);
         return;

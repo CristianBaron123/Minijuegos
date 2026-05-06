@@ -17,8 +17,8 @@ const OWNER_AUTH = "JHcYct4vfesGbi6tGaauh08AxSwWnZq3QCm4rnzn2GE";
 // CONFIGURACIÓN DE MODERADORES
 // ============================================
 const MODERATOR_AUTHS = [
-    "TSR_V1yn25T3PGuLRLDtJtqjS_2QXTLZVBCY7XkmTYpc", // Primer mod
-    "2.4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk", // Segundo mod
+    "TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc",
+    "4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk",
 ];
 
 // ============================================
@@ -209,6 +209,10 @@ const mapBonkBeruHaxData = fs.readFileSync(mapBonkBeruHaxPath, 'utf8');
 // Map: Covid2 by Namajunas
 const mapCovid2Path = path.join(__dirname, 'Mapas', 'Covid2byNamajunasfromHaxMaps.hbs');
 const mapCovid2Data = fs.readFileSync(mapCovid2Path, 'utf8');
+
+// Map: COVID-19 by Namajunas
+const mapCovid19NamajunasPath = path.join(__dirname, 'Mapas', 'covid-19-by-namajunas-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_6158338797e74.hbs');
+const mapCovid19NamajunasData = fs.readFileSync(mapCovid19NamajunasPath, 'utf8');
 
 // Map: DOMINIC SURVIVOR 15
 const mapDominicPath = path.join(__dirname, 'Mapas', 'DOMINIC SURVIVOR 15 from HaxMaps.hbs');
@@ -446,6 +450,10 @@ const mapChargeData = fs.readFileSync(mapChargePath, 'utf8');
 const mapRunMiniPath = path.join(__dirname, 'Mapas', 'RUN-Mini-Pekka-By-zer0ne-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_628048143a738.hbs');
 const mapRunMiniData = fs.readFileSync(mapRunMiniPath, 'utf8');
 
+// Map: Earn Easily
+const mapEarnEasilyPath = path.join(__dirname, 'Mapas', 'Earn-easily-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_694d6bbf23fc3.hbs');
+const mapEarnEasilyData = fs.readFileSync(mapEarnEasilyPath, 'utf8');
+
 // Map: Bonk Summer
 const mapBonkSummerPath = path.join(__dirname, 'Mapas', 'Bonk-Summer-by-Serefli-Seref-20-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae18e96d540.hbs');
 const mapBonkSummerData = fs.readFileSync(mapBonkSummerPath, 'utf8');
@@ -553,6 +561,9 @@ const bonkBeruHaxModuleCode = fs.readFileSync(bonkBeruHaxModulePath, 'utf8');
 
 const covid2ModulePath = path.join(__dirname, 'games', 'minijuegos', 'covid2.js');
 const covid2ModuleCode = fs.readFileSync(covid2ModulePath, 'utf8');
+
+const covid19NamajunasModulePath = path.join(__dirname, 'games', 'minijuegos', 'covid19_namajunas.js');
+const covid19NamajunasModuleCode = fs.readFileSync(covid19NamajunasModulePath, 'utf8');
 
 const dominicModulePath = path.join(__dirname, 'games', 'minijuegos', 'dominic_survivor.js');
 const dominicModuleCode = fs.readFileSync(dominicModulePath, 'utf8');
@@ -747,6 +758,9 @@ const chargeModuleCode = fs.readFileSync(chargeModulePath, 'utf8');
 const runMiniModulePath = path.join(__dirname, 'games', 'minijuegos', 'run_mini.js');
 const runMiniModuleCode = fs.readFileSync(runMiniModulePath, 'utf8');
 
+const earnEasilyModulePath = path.join(__dirname, 'games', 'minijuegos', 'earn_easily.js');
+const earnEasilyModuleCode = fs.readFileSync(earnEasilyModulePath, 'utf8');
+
 // Cargar mapas Buho (2-MAN a 16-MAN + CAMPEON)
 const buhoMapsDir = path.join(__dirname, 'Buho', 'mapas');
 const buhoMapsData = {};
@@ -848,6 +862,7 @@ const getBotScript = () => {
         const animalChairsModule = transformModuleForBrowser(animalChairsModuleCode, mapAnimalChairsData);
         const bonkBeruHaxModule = transformModuleForBrowser(bonkBeruHaxModuleCode, mapBonkBeruHaxData);
         const covid2Module = transformModuleForBrowser(covid2ModuleCode, mapCovid2Data);
+        const covid19NamajunasModule = transformModuleForBrowser(covid19NamajunasModuleCode, mapCovid19NamajunasData);
         const dominicModule = transformModuleForBrowser(dominicModuleCode, mapDominicData);
         const airHockeyModule = transformModuleForBrowser(airHockeyModuleCode, mapAirHockeyData);
         const fitTrenModule = transformModuleForBrowser(fitTrenModuleCode, mapFitTrenData);
@@ -897,6 +912,7 @@ const getBotScript = () => {
         const plumModule = transformModuleForBrowser(plumModuleCode, mapPlumData);
         const runRebound2Module = transformModuleForBrowser(runRebound2ModuleCode, mapRunRebound2Data);
         const runMiniModule = transformModuleForBrowser(runMiniModuleCode, mapRunMiniData);
+        const earnEasilyModule = transformModuleForBrowser(earnEasilyModuleCode, mapEarnEasilyData);
         const swingCannonsModule = transformModuleForBrowser(swingCannonsModuleCode, mapSwingCannonsData);
         const survivalInsectModule = transformModuleForBrowser(survivalInsectModuleCode, mapSurvivalInsectData);
         const runLuckModule = transformModuleForBrowser(runLuckModuleCode, mapRunLuckData);
@@ -1137,6 +1153,11 @@ var BONK_BERU_HAX = ` + bonkBeruHaxModule + `;
 // MÓDULO: COVID2
 // ============================================
 var COVID2 = ` + covid2Module + `;
+
+// ============================================
+// MÓDULO: COVID-19 NAMAJUNAS
+// ============================================
+var COVID_NAMAJUNAS = ` + covid19NamajunasModule + `;
 
 // ============================================
 // MÓDULO: DOMINIC SURVIVOR
@@ -1437,6 +1458,11 @@ var CHARGE = ` + chargeModule + `;
 // MÓDULO: RUN MINI
 // ============================================
 var RUN_MINI = ` + runMiniModule + `;
+
+// ============================================
+// MÓDULO: EARN EASILY
+// ============================================
+var EARN_EASILY = ` + earnEasilyModule + `;
 
 // ============================================
 // MÓDULO: BONK SUMMER
