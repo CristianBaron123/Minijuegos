@@ -19,6 +19,7 @@ const OWNER_AUTH = "JHcYct4vfesGbi6tGaauh08AxSwWnZq3QCm4rnzn2GE";
 const MODERATOR_AUTHS = [
     "TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc",
     "4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk",
+    "py-h0135hpGNwKNn_I7n00W04x4tc6k2THJv1-Xj2ik",
 ];
 
 // ============================================
