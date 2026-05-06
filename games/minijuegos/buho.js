@@ -34,6 +34,7 @@ function loadMapForPlayers(room, n) {
         room.setCustomStadium(maps[key]);
         gameState.currentMapSize = parseInt(key);
         gameState.goalCenters = buhoData.goalCenters[key] || [];
+        console.log('[BUHO] loadMap: key=' + key + ' goalCenters=' + gameState.goalCenters.length + ' buhoData.goalCenters keys=' + Object.keys(buhoData.goalCenters).join(','));
         return true;
     } catch(e) {
         console.error('[BUHO] Error cargando mapa ' + key + '-MAN: ' + e.message);
@@ -156,6 +157,7 @@ function checkRemaining(room) {
 function start(room, onGameEnd) {
     if (!buhoData) {
         console.error('[BUHO] buhoData no inyectado.');
+        if (typeof reportBug === 'function') reportBug('BUHO.start', 'buhoData es null — no se inyectaron mapas/goals');
         if (onGameEnd) onGameEnd(null);
         return;
     }
@@ -259,6 +261,7 @@ function onTeamGoal(room, team) {
     }
     if (closest === -1) {
         console.log('[BUHO] onTeamGoal: no se encontró goal cercano. goalCenters=' + gameState.goalCenters.length);
+        if (typeof reportBug === 'function') reportBug('BUHO.onTeamGoal', 'goalCenters=' + gameState.goalCenters.length + ' ballPos=' + JSON.stringify(ballPos) + ' currentMapSize=' + gameState.currentMapSize + ' active=' + gameState.active);
         return;
     }
 

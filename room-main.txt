@@ -1,5 +1,7 @@
+var BOT_VERSION = "##BOT_VERSION##";
+
 var roomConfig = {
-    roomName: "🎮🎮🎮| Minijuegos_Isagi v2.1 🎮",
+    roomName: "\uD83C\uDFAE\uD83C\uDFAE\uD83C\uDFAE| Minijuegos_Isagi v" + BOT_VERSION + " \uD83C\uDFAE",
     maxPlayers: 30,
     public: true,
     token: "##TOKEN##",
@@ -10,8 +12,33 @@ var roomConfig = {
 var room = HBInit(roomConfig);
 room.setTeamsLock(true);
 
-console.log("✅ Bot iniciado");
+console.log("✅ Bot iniciado — v" + BOT_VERSION);
 console.log("🔗 Link: " + room.link);
+
+// ============================================
+// SISTEMA DE REPORTAR BUGS (terminal)
+// ============================================
+function reportBug(context, error) {
+    var msg = '🐛 BUG REPORT [v' + BOT_VERSION + ']\n' +
+          '📂 Contexto: ' + context + '\n' +
+          '❌ Error: ' + (error instanceof Error ? error.message : String(error)).substring(0, 500) + '\n' +
+          (error instanceof Error && error.stack ? '📋 Stack: ' + error.stack.substring(0, 500) + '\n' : '') +
+          '🕐 Hora: ' + new Date().toISOString();
+    console.log(msg);
+}
+
+if (typeof window !== 'undefined') {
+    window.onerror = function(msg, url, line, col, error) {
+        reportBug('window.onerror (linea ' + line + ')', error || msg);
+    };
+}
+try {
+    if (typeof process !== 'undefined' && process.on) {
+        process.on('uncaughtException', function(err) {
+            reportBug('uncaughtException', err);
+        });
+    }
+} catch(e) {}
 // Asegurar que la sala no tenga límite de tiempo ni de goles
 try { if (typeof room !== 'undefined') { if (room.setTimeLimit) room.setTimeLimit(0); if (room.setScoreLimit) room.setScoreLimit(0); } } catch(e) {}
 
@@ -19,11 +46,7 @@ try { if (typeof room !== 'undefined') { if (room.setTimeLimit) room.setTimeLimi
 // SISTEMA DE OWNER (DUEÑO)
 // ============================================
 var OWNER_AUTH = "##OWNER_AUTH##";
-var MODERATOR_AUTHS = [
-    "TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc",
-    "4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk",
-    "py-h0135hpGNwKNn_I7n00W04x4tc6k2THJv1-Xj2ik"
-];
+var MODERATOR_AUTHS = ##MODERATOR_AUTHS##;
 
 // ============================================
 // SISTEMA VIP (2 NIVELES) - CONFIGURAR AUTH MANUALMENTE
@@ -936,615 +959,276 @@ room.onPlayerKicked = function(kickedPlayer, reason, ban, byPlayer) {
     } catch (e) { console.error('[ROOM] onPlayerKicked error ' + (e && e.message ? e.message : String(e))); }
 };
 
+// ============================================
+// REGISTRO CENTRALIZADO DE MINIJUEGOS
+// ============================================
+var minigameModules = [
+    { name: 'LALALA', module: LALALA, displayName: 'LALALA' },
+    { name: 'SURVIVAL', module: SURVIVAL, displayName: 'SURVIVAL' },
+    // { name: 'METEORS', module: METEORS, displayName: 'METEORS' }, // DESACTIVADO
+    { name: 'JUMPING', module: JUMPING, displayName: 'JUMPING ARENA' },
+    { name: 'WEBSURVIVAL', module: WEBSURVIVAL, displayName: 'WEB SURVIVAL' },
+    { name: 'GALACTIC', module: GALACTIC, displayName: 'GALACTIC FIT' },
+    { name: 'SPACE_MELEE', module: SPACE_MELEE, displayName: 'SPACE MELEE' },
+    { name: 'GYM', module: GYM, displayName: 'GYM' },
+    { name: 'MULTIBALLS', module: MULTIBALLS, displayName: 'MULTIBALLS' },
+    { name: 'DODGEBALL', module: DODGEBALL, displayName: 'DODGEBALL' },
+    { name: 'DODGEBALL_V2', module: DODGEBALL_V2, displayName: 'DODGEBALL V2' },
+    { name: 'SUPERMAN', module: SUPERMAN, displayName: 'SUPERMAN CHAIR' },
+    { name: 'ULTRABALL', module: ULTRABALL, displayName: 'ULTRABALL' },
+    { name: 'NUMBERCHAIRS', module: NUMBERCHAIRS, displayName: 'NUMBER CHAIRS' },
+    { name: 'SURVIVAL_SQ', module: SURVIVAL_SQ, displayName: 'SURVIVAL SQUARE' },
+    { name: 'COLLISION', module: COLLISION_TEAM_RACING, displayName: 'COLLISION TEAM RACING' },
+    { name: 'SPOT_BONK', module: SPOT_BONK, displayName: 'SPOT BONK' },
+    { name: 'CHAIRMIX', module: CHAIRMIX, displayName: 'CHAIRMIX' },
+    { name: 'COVID19', module: COVID19, displayName: 'COVID-19' },
+    { name: 'GYMMIX', module: GYMMIX, displayName: 'GYMMIX - Carrera de Obstaculos' },
+    { name: 'TRIVIA', module: TRIVIA, displayName: 'TRIVIA' },
+    { name: 'SPACE_CASE', module: SPACE_CASE, displayName: 'SPACE CASE' },
+    { name: 'AMERICAN_CARRYBALL', module: AMERICAN_CARRYBALL, displayName: 'AMERICAN SPACE CARRYBALL' },
+    { name: 'RING_SURVIVAL', module: RING_SURVIVAL, displayName: 'RING SURVIVAL' },
+    { name: 'BONK_ARENA', module: BONK_ARENA, displayName: 'BONK ARENA' },
+    { name: 'BONK_BERU', module: BONK_BERU, displayName: 'BONK GAME BY BERU' },
+    { name: 'ANIMALCHAIRS_WHALE', module: ANIMALCHAIRS_WHALE, displayName: 'ANIMALCHAIRS WHALE' },
+    { name: 'BONK_BERU_HAX', module: BONK_BERU_HAX, displayName: 'BONK GAME BY BERU (HAX)' },
+    { name: 'COVID2', module: COVID2, displayName: 'COVID-2 Survival' },
+    { name: 'COVID_NAMAJUNAS', module: COVID_NAMAJUNAS, displayName: 'COVID Namajunas' },
+    { name: 'FIT_IN_TREN', module: FIT_IN_TREN, displayName: 'FIT IN TREN' },
+    { name: 'FITANIC', module: FITANIC, displayName: 'FITANIC' },
+    { name: 'FORTUNATE_RACE', module: FORTUNATE_RACE, displayName: 'FORTUNATE RACE' },
+    { name: 'KAFA_TOPU', module: KAFA_TOPU, displayName: 'KAFA TOPU' },
+    { name: 'KAFA_TOPU_SHADOW', module: KAFA_TOPU_SHADOW, displayName: 'KAFA TOPU SHADOW' },
+    { name: 'KURU_KAFA_BONK', module: KURU_KAFA_BONK, displayName: 'KURU KAFA BONK' },
+    { name: 'LASER_RACE', module: LASER_RACE, displayName: 'LASER RACE' },
+    // { name: 'COPS_ROBBERS', module: COPS_ROBBERS, displayName: 'COPS & ROBBERS' }, // DESACTIVADO
+    { name: 'JUEGO_1234', module: JUEGO_1234, displayName: 'JUEGO 1234' },
+    { name: 'WAR_CONQUEST', module: WAR_CONQUEST, displayName: 'WAR OF CONQUEST' },
+    { name: 'TANK_WAR', module: TANK_WAR, displayName: 'TANK WAR' },
+    { name: 'JUMP_QUA', module: JUMP_QUA, displayName: 'JUMP' },
+    { name: 'BOOMERANG_LEAGUE', module: BOOMERANG_LEAGUE, displayName: 'BOOMERANG LEAGUE' },
+    { name: 'XD_GOALS', module: XD_GOALS, displayName: 'XD' },
+    { name: 'WWECROSS', module: WWECROSS, displayName: 'WWECROSS' },
+    { name: 'WEB_SURVIVAL_3', module: WEB_SURVIVAL_3, displayName: 'WEB SURVIVAL III' },
+    { name: 'TRAMPOLIN', module: TRAMPOLIN, displayName: 'TRAMPOLIN' },
+    { name: 'SWING_TRAMPOLIN', module: SWING_TRAMPOLIN, displayName: 'SWING TRAMPOLIN' },
+    { name: 'SUPER_GRAVEDAD', module: SUPER_GRAVEDAD, displayName: 'SUPER GRAVEDAD x4' },
+    { name: 'ENDURE_SURVIVAL', module: ENDURE_SURVIVAL, displayName: 'ENDURE SURVIVAL 2' },
+    { name: 'LUCKY_RACE', module: LUCKY_RACE, displayName: 'LUCKY RACE' },
+    { name: 'STREET_RACE', module: STREET_RACE, displayName: 'STREET RACE' },
+    { name: 'SHOOTING_SURVIVAL', module: SHOOTING_SURVIVAL, displayName: 'SHOOTING SURVIVAL' },
+    { name: 'SPACEBOUNCE_RACE', module: SPACEBOUNCE_RACE, displayName: 'SPACEBOUNCE RACE' },
+    { name: 'RUN_REBOUND', module: RUN_REBOUND, displayName: 'RUN REBOUND' },
+    { name: 'MEADOWLANDS', module: MEADOWLANDS, displayName: 'MEADOWLANDS SURVIVAL' },
+    { name: 'WIND', module: WIND, displayName: 'WIND' },
+    { name: 'IMPOSTOR', module: IMPOSTOR, displayName: 'IMPOSTOR' },
+    { name: 'PISTOLERO', module: PISTOLERO, displayName: 'PISTOLERO' },
+    { name: 'BONK_MOVABLE', module: BONK_MOVABLE, displayName: 'BONK MOVABLE' },
+    { name: 'ENDURE_BOMBS', module: ENDURE_BOMBS, displayName: 'ENDURE BOMBS' },
+    { name: 'MUSICAL_FIT', module: MUSICAL_FIT, displayName: 'MUSICAL FIT' },
+    { name: 'NAMAJUNAS_RACE', module: NAMAJUNAS_RACE, displayName: 'NAMAJUNAS RACE' },
+    { name: 'NAMAJUNAS_RACE_2', module: NAMAJUNAS_RACE_2, displayName: 'NAMAJUNAS RACE 2' },
+    { name: 'FCT1', module: FCT1, displayName: 'FCT 1' },
+    { name: 'FIT_IN_GRAVEYARD', module: FIT_IN_GRAVEYARD, displayName: 'FIT IN GRAVEYARD' },
+    { name: 'FUTBOL_CALLEJERO', module: FUTBOL_CALLEJERO, displayName: 'FUTBOL CALLEJERO' },
+    { name: 'GYM_COLORS', module: GYM_COLORS, displayName: 'GYM COLORS' },
+    { name: 'GYM9', module: GYM9, displayName: 'GYM 9' },
+    { name: 'MATRIX_FIT', module: MATRIX_FIT, displayName: 'MATRIX FIT' },
+    { name: 'RACE02', module: RACE02, displayName: 'RACE 02' },
+    { name: 'PLUM', module: PLUM, displayName: 'PLUM' },
+    { name: 'RUN_REBOUND_2', module: RUN_REBOUND_2, displayName: 'RUN REBOUND 2' },
+    { name: 'SWING_CANNONS', module: SWING_CANNONS, displayName: 'SWING CANNONS' },
+    { name: 'SURVIVAL_INSECT', module: SURVIVAL_INSECT, displayName: 'SURVIVAL INSECT' },
+    { name: 'RUN_LUCK', module: RUN_LUCK, displayName: 'RUN LUCK' },
+    { name: 'PINBALL_ROULETTE', module: PINBALL_ROULETTE, displayName: 'PINBALL ROULETTE' },
+    { name: 'JUMPING_SURVIVAL', module: JUMPING_SURVIVAL, displayName: 'JUMPING SURVIVAL' },
+    { name: 'ZOMBIE_RUN', module: ZOMBIE_RUN, displayName: 'ZOMBIE RUN' },
+    { name: 'SPACEBOUNCE_POWER', module: SPACEBOUNCE_POWER, displayName: 'SPACEBOUNCE POWER' },
+    { name: 'SHAOLIN_SOCCER', module: SHAOLIN_SOCCER, displayName: 'SHAOLIN SOCCER' },
+    { name: 'BASKETBALL', module: BASKETBALL, displayName: 'BASKETBALL' },
+    { name: 'BTL', module: BTL, displayName: 'B.T.L' },
+    { name: 'CHARGE', module: CHARGE, displayName: 'Charge' },
+    { name: 'RUN_MINI', module: RUN_MINI, displayName: 'RUN MINI' },
+    { name: 'EARN_EASILY', module: EARN_EASILY, displayName: 'EARN EASILY' },
+    // { name: 'BONK_SUMMER', module: BONK_SUMMER, displayName: 'BONK SUMMER' }, // DESACTIVADO
+    { name: 'BONK_WINTER', module: BONK_WINTER, displayName: 'BONK WINTER' },
+    { name: 'RACING_GROUND', module: RACING_GROUND, displayName: 'RACING GROUND' },
+    { name: 'BUHO', module: BUHO, displayName: 'BUHO' }
+];
+
+// Función genérica para iniciar minijuego
+function startMinigame(gameEntry) {
+    botState.gameActive = true;
+    var mod = gameEntry.module;
+    if (typeof mod !== 'undefined' && mod.start) {
+        mod.start(room, function(winner) {
+            if (typeof showGameStats === 'function') showGameStats(mod);
+            if (winner) {
+                loadLuckyMap(winner);
+            } else {
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            }
+        });
+    } else {
+        botState.gameActive = false;
+        setTimeout(checkAndStart, 5000);
+    }
+}
 
 function startLALALA() {
-    botState.gameActive = true;
-    
-    LALALA.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'LALALA'; }));
 }
 
 function startSURVIVAL() {
-    botState.gameActive = true;
-    
-    SURVIVAL.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SURVIVAL'; }));
 }
 
 function startMETEORS() {
-    botState.gameActive = true;
-    
-    METEORS.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'METEORS'; }));
 }
 
 function startJUMPING() {
-    botState.gameActive = true;
-    
-    JUMPING.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'JUMPING'; }));
 }
 
 function startWEBSURVIVAL() {
-    botState.gameActive = true;
-    
-    WEBSURVIVAL.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'WEBSURVIVAL'; }));
 }
 
 function startGALACTIC() {
-    botState.gameActive = true;
-    
-    GALACTIC.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'GALACTIC'; }));
 }
 
 function startSPACE_MELEE() {
-    botState.gameActive = true;
-    if (typeof SPACE_MELEE !== 'undefined') {
-        SPACE_MELEE.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SPACE_MELEE'; }));
 }
 
 function startSPOT_BONK() {
-    botState.gameActive = true;
-    if (typeof SPOT_BONK !== 'undefined') {
-        SPOT_BONK.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SPOT_BONK'; }));
 }
 
 function startCOVID19() {
-    botState.gameActive = true;
-    if (typeof COVID19 !== 'undefined') {
-        COVID19.start(room, function(winner) {
-            showGameStats(COVID19);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'COVID19'; }));
 }
 
 function startCOLLISION() {
-    botState.gameActive = true;
-    if (typeof COLLISION_TEAM_RACING !== 'undefined') {
-        COLLISION_TEAM_RACING.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        // Módulo no disponible
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'COLLISION'; }));
 }
 
 function startGYM() {
-    botState.gameActive = true;
-    
-    GYM.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'GYM'; }));
 }
 
 function startMULTIBALLS() {
-    botState.gameActive = true;
-    
-    MULTIBALLS.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'MULTIBALLS'; }));
 }
 
 function startDODGEBALL() {
-    botState.gameActive = true;
-    
-    DODGEBALL.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'DODGEBALL'; }));
 }
 
 function startDODGEBALL_V2() {
-    botState.gameActive = true;
-    if (typeof DODGEBALL_V2 !== 'undefined') {
-        DODGEBALL_V2.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'DODGEBALL_V2'; }));
 }
 
 function startSUPERMAN() {
-    botState.gameActive = true;
-    SUPERMAN.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SUPERMAN'; }));
 }
 
 function startULTRABALL() {
-    botState.gameActive = true;
-    ULTRABALL.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'ULTRABALL'; }));
 }
 
 function startSURVIVAL_SQ() {
-    botState.gameActive = true;
-    SURVIVAL_SQ.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SURVIVAL_SQ'; }));
 }
 
 function startNUMBERCHAIRS() {
-    botState.gameActive = true;
-    NUMBERCHAIRS.start(room, function(winner) {
-        if (winner) {
-            loadLuckyMap(winner);
-        } else {
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    });
+    startMinigame(minigameModules.find(function(g) { return g.name === 'NUMBERCHAIRS'; }));
 }
 
 function startCHAIRMIX() {
-    botState.gameActive = true;
-    if (typeof CHAIRMIX !== 'undefined') {
-        CHAIRMIX.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'CHAIRMIX'; }));
 }
 
 function startGYMMIX() {
-    botState.gameActive = true;
-    if (typeof GYMMIX !== 'undefined') {
-        GYMMIX.start(room, function(winner) {
-            showGameStats(GYMMIX);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'GYMMIX'; }));
 }
 
 function startTRIVIA() {
-    botState.gameActive = true;
-    if (typeof TRIVIA !== 'undefined') {
-        TRIVIA.start(room, function(winner) {
-            showGameStats(TRIVIA);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'TRIVIA'; }));
 }
 
 function startGOT() {
-    botState.gameActive = true;
-    if (typeof GOT !== 'undefined') {
-        GOT.start(room, function(winner) {
-            showGameStats(GOT);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'GOT'; }));
 }
 
 function startSPACE_CASE() {
-    botState.gameActive = true;
-    if (typeof SPACE_CASE !== 'undefined') {
-        SPACE_CASE.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SPACE_CASE'; }));
 }
 
 function startAMERICAN_CARRYBALL() {
-    botState.gameActive = true;
-    if (typeof AMERICAN_CARRYBALL !== 'undefined') {
-        AMERICAN_CARRYBALL.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'AMERICAN_CARRYBALL'; }));
 }
 
 function startRING_SURVIVAL() {
-    botState.gameActive = true;
-    if (typeof RING_SURVIVAL !== 'undefined') {
-        RING_SURVIVAL.start(room, function(winner) {
-            showGameStats(RING_SURVIVAL);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'RING_SURVIVAL'; }));
 }
 
 function startBONK_ARENA() {
-    botState.gameActive = true;
-    if (typeof BONK_ARENA !== 'undefined') {
-        BONK_ARENA.start(room, function(winner) {
-            showGameStats(BONK_ARENA);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BONK_ARENA'; }));
 }
 
 function startBONK_BERU() {
-    botState.gameActive = true;
-    if (typeof BONK_BERU !== 'undefined') {
-        BONK_BERU.start(room, function(winner) {
-            showGameStats(BONK_BERU);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BONK_BERU'; }));
 }
 
 function startANIMALCHAIRS_WHALE() {
-    botState.gameActive = true;
-    if (typeof ANIMALCHAIRS_WHALE !== 'undefined') {
-        ANIMALCHAIRS_WHALE.start(room, function(winner) {
-            showGameStats(ANIMALCHAIRS_WHALE);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'ANIMALCHAIRS_WHALE'; }));
 }
 
 function startBONK_BERU_HAX() {
-    botState.gameActive = true;
-    if (typeof BONK_BERU_HAX !== 'undefined') {
-        BONK_BERU_HAX.start(room, function(winner) {
-            showGameStats(BONK_BERU_HAX);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BONK_BERU_HAX'; }));
 }
 
 function startCOVID2() {
-    botState.gameActive = true;
-    if (typeof COVID2 !== 'undefined') {
-        COVID2.start(room, function(winner) {
-            showGameStats(COVID2);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'COVID2'; }));
 }
 
 function startCOVID_NAMAJUNAS() {
-    botState.gameActive = true;
-    if (typeof COVID_NAMAJUNAS !== 'undefined') {
-        COVID_NAMAJUNAS.start(room, function(winner) {
-            showGameStats(COVID_NAMAJUNAS);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'COVID_NAMAJUNAS'; }));
 }
 
 function startFIT_IN_TREN() {
-    botState.gameActive = true;
-    if (typeof FIT_IN_TREN !== 'undefined') {
-        FIT_IN_TREN.start(room, function(winner) {
-            showGameStats(FIT_IN_TREN);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'FIT_IN_TREN'; }));
 }
 
 function startFITANIC() {
-    botState.gameActive = true;
-    if (typeof FITANIC !== 'undefined') {
-        FITANIC.start(room, function(winner) {
-            showGameStats(FITANIC);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'FITANIC'; }));
 }
 
 function startFORTUNATE_RACE() {
-    botState.gameActive = true;
-    if (typeof FORTUNATE_RACE !== 'undefined') {
-        FORTUNATE_RACE.start(room, function(winner) {
-            showGameStats(FORTUNATE_RACE);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'FORTUNATE_RACE'; }));
 }
 
 function startKAFA_TOPU() {
-    botState.gameActive = true;
-    if (typeof KAFA_TOPU !== 'undefined') {
-        KAFA_TOPU.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'KAFA_TOPU'; }));
 }
 
 function startKAFA_TOPU_SHADOW() {
-    botState.gameActive = true;
-    if (typeof KAFA_TOPU_SHADOW !== 'undefined') {
-        KAFA_TOPU_SHADOW.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'KAFA_TOPU_SHADOW'; }));
 }
 
 function startKURU_KAFA_BONK() {
-    botState.gameActive = true;
-    if (typeof KURU_KAFA_BONK !== 'undefined') {
-        KURU_KAFA_BONK.start(room, function(winner) {
-            showGameStats(KURU_KAFA_BONK);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'KURU_KAFA_BONK'; }));
 }
 
 function startLASER_RACE() {
-    botState.gameActive = true;
-    if (typeof LASER_RACE !== 'undefined') {
-        LASER_RACE.start(room, function(winner) {
-            showGameStats(LASER_RACE);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'LASER_RACE'; }));
 }
 
 function startCAPTURE_THE_FLAG() {
-    botState.gameActive = true;
-    if (typeof CAPTURE_THE_FLAG !== 'undefined') {
-        CAPTURE_THE_FLAG.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'CAPTURE_THE_FLAG'; }));
 }
 
 function startCOPS_ROBBERS() {
@@ -1575,203 +1259,83 @@ function startCOPS_ROBBERS() {
 }
 
 function startWAR_CONQUEST() {
-    botState.gameActive = true;
-    if (typeof WAR_CONQUEST !== 'undefined') {
-        WAR_CONQUEST.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'WAR_CONQUEST'; }));
 }
 
 function startTANK_WAR() {
-    botState.gameActive = true;
-    if (typeof TANK_WAR !== 'undefined') {
-        TANK_WAR.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'TANK_WAR'; }));
 }
 
 function startJUEGO_1234() {
-    botState.gameActive = true;
-    if (typeof JUEGO_1234 !== 'undefined') {
-        JUEGO_1234.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'JUEGO_1234'; }));
 }
 
 function startJUMP_QUA() {
-    botState.gameActive = true;
-    if (typeof JUMP_QUA !== 'undefined') {
-        JUMP_QUA.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'JUMP_QUA'; }));
 }
 
 function startBOOMERANG_LEAGUE() {
-    botState.gameActive = true;
-    if (typeof BOOMERANG_LEAGUE !== 'undefined') {
-        BOOMERANG_LEAGUE.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BOOMERANG_LEAGUE'; }));
 }
 
 function startXD_GOALS() {
-    botState.gameActive = true;
-    if (typeof XD_GOALS !== 'undefined') {
-        XD_GOALS.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'XD_GOALS'; }));
 }
 
 function startWWECROSS() {
-    botState.gameActive = true;
-    if (typeof WWECROSS !== 'undefined') {
-        WWECROSS.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'WWECROSS'; }));
 }
 
 function startWEB_SURVIVAL_3() {
-    botState.gameActive = true;
-    if (typeof WEB_SURVIVAL_3 !== 'undefined') {
-        WEB_SURVIVAL_3.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'WEB_SURVIVAL_3'; }));
 }
 
 function startTRAMPOLIN() {
-    botState.gameActive = true;
-    if (typeof TRAMPOLIN !== 'undefined') {
-        TRAMPOLIN.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'TRAMPOLIN'; }));
 }
 
 function startSWING_TRAMPOLIN() {
-    botState.gameActive = true;
-    if (typeof SWING_TRAMPOLIN !== 'undefined') {
-        SWING_TRAMPOLIN.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SWING_TRAMPOLIN'; }));
 }
 
 function startSUPER_GRAVEDAD() {
-    botState.gameActive = true;
-    if (typeof SUPER_GRAVEDAD !== 'undefined') {
-        SUPER_GRAVEDAD.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SUPER_GRAVEDAD'; }));
 }
 
 function startENDURE_SURVIVAL() {
-    botState.gameActive = true;
-    if (typeof ENDURE_SURVIVAL !== 'undefined') {
-        ENDURE_SURVIVAL.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'ENDURE_SURVIVAL'; }));
 }
 
 function startLUCKY_RACE() {
-    botState.gameActive = true;
-    if (typeof LUCKY_RACE !== 'undefined') {
-        LUCKY_RACE.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'LUCKY_RACE'; }));
 }
 
 function startSTREET_RACE() {
-    botState.gameActive = true;
-    if (typeof STREET_RACE !== 'undefined') {
-        STREET_RACE.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'STREET_RACE'; }));
 }
 
 function startSHOOTING_SURVIVAL() {
-    botState.gameActive = true;
-    if (typeof SHOOTING_SURVIVAL !== 'undefined') {
-        SHOOTING_SURVIVAL.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SHOOTING_SURVIVAL'; }));
 }
 
 function startSPACEBOUNCE_RACE() {
-    botState.gameActive = true;
-    if (typeof SPACEBOUNCE_RACE !== 'undefined') {
-        SPACEBOUNCE_RACE.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SPACEBOUNCE_RACE'; }));
 }
 
 function startRUN_REBOUND() {
-    botState.gameActive = true;
-    if (typeof RUN_REBOUND !== 'undefined') {
-        RUN_REBOUND.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'RUN_REBOUND'; }));
 }
 
 function startMEADOWLANDS() {
-    botState.gameActive = true;
-    if (typeof MEADOWLANDS !== 'undefined') {
-        MEADOWLANDS.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'MEADOWLANDS'; }));
 }
 
 function startSURVIVOR_VOL17() {
-    botState.gameActive = true;
-    if (typeof SURVIVOR_VOL17 !== 'undefined') {
-        SURVIVOR_VOL17.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SURVIVOR_VOL17'; }));
 }
 
 function startWIND() {
-    botState.gameActive = true;
-    if (typeof WIND !== 'undefined') {
-        WIND.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'WIND'; }));
 }
 
 function startIMPOSTOR() {
@@ -1841,330 +1405,131 @@ function startIMPOSTOR() {
 }
 
 function startPISTOLERO() {
-    botState.gameActive = true;
-    if (typeof PISTOLERO !== 'undefined') {
-        PISTOLERO.start(room, function(winner) {
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            }
-        });
-    } else {
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'PISTOLERO'; }));
 }
 
 function startBONK_MOVABLE() {
-    botState.gameActive = true;
-    if (typeof BONK_MOVABLE !== 'undefined') {
-        BONK_MOVABLE.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BONK_MOVABLE'; }));
 }
 
 function startENDURE_BOMBS() {
-    botState.gameActive = true;
-    if (typeof ENDURE_BOMBS !== 'undefined') {
-        ENDURE_BOMBS.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'ENDURE_BOMBS'; }));
 }
 
 function startMUSICAL_FIT() {
-    botState.gameActive = true;
-    if (typeof MUSICAL_FIT !== 'undefined') {
-        MUSICAL_FIT.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'MUSICAL_FIT'; }));
 }
 
 function startNAMAJUNAS_RACE() {
-    botState.gameActive = true;
-    if (typeof NAMAJUNAS_RACE !== 'undefined') {
-        NAMAJUNAS_RACE.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'NAMAJUNAS_RACE'; }));
 }
 
 function startNAMAJUNAS_RACE_2() {
-    botState.gameActive = true;
-    if (typeof NAMAJUNAS_RACE_2 !== 'undefined') {
-        NAMAJUNAS_RACE_2.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'NAMAJUNAS_RACE_2'; }));
 }
 
 function startFCT1() {
-    botState.gameActive = true;
-    if (typeof FCT1 !== 'undefined') {
-        FCT1.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'FCT1'; }));
 }
 
 function startFIT_IN_GRAVEYARD() {
-    botState.gameActive = true;
-    if (typeof FIT_IN_GRAVEYARD !== 'undefined') {
-        FIT_IN_GRAVEYARD.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'FIT_IN_GRAVEYARD'; }));
 }
 
 function startFUTBOL_CALLEJERO() {
-    botState.gameActive = true;
-    if (typeof FUTBOL_CALLEJERO !== 'undefined') {
-        FUTBOL_CALLEJERO.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'FUTBOL_CALLEJERO'; }));
 }
 
 function startGYM_COLORS() {
-    botState.gameActive = true;
-    if (typeof GYM_COLORS !== 'undefined') {
-        GYM_COLORS.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'GYM_COLORS'; }));
 }
 
 function startGYM9() {
-    botState.gameActive = true;
-    if (typeof GYM9 !== 'undefined') {
-        GYM9.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'GYM9'; }));
 }
 
 function startMATRIX_FIT() {
-    botState.gameActive = true;
-    if (typeof MATRIX_FIT !== 'undefined') {
-        MATRIX_FIT.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'MATRIX_FIT'; }));
 }
 
 function startRACE02() {
-    botState.gameActive = true;
-    if (typeof RACE02 !== 'undefined') {
-        RACE02.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'RACE02'; }));
 }
 
 function startPLUM() {
-    botState.gameActive = true;
-    if (typeof PLUM !== 'undefined') {
-        PLUM.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'PLUM'; }));
 }
 
 function startRUN_REBOUND_2() {
-    botState.gameActive = true;
-    if (typeof RUN_REBOUND_2 !== 'undefined') {
-        RUN_REBOUND_2.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'RUN_REBOUND_2'; }));
 }
 
 function startSWING_CANNONS() {
-    botState.gameActive = true;
-    if (typeof SWING_CANNONS !== 'undefined') {
-        SWING_CANNONS.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SWING_CANNONS'; }));
 }
 
 function startSURVIVAL_INSECT() {
-    botState.gameActive = true;
-    if (typeof SURVIVAL_INSECT !== 'undefined') {
-        SURVIVAL_INSECT.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SURVIVAL_INSECT'; }));
 }
 
 function startRUN_LUCK() {
-    botState.gameActive = true;
-    if (typeof RUN_LUCK !== 'undefined') {
-        RUN_LUCK.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'RUN_LUCK'; }));
 }
 
 function startPINBALL_ROULETTE() {
-    botState.gameActive = true;
-    if (typeof PINBALL_ROULETTE !== 'undefined') {
-        PINBALL_ROULETTE.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'PINBALL_ROULETTE'; }));
 }
 
 function startJUMPING_SURVIVAL() {
-    botState.gameActive = true;
-    if (typeof JUMPING_SURVIVAL !== 'undefined') {
-        JUMPING_SURVIVAL.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'JUMPING_SURVIVAL'; }));
 }
 
 function startZOMBIE_RUN() {
-    botState.gameActive = true;
-    if (typeof ZOMBIE_RUN !== 'undefined') {
-        ZOMBIE_RUN.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'ZOMBIE_RUN'; }));
 }
 
 function startRACING_GROUND() {
-    botState.gameActive = true;
-    if (typeof RACING_GROUND !== 'undefined') {
-        RACING_GROUND.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'RACING_GROUND'; }));
 }
 
 function startBUHO() {
-    botState.gameActive = true;
-    if (typeof BUHO !== 'undefined') {
-        BUHO.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BUHO'; }));
 }
 
 function startSHAOLIN_SOCCER() {
-    botState.gameActive = true;
-    if (typeof SHAOLIN_SOCCER !== 'undefined') {
-        SHAOLIN_SOCCER.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SHAOLIN_SOCCER'; }));
 }
 
 function startSPACEBOUNCE_POWER() {
-    botState.gameActive = true;
-    if (typeof SPACEBOUNCE_POWER !== 'undefined') {
-        SPACEBOUNCE_POWER.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'SPACEBOUNCE_POWER'; }));
 }
 
 function startBASKETBALL() {
-    botState.gameActive = true;
-    if (typeof BASKETBALL !== 'undefined') {
-        BASKETBALL.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BASKETBALL'; }));
 }
 
 function startBTL() {
-    botState.gameActive = true;
-    if (typeof BTL !== 'undefined') {
-        BTL.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BTL'; }));
 }
 
 function startCHARGE() {
-    botState.gameActive = true;
-    if (typeof CHARGE !== 'undefined') {
-        CHARGE.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'CHARGE'; }));
 }
 
 function startRUN_MINI() {
-    botState.gameActive = true;
-    if (typeof RUN_MINI !== 'undefined') {
-        RUN_MINI.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'RUN_MINI'; }));
 }
 
 function startEARN_EASILY() {
-    botState.gameActive = true;
-    if (typeof EARN_EASILY !== 'undefined') {
-        EARN_EASILY.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'EARN_EASILY'; }));
 }
 
 function startBONK_SUMMER() {
-    botState.gameActive = true;
-    if (typeof BONK_SUMMER !== 'undefined') {
-        BONK_SUMMER.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BONK_SUMMER'; }));
 }
 
 function startBONK_WINTER() {
-    botState.gameActive = true;
-    if (typeof BONK_WINTER !== 'undefined') {
-        BONK_WINTER.start(room, function(winner) {
-            if (winner) { loadLuckyMap(winner); }
-            else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
-        });
-    } else { botState.gameActive = false; setTimeout(checkAndStart, 5000); }
+    startMinigame(minigameModules.find(function(g) { return g.name === 'BONK_WINTER'; }));
 }
 
 // Ban temporal robusto: trackea por auth con timestamp de expiración
@@ -2731,8 +2096,7 @@ function excludeAFKFromGame() {
 // DETENER TODOS LOS JUEGOS (helper reutilizable)
 // ============================================
 function forceStopAllGames() {
-    stopReplay(); // Limpiar grabación pendiente
-    // Limpiar juicio público si está activo
+    stopReplay();
     if (botState.banVoteActive) {
         if (botState.banVoteInterval) { clearInterval(botState.banVoteInterval); botState.banVoteInterval = null; }
         if (botState.banVoteTimeout) { clearTimeout(botState.banVoteTimeout); botState.banVoteTimeout = null; }
@@ -2740,109 +2104,15 @@ function forceStopAllGames() {
         botState.chatBlocked = false;
     }
     botState.pendingBanVote = null;
-    try { if (LALALA.isActive()) LALALA.stop(room); } catch(e){}
+    minigameModules.forEach(function(g) {
+        try { if (g.module && g.module.isActive && g.module.isActive()) g.module.stop(room); } catch(e) { reportBug('forceStopAllGames.stop(' + g.name + ')', e); }
+    });
+    // Lucky modules (separados por lógica especial)
     try { if (LUCKY.isActive()) LUCKY.stop(room); } catch(e){}
     try { if (LUCKY_HELL && LUCKY_HELL.isActive && LUCKY_HELL.isActive()) LUCKY_HELL.stop(room); } catch(e){}
     try { if (LUCKY_DIOS && LUCKY_DIOS.isActive && LUCKY_DIOS.isActive()) LUCKY_DIOS.stop(room); } catch(e){}
-    try { if (SURVIVAL.isActive()) SURVIVAL.stop(room); } catch(e){}
-    try { if (METEORS.isActive()) METEORS.stop(room); } catch(e){}
-    try { if (JUMPING.isActive()) JUMPING.stop(room); } catch(e){}
-    try { if (WEBSURVIVAL.isActive()) WEBSURVIVAL.stop(room); } catch(e){}
-    try { if (GALACTIC.isActive()) GALACTIC.stop(room); } catch(e){}
-    try { if (SPACE_MELEE && SPACE_MELEE.isActive && SPACE_MELEE.isActive()) SPACE_MELEE.stop(room); } catch(e){}
-    try { if (GYM.isActive()) GYM.stop(room); } catch(e){}
-    try { if (MULTIBALLS.isActive()) MULTIBALLS.stop(room); } catch(e){}
-    try { if (DODGEBALL.isActive()) DODGEBALL.stop(room); } catch(e){}
-    try { if (DODGEBALL_V2 && DODGEBALL_V2.isActive && DODGEBALL_V2.isActive()) DODGEBALL_V2.stop(room); } catch(e){}
-    try { if (SUPERMAN && SUPERMAN.isActive && SUPERMAN.isActive()) SUPERMAN.stop(room); } catch(e){}
-    try { if (ULTRABALL && ULTRABALL.isActive && ULTRABALL.isActive()) ULTRABALL.stop(room); } catch(e){}
-    try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) NUMBERCHAIRS.stop(room); } catch(e){}
-    try { if (SURVIVAL_SQ && SURVIVAL_SQ.isActive && SURVIVAL_SQ.isActive()) SURVIVAL_SQ.stop(room); } catch(e){}
-    try { if (COLLISION_TEAM_RACING && COLLISION_TEAM_RACING.isActive && COLLISION_TEAM_RACING.isActive()) COLLISION_TEAM_RACING.stop(room); } catch(e){}
-    try { if (SPOT_BONK && SPOT_BONK.isActive && SPOT_BONK.isActive()) SPOT_BONK.stop(room); } catch(e){}
-    try { if (CHAIRMIX && CHAIRMIX.isActive && CHAIRMIX.isActive()) CHAIRMIX.stop(room); } catch(e){}
-    try { if (COVID19 && COVID19.isActive && COVID19.isActive()) COVID19.stop(room); } catch(e){}
-    try { if (GYMMIX && GYMMIX.isActive && GYMMIX.isActive()) GYMMIX.stop(room); } catch(e){}
-    try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) TRIVIA.stop(room); } catch(e){}
-    try { if (GOT && GOT.isActive && GOT.isActive()) GOT.stop(room); } catch(e){}
-    try { if (SPACE_CASE && SPACE_CASE.isActive && SPACE_CASE.isActive()) SPACE_CASE.stop(room); } catch(e){}
-    try { if (AMERICAN_CARRYBALL && AMERICAN_CARRYBALL.isActive && AMERICAN_CARRYBALL.isActive()) AMERICAN_CARRYBALL.stop(room); } catch(e){}
-    try { if (RING_SURVIVAL && RING_SURVIVAL.isActive && RING_SURVIVAL.isActive()) RING_SURVIVAL.stop(room); } catch(e){}
-    try { if (BONK_ARENA && BONK_ARENA.isActive && BONK_ARENA.isActive()) BONK_ARENA.stop(room); } catch(e){}
-    try { if (BONK_BERU && BONK_BERU.isActive && BONK_BERU.isActive()) BONK_BERU.stop(room); } catch(e){}
-    try { if (ANIMALCHAIRS_WHALE && ANIMALCHAIRS_WHALE.isActive && ANIMALCHAIRS_WHALE.isActive()) ANIMALCHAIRS_WHALE.stop(room); } catch(e){}
-    try { if (BONK_BERU_HAX && BONK_BERU_HAX.isActive && BONK_BERU_HAX.isActive()) BONK_BERU_HAX.stop(room); } catch(e){}
-    try { if (COVID2 && COVID2.isActive && COVID2.isActive()) COVID2.stop(room); } catch(e){}
-    try { if (COVID_NAMAJUNAS && COVID_NAMAJUNAS.isActive && COVID_NAMAJUNAS.isActive()) COVID_NAMAJUNAS.stop(room); } catch(e){}
-    try { if (DOMINIC_SURVIVOR && DOMINIC_SURVIVOR.isActive && DOMINIC_SURVIVOR.isActive()) DOMINIC_SURVIVOR.stop(room); } catch(e){}
-    try { if (AIR_HOCKEY && AIR_HOCKEY.isActive && AIR_HOCKEY.isActive()) AIR_HOCKEY.stop(room); } catch(e){}
-    try { if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive && SURVIVOR_VOL17.isActive()) SURVIVOR_VOL17.stop(room); } catch(e){}
-    try { if (FIT_IN_TREN && FIT_IN_TREN.isActive && FIT_IN_TREN.isActive()) FIT_IN_TREN.stop(room); } catch(e){}
-    try { if (FITANIC && FITANIC.isActive && FITANIC.isActive()) FITANIC.stop(room); } catch(e){}
-    try { if (FORTUNATE_RACE && FORTUNATE_RACE.isActive && FORTUNATE_RACE.isActive()) FORTUNATE_RACE.stop(room); } catch(e){}
-    try { if (KAFA_TOPU && KAFA_TOPU.isActive && KAFA_TOPU.isActive()) KAFA_TOPU.stop(room); } catch(e){}
-    try { if (KAFA_TOPU_SHADOW && KAFA_TOPU_SHADOW.isActive && KAFA_TOPU_SHADOW.isActive()) KAFA_TOPU_SHADOW.stop(room); } catch(e){}
-    try { if (KURU_KAFA_BONK && KURU_KAFA_BONK.isActive && KURU_KAFA_BONK.isActive()) KURU_KAFA_BONK.stop(room); } catch(e){}
-    try { if (LASER_RACE && LASER_RACE.isActive && LASER_RACE.isActive()) LASER_RACE.stop(room); } catch(e){}
-    try { if (CAPTURE_THE_FLAG && CAPTURE_THE_FLAG.isActive && CAPTURE_THE_FLAG.isActive()) CAPTURE_THE_FLAG.stop(room); } catch(e){}
-    try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) COPS_ROBBERS.stop(room); } catch(e){}
-    try { if (JUMP_QUA && JUMP_QUA.isActive && JUMP_QUA.isActive()) JUMP_QUA.stop(room); } catch(e){}
-    try { if (BOOMERANG_LEAGUE && BOOMERANG_LEAGUE.isActive && BOOMERANG_LEAGUE.isActive()) BOOMERANG_LEAGUE.stop(room); } catch(e){}
-    try { if (XD_GOALS && XD_GOALS.isActive && XD_GOALS.isActive()) XD_GOALS.stop(room); } catch(e){}
-    try { if (WWECROSS && WWECROSS.isActive && WWECROSS.isActive()) WWECROSS.stop(room); } catch(e){}
-    try { if (WEB_SURVIVAL_3 && WEB_SURVIVAL_3.isActive && WEB_SURVIVAL_3.isActive()) WEB_SURVIVAL_3.stop(room); } catch(e){}
-    try { if (TRAMPOLIN && TRAMPOLIN.isActive && TRAMPOLIN.isActive()) TRAMPOLIN.stop(room); } catch(e){}
-    try { if (SWING_TRAMPOLIN && SWING_TRAMPOLIN.isActive && SWING_TRAMPOLIN.isActive()) SWING_TRAMPOLIN.stop(room); } catch(e){}
-    try { if (SUPER_GRAVEDAD && SUPER_GRAVEDAD.isActive && SUPER_GRAVEDAD.isActive()) SUPER_GRAVEDAD.stop(room); } catch(e){}
-    try { if (ENDURE_SURVIVAL && ENDURE_SURVIVAL.isActive && ENDURE_SURVIVAL.isActive()) ENDURE_SURVIVAL.stop(room); } catch(e){}
-    try { if (LUCKY_RACE && LUCKY_RACE.isActive && LUCKY_RACE.isActive()) LUCKY_RACE.stop(room); } catch(e){}
-    try { if (STREET_RACE && STREET_RACE.isActive && STREET_RACE.isActive()) STREET_RACE.stop(room); } catch(e){}
-    try { if (SHOOTING_SURVIVAL && SHOOTING_SURVIVAL.isActive && SHOOTING_SURVIVAL.isActive()) SHOOTING_SURVIVAL.stop(room); } catch(e){}
-    try { if (SPACEBOUNCE_RACE && SPACEBOUNCE_RACE.isActive && SPACEBOUNCE_RACE.isActive()) SPACEBOUNCE_RACE.stop(room); } catch(e){}
-    try { if (RUN_REBOUND && RUN_REBOUND.isActive && RUN_REBOUND.isActive()) RUN_REBOUND.stop(room); } catch(e){}
-    try { if (MEADOWLANDS && MEADOWLANDS.isActive && MEADOWLANDS.isActive()) MEADOWLANDS.stop(room); } catch(e){}
-    try { if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive && SURVIVOR_VOL17.isActive()) SURVIVOR_VOL17.stop(room); } catch(e){}
-    try { if (WIND && WIND.isActive && WIND.isActive()) WIND.stop(room); } catch(e){}
-    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) IMPOSTOR.stop(room); } catch(e){}
-    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) PISTOLERO.stop(room); } catch(e){}
-    try { if (BONK_MOVABLE && BONK_MOVABLE.isActive && BONK_MOVABLE.isActive()) BONK_MOVABLE.stop(room); } catch(e){}
-    try { if (ENDURE_BOMBS && ENDURE_BOMBS.isActive && ENDURE_BOMBS.isActive()) ENDURE_BOMBS.stop(room); } catch(e){}
-    try { if (MUSICAL_FIT && MUSICAL_FIT.isActive && MUSICAL_FIT.isActive()) MUSICAL_FIT.stop(room); } catch(e){}
-    try { if (NAMAJUNAS_RACE && NAMAJUNAS_RACE.isActive && NAMAJUNAS_RACE.isActive()) NAMAJUNAS_RACE.stop(room); } catch(e){}
-    try { if (NAMAJUNAS_RACE_2 && NAMAJUNAS_RACE_2.isActive && NAMAJUNAS_RACE_2.isActive()) NAMAJUNAS_RACE_2.stop(room); } catch(e){}
-    try { if (FCT1 && FCT1.isActive && FCT1.isActive()) FCT1.stop(room); } catch(e){}
-    try { if (FIT_IN_GRAVEYARD && FIT_IN_GRAVEYARD.isActive && FIT_IN_GRAVEYARD.isActive()) FIT_IN_GRAVEYARD.stop(room); } catch(e){}
-    try { if (FUTBOL_CALLEJERO && FUTBOL_CALLEJERO.isActive && FUTBOL_CALLEJERO.isActive()) FUTBOL_CALLEJERO.stop(room); } catch(e){}
-    try { if (GOL_A_GOL && GOL_A_GOL.isActive && GOL_A_GOL.isActive()) GOL_A_GOL.stop(room); } catch(e){}
-    try { if (GYM_COLORS && GYM_COLORS.isActive && GYM_COLORS.isActive()) GYM_COLORS.stop(room); } catch(e){}
-    try { if (GYM9 && GYM9.isActive && GYM9.isActive()) GYM9.stop(room); } catch(e){}
-    try { if (MATRIX_FIT && MATRIX_FIT.isActive && MATRIX_FIT.isActive()) MATRIX_FIT.stop(room); } catch(e){}
-    try { if (RACE02 && RACE02.isActive && RACE02.isActive()) RACE02.stop(room); } catch(e){}
-    try { if (PLUM && PLUM.isActive && PLUM.isActive()) PLUM.stop(room); } catch(e){}
-    try { if (RUN_REBOUND_2 && RUN_REBOUND_2.isActive && RUN_REBOUND_2.isActive()) RUN_REBOUND_2.stop(room); } catch(e){}
-    try { if (SWING_CANNONS && SWING_CANNONS.isActive && SWING_CANNONS.isActive()) SWING_CANNONS.stop(room); } catch(e){}
-    try { if (SURVIVAL_INSECT && SURVIVAL_INSECT.isActive && SURVIVAL_INSECT.isActive()) SURVIVAL_INSECT.stop(room); } catch(e){}
-    try { if (RUN_LUCK && RUN_LUCK.isActive && RUN_LUCK.isActive()) RUN_LUCK.stop(room); } catch(e){}
-    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) PINBALL_ROULETTE.stop(room); } catch(e){}
-    try { if (JUMPING_SURVIVAL && JUMPING_SURVIVAL.isActive && JUMPING_SURVIVAL.isActive()) JUMPING_SURVIVAL.stop(room); } catch(e){}
-    try { if (SHAOLIN_SOCCER && SHAOLIN_SOCCER.isActive && SHAOLIN_SOCCER.isActive()) SHAOLIN_SOCCER.stop(room); } catch(e){}
-    try { if (SPACE_VORTEX && SPACE_VORTEX.isActive && SPACE_VORTEX.isActive()) SPACE_VORTEX.stop(room); } catch(e){}
-    try { if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) SPACEBOUNCE_POWER.stop(room); } catch(e){}
-    try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) BASKETBALL.stop(room); } catch(e){}
-    try { if (BTL && BTL.isActive && BTL.isActive()) BTL.stop(room); } catch(e){}
-    try { if (CHARGE && CHARGE.isActive && CHARGE.isActive()) CHARGE.stop(room); } catch(e){}
-    try { if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) RUN_MINI.stop(room); } catch(e){}
-    try { if (EARN_EASILY && EARN_EASILY.isActive && EARN_EASILY.isActive()) EARN_EASILY.stop(room); } catch(e){}
-    try { if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) BONK_SUMMER.stop(room); } catch(e){}
-    try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) BONK_WINTER.stop(room); } catch(e){}
-    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) ZOMBIE_RUN.stop(room); } catch(e){}
-    try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) RACING_GROUND.stop(room); } catch(e){}
-    try { if (BUHO && BUHO.isActive && BUHO.isActive()) BUHO.stop(room); } catch(e){}
-    try { if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) JUEGO_1234.stop(room); } catch(e){}
-    try { if (WAR_CONQUEST && WAR_CONQUEST.isActive && WAR_CONQUEST.isActive()) WAR_CONQUEST.stop(room); } catch(e){}
-    try { if (TANK_WAR && TANK_WAR.isActive && TANK_WAR.isActive()) TANK_WAR.stop(room); } catch(e){}
     try { room.stopGame(); } catch(e){}
-    room.onTeamGoal = buhoGoalHandler;
+    room.onTeamGoal = gameGoalHandler;
     botState.gameActive = false;
     if (botState.startTimeout) {
         clearTimeout(botState.startTimeout);
@@ -2866,104 +2136,9 @@ function checkAndStart() {
 
     // Safety: verificar que ningún módulo de juego siga activo (race condition)
     var anyModuleActive = false;
-    try { if (LALALA.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SURVIVAL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (METEORS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (JUMPING.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (WEBSURVIVAL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (GALACTIC.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SPACE_MELEE && SPACE_MELEE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (GYM.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (MULTIBALLS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (DODGEBALL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (DODGEBALL_V2 && DODGEBALL_V2.isActive && DODGEBALL_V2.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SUPERMAN && SUPERMAN.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (ULTRABALL && ULTRABALL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SURVIVAL_SQ && SURVIVAL_SQ.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (COLLISION_TEAM_RACING && COLLISION_TEAM_RACING.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SPOT_BONK && SPOT_BONK.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (CHAIRMIX && CHAIRMIX.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (COVID19 && COVID19.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (GYMMIX && GYMMIX.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (TRIVIA && TRIVIA.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (GOT && GOT.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SPACE_CASE && SPACE_CASE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (AMERICAN_CARRYBALL && AMERICAN_CARRYBALL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (RING_SURVIVAL && RING_SURVIVAL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BONK_ARENA && BONK_ARENA.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BONK_BERU && BONK_BERU.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (ANIMALCHAIRS_WHALE && ANIMALCHAIRS_WHALE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BONK_BERU_HAX && BONK_BERU_HAX.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (COVID2 && COVID2.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (COVID_NAMAJUNAS && COVID_NAMAJUNAS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (DOMINIC_SURVIVOR && DOMINIC_SURVIVOR.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (AIR_HOCKEY && AIR_HOCKEY.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (FIT_IN_TREN && FIT_IN_TREN.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (FITANIC && FITANIC.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (FORTUNATE_RACE && FORTUNATE_RACE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (KAFA_TOPU && KAFA_TOPU.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (KAFA_TOPU_SHADOW && KAFA_TOPU_SHADOW.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (KURU_KAFA_BONK && KURU_KAFA_BONK.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (LASER_RACE && LASER_RACE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (CAPTURE_THE_FLAG && CAPTURE_THE_FLAG.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (COPS_ROBBERS && COPS_ROBBERS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (JUMP_QUA && JUMP_QUA.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BOOMERANG_LEAGUE && BOOMERANG_LEAGUE.isActive && BOOMERANG_LEAGUE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (XD_GOALS && XD_GOALS.isActive && XD_GOALS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (WWECROSS && WWECROSS.isActive && WWECROSS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (WEB_SURVIVAL_3 && WEB_SURVIVAL_3.isActive && WEB_SURVIVAL_3.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (TRAMPOLIN && TRAMPOLIN.isActive && TRAMPOLIN.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SWING_TRAMPOLIN && SWING_TRAMPOLIN.isActive && SWING_TRAMPOLIN.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SUPER_GRAVEDAD && SUPER_GRAVEDAD.isActive && SUPER_GRAVEDAD.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (ENDURE_SURVIVAL && ENDURE_SURVIVAL.isActive && ENDURE_SURVIVAL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (LUCKY_RACE && LUCKY_RACE.isActive && LUCKY_RACE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (STREET_RACE && STREET_RACE.isActive && STREET_RACE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SHOOTING_SURVIVAL && SHOOTING_SURVIVAL.isActive && SHOOTING_SURVIVAL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SPACEBOUNCE_RACE && SPACEBOUNCE_RACE.isActive && SPACEBOUNCE_RACE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (RUN_REBOUND && RUN_REBOUND.isActive && RUN_REBOUND.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (MEADOWLANDS && MEADOWLANDS.isActive && MEADOWLANDS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive && SURVIVOR_VOL17.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (WIND && WIND.isActive && WIND.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BONK_MOVABLE && BONK_MOVABLE.isActive && BONK_MOVABLE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (ENDURE_BOMBS && ENDURE_BOMBS.isActive && ENDURE_BOMBS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (MUSICAL_FIT && MUSICAL_FIT.isActive && MUSICAL_FIT.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (NAMAJUNAS_RACE && NAMAJUNAS_RACE.isActive && NAMAJUNAS_RACE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (NAMAJUNAS_RACE_2 && NAMAJUNAS_RACE_2.isActive && NAMAJUNAS_RACE_2.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (FCT1 && FCT1.isActive && FCT1.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (FIT_IN_GRAVEYARD && FIT_IN_GRAVEYARD.isActive && FIT_IN_GRAVEYARD.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (FUTBOL_CALLEJERO && FUTBOL_CALLEJERO.isActive && FUTBOL_CALLEJERO.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (GOL_A_GOL && GOL_A_GOL.isActive && GOL_A_GOL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (GYM_COLORS && GYM_COLORS.isActive && GYM_COLORS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (GYM9 && GYM9.isActive && GYM9.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (MATRIX_FIT && MATRIX_FIT.isActive && MATRIX_FIT.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (RACE02 && RACE02.isActive && RACE02.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (PLUM && PLUM.isActive && PLUM.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (RUN_REBOUND_2 && RUN_REBOUND_2.isActive && RUN_REBOUND_2.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SWING_CANNONS && SWING_CANNONS.isActive && SWING_CANNONS.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SURVIVAL_INSECT && SURVIVAL_INSECT.isActive && SURVIVAL_INSECT.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (RUN_LUCK && RUN_LUCK.isActive && RUN_LUCK.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (JUMPING_SURVIVAL && JUMPING_SURVIVAL.isActive && JUMPING_SURVIVAL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SHAOLIN_SOCCER && SHAOLIN_SOCCER.isActive && SHAOLIN_SOCCER.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SPACE_VORTEX && SPACE_VORTEX.isActive && SPACE_VORTEX.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BTL && BTL.isActive && BTL.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (CHARGE && CHARGE.isActive && CHARGE.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (EARN_EASILY && EARN_EASILY.isActive && EARN_EASILY.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (BUHO && BUHO.isActive && BUHO.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (WAR_CONQUEST && WAR_CONQUEST.isActive && WAR_CONQUEST.isActive()) anyModuleActive = true; } catch(e){}
-    try { if (TANK_WAR && TANK_WAR.isActive && TANK_WAR.isActive()) anyModuleActive = true; } catch(e){}
+    minigameModules.forEach(function(g) {
+        try { if (g.module && g.module.isActive && g.module.isActive()) anyModuleActive = true; } catch(e){}
+    });
     if (anyModuleActive) {
         console.log('⚠️ Safety: módulo de juego aún activo, forzando stop');
         forceStopAllGames();
@@ -3128,98 +2303,7 @@ function checkAndStart() {
 
         // SISTEMA DE MINIJUEGOS ALEATORIOS (evitar repetir el último)
         // Lista completa de minijuegos disponibles
-        var minigames = [
-            { name: 'LALALA', module: LALALA, displayName: 'LALALA', starter: startLALALA },
-            { name: 'SURVIVAL', module: SURVIVAL, displayName: 'SURVIVAL', starter: startSURVIVAL },
-            // { name: 'METEORS', module: METEORS, displayName: 'METEORS', starter: startMETEORS }, // DESACTIVADO
-            { name: 'JUMPING', module: JUMPING, displayName: 'JUMPING ARENA', starter: startJUMPING },
-            { name: 'WEBSURVIVAL', module: WEBSURVIVAL, displayName: 'WEB SURVIVAL', starter: startWEBSURVIVAL },
-            { name: 'GALACTIC', module: GALACTIC, displayName: 'GALACTIC FIT', starter: startGALACTIC },
-            { name: 'SPACE_MELEE', module: SPACE_MELEE, displayName: 'SPACE MELEE', starter: startSPACE_MELEE },
-            { name: 'GYM', module: GYM, displayName: 'GYM', starter: startGYM },
-            { name: 'MULTIBALLS', module: MULTIBALLS, displayName: 'MULTIBALLS', starter: startMULTIBALLS },
-            { name: 'DODGEBALL', module: DODGEBALL, displayName: 'DODGEBALL', starter: startDODGEBALL },
-            { name: 'DODGEBALL_V2', module: DODGEBALL_V2, displayName: 'DODGEBALL V2', starter: startDODGEBALL_V2 },
-            { name: 'SUPERMAN', module: SUPERMAN, displayName: 'SUPERMAN CHAIR', starter: startSUPERMAN },
-            { name: 'ULTRABALL', module: ULTRABALL, displayName: 'ULTRABALL', starter: startULTRABALL },
-            { name: 'NUMBERCHAIRS', module: NUMBERCHAIRS, displayName: 'NUMBER CHAIRS', starter: startNUMBERCHAIRS },
-            { name: 'SURVIVAL_SQ', module: SURVIVAL_SQ, displayName: 'SURVIVAL SQUARE', starter: startSURVIVAL_SQ },
-            { name: 'COLLISION', module: COLLISION_TEAM_RACING, displayName: 'COLLISION TEAM RACING', starter: startCOLLISION },
-            { name: 'SPOT_BONK', module: SPOT_BONK, displayName: 'SPOT BONK', starter: startSPOT_BONK },
-            { name: 'CHAIRMIX', module: CHAIRMIX, displayName: 'CHAIRMIX', starter: startCHAIRMIX },
-            { name: 'COVID19', module: COVID19, displayName: 'COVID-19', starter: startCOVID19 },
-            { name: 'GYMMIX', module: GYMMIX, displayName: 'GYMMIX - Carrera de Obstaculos', starter: startGYMMIX },
-            { name: 'TRIVIA', module: TRIVIA, displayName: 'TRIVIA', starter: startTRIVIA },
-            { name: 'SPACE_CASE', module: SPACE_CASE, displayName: 'SPACE CASE', starter: startSPACE_CASE },
-            { name: 'AMERICAN_CARRYBALL', module: AMERICAN_CARRYBALL, displayName: 'AMERICAN SPACE CARRYBALL', starter: startAMERICAN_CARRYBALL },
-            { name: 'RING_SURVIVAL', module: RING_SURVIVAL, displayName: 'RING SURVIVAL', starter: startRING_SURVIVAL },
-            { name: 'BONK_ARENA', module: BONK_ARENA, displayName: 'BONK ARENA', starter: startBONK_ARENA },
-            { name: 'BONK_BERU', module: BONK_BERU, displayName: 'BONK GAME BY BERU', starter: startBONK_BERU },
-            { name: 'ANIMALCHAIRS_WHALE', module: ANIMALCHAIRS_WHALE, displayName: 'ANIMALCHAIRS WHALE', starter: startANIMALCHAIRS_WHALE },
-            { name: 'BONK_BERU_HAX', module: BONK_BERU_HAX, displayName: 'BONK GAME BY BERU (HAX)', starter: startBONK_BERU_HAX },
-            { name: 'COVID2', module: COVID2, displayName: 'COVID-2 Survival', starter: startCOVID2 },
-            { name: 'COVID_NAMAJUNAS', module: COVID_NAMAJUNAS, displayName: 'COVID Namajunas', starter: startCOVID_NAMAJUNAS },
-            { name: 'FIT_IN_TREN', module: FIT_IN_TREN, displayName: 'FIT IN TREN', starter: startFIT_IN_TREN },
-            { name: 'FITANIC', module: FITANIC, displayName: 'FITANIC', starter: startFITANIC },
-            { name: 'FORTUNATE_RACE', module: FORTUNATE_RACE, displayName: 'FORTUNATE RACE', starter: startFORTUNATE_RACE },
-            { name: 'KAFA_TOPU', module: KAFA_TOPU, displayName: 'KAFA TOPU', starter: startKAFA_TOPU },
-            { name: 'KAFA_TOPU_SHADOW', module: KAFA_TOPU_SHADOW, displayName: 'KAFA TOPU SHADOW', starter: startKAFA_TOPU_SHADOW },
-            { name: 'KURU_KAFA_BONK', module: KURU_KAFA_BONK, displayName: 'KURU KAFA BONK', starter: startKURU_KAFA_BONK },
-            { name: 'LASER_RACE', module: LASER_RACE, displayName: 'LASER RACE', starter: startLASER_RACE },
-            // { name: 'COPS_ROBBERS', module: COPS_ROBBERS, displayName: 'COPS & ROBBERS', starter: startCOPS_ROBBERS }, // DESACTIVADO
-            { name: 'JUEGO_1234', module: JUEGO_1234, displayName: 'JUEGO 1234', starter: startJUEGO_1234 },
-            { name: 'WAR_CONQUEST', module: WAR_CONQUEST, displayName: 'WAR OF CONQUEST', starter: startWAR_CONQUEST },
-            { name: 'TANK_WAR', module: TANK_WAR, displayName: 'TANK WAR', starter: startTANK_WAR },
-            { name: 'JUMP_QUA', module: JUMP_QUA, displayName: 'JUMP', starter: startJUMP_QUA },
-            { name: 'BOOMERANG_LEAGUE', module: BOOMERANG_LEAGUE, displayName: 'BOOMERANG LEAGUE', starter: startBOOMERANG_LEAGUE },
-            { name: 'XD_GOALS', module: XD_GOALS, displayName: 'XD', starter: startXD_GOALS },
-            { name: 'WWECROSS', module: WWECROSS, displayName: 'WWECROSS', starter: startWWECROSS },
-            { name: 'WEB_SURVIVAL_3', module: WEB_SURVIVAL_3, displayName: 'WEB SURVIVAL III', starter: startWEB_SURVIVAL_3 },
-            { name: 'TRAMPOLIN', module: TRAMPOLIN, displayName: 'TRAMPOLIN', starter: startTRAMPOLIN },
-            { name: 'SWING_TRAMPOLIN', module: SWING_TRAMPOLIN, displayName: 'SWING TRAMPOLIN', starter: startSWING_TRAMPOLIN },
-            { name: 'SUPER_GRAVEDAD', module: SUPER_GRAVEDAD, displayName: 'SUPER GRAVEDAD x4', starter: startSUPER_GRAVEDAD },
-            { name: 'ENDURE_SURVIVAL', module: ENDURE_SURVIVAL, displayName: 'ENDURE SURVIVAL 2', starter: startENDURE_SURVIVAL },
-            { name: 'LUCKY_RACE', module: LUCKY_RACE, displayName: 'LUCKY RACE', starter: startLUCKY_RACE },
-            { name: 'STREET_RACE', module: STREET_RACE, displayName: 'STREET RACE', starter: startSTREET_RACE },
-            { name: 'SHOOTING_SURVIVAL', module: SHOOTING_SURVIVAL, displayName: 'SHOOTING SURVIVAL', starter: startSHOOTING_SURVIVAL },
-            { name: 'SPACEBOUNCE_RACE', module: SPACEBOUNCE_RACE, displayName: 'SPACEBOUNCE RACE', starter: startSPACEBOUNCE_RACE },
-            { name: 'RUN_REBOUND', module: RUN_REBOUND, displayName: 'RUN REBOUND', starter: startRUN_REBOUND },
-            { name: 'MEADOWLANDS', module: MEADOWLANDS, displayName: 'MEADOWLANDS SURVIVAL', starter: startMEADOWLANDS },
-            { name: 'WIND', module: WIND, displayName: 'WIND', starter: startWIND },
-            { name: 'IMPOSTOR', module: IMPOSTOR, displayName: 'IMPOSTOR', starter: startIMPOSTOR },
-            { name: 'PISTOLERO', module: PISTOLERO, displayName: 'PISTOLERO', starter: startPISTOLERO },
-            { name: 'BONK_MOVABLE', module: BONK_MOVABLE, displayName: 'BONK MOVABLE', starter: startBONK_MOVABLE },
-            { name: 'ENDURE_BOMBS', module: ENDURE_BOMBS, displayName: 'ENDURE BOMBS', starter: startENDURE_BOMBS },
-            { name: 'MUSICAL_FIT', module: MUSICAL_FIT, displayName: 'MUSICAL FIT', starter: startMUSICAL_FIT },
-            { name: 'NAMAJUNAS_RACE', module: NAMAJUNAS_RACE, displayName: 'NAMAJUNAS RACE', starter: startNAMAJUNAS_RACE },
-            { name: 'NAMAJUNAS_RACE_2', module: NAMAJUNAS_RACE_2, displayName: 'NAMAJUNAS RACE 2', starter: startNAMAJUNAS_RACE_2 },
-            { name: 'FCT1', module: FCT1, displayName: 'FCT 1', starter: startFCT1 },
-            { name: 'FIT_IN_GRAVEYARD', module: FIT_IN_GRAVEYARD, displayName: 'FIT IN GRAVEYARD', starter: startFIT_IN_GRAVEYARD },
-            { name: 'FUTBOL_CALLEJERO', module: FUTBOL_CALLEJERO, displayName: 'FUTBOL CALLEJERO', starter: startFUTBOL_CALLEJERO },
-            { name: 'GYM_COLORS', module: GYM_COLORS, displayName: 'GYM COLORS', starter: startGYM_COLORS },
-            { name: 'GYM9', module: GYM9, displayName: 'GYM 9', starter: startGYM9 },
-            { name: 'MATRIX_FIT', module: MATRIX_FIT, displayName: 'MATRIX FIT', starter: startMATRIX_FIT },
-            { name: 'RACE02', module: RACE02, displayName: 'RACE 02', starter: startRACE02 },
-            { name: 'PLUM', module: PLUM, displayName: 'PLUM', starter: startPLUM },
-            { name: 'RUN_REBOUND_2', module: RUN_REBOUND_2, displayName: 'RUN REBOUND 2', starter: startRUN_REBOUND_2 },
-            { name: 'SWING_CANNONS', module: SWING_CANNONS, displayName: 'SWING CANNONS', starter: startSWING_CANNONS },
-            { name: 'SURVIVAL_INSECT', module: SURVIVAL_INSECT, displayName: 'SURVIVAL INSECT', starter: startSURVIVAL_INSECT },
-            { name: 'RUN_LUCK', module: RUN_LUCK, displayName: 'RUN LUCK', starter: startRUN_LUCK },
-            { name: 'PINBALL_ROULETTE', module: PINBALL_ROULETTE, displayName: 'PINBALL ROULETTE', starter: startPINBALL_ROULETTE },
-            { name: 'JUMPING_SURVIVAL', module: JUMPING_SURVIVAL, displayName: 'JUMPING SURVIVAL', starter: startJUMPING_SURVIVAL },
-            { name: 'ZOMBIE_RUN', module: ZOMBIE_RUN, displayName: 'ZOMBIE RUN', starter: startZOMBIE_RUN },
-            { name: 'SPACEBOUNCE_POWER', module: SPACEBOUNCE_POWER, displayName: 'SPACEBOUNCE POWER', starter: startSPACEBOUNCE_POWER },
-            { name: 'SHAOLIN_SOCCER', module: SHAOLIN_SOCCER, displayName: 'SHAOLIN SOCCER', starter: startSHAOLIN_SOCCER },
-            { name: 'BASKETBALL', module: BASKETBALL, displayName: 'BASKETBALL', starter: startBASKETBALL },
-            { name: 'BTL', module: BTL, displayName: 'B.T.L', starter: startBTL },
-            { name: 'CHARGE', module: CHARGE, displayName: 'Charge', starter: startCHARGE },
-            { name: 'RUN_MINI', module: RUN_MINI, displayName: 'RUN MINI', starter: startRUN_MINI },
-            { name: 'EARN_EASILY', module: EARN_EASILY, displayName: 'EARN EASILY', starter: startEARN_EASILY },
-            // { name: 'BONK_SUMMER', module: BONK_SUMMER, displayName: 'BONK SUMMER', starter: startBONK_SUMMER }, // DESACTIVADO temporalmente
-            { name: 'BONK_WINTER', module: BONK_WINTER, displayName: 'BONK WINTER', starter: startBONK_WINTER },
-            { name: 'RACING_GROUND', module: RACING_GROUND, displayName: 'RACING GROUND', starter: startRACING_GROUND },
-            { name: 'BUHO', module: BUHO, displayName: 'BUHO', starter: startBUHO }
-        ];
+        var minigames = minigameModules.slice();
 
         // Modo test: filtrar solo los juegos seleccionados
         if (typeof TEST_ONLY_GAMES !== 'undefined' && TEST_ONLY_GAMES && TEST_ONLY_GAMES.length > 0) {
@@ -3320,6 +2404,7 @@ function checkAndStart() {
         }
         } // fin if (!selectedGame)
         
+        console.log('🎮 Juego seleccionado: ' + selectedGame.name + ' | lastMinigame: ' + botState.lastMinigame + ' | bolsa restante: ' + botState.minigameBag.length);
         botState.lastMinigame = selectedGame.name;
         botState.currentMinigame = selectedGame.name;
         botState.gameActive = true; // Marcar activo INMEDIATAMENTE para evitar duplicados
@@ -3470,27 +2555,38 @@ function stopSoloEntertainment() {
 }
 
 // ============================================
-// EVENTOS GLOBALES DE HAXBALL (para BUHO)
+// EVENTOS GLOBALES DE HAXBALL (handlers centralizados)
 // ============================================
 
-function buhoGoalHandler(team) {
-    if (BUHO && BUHO.isActive && BUHO.isActive()) {
-        try { BUHO.onTeamGoal(room, team); } catch(e) {}
-        return;
+function gameGoalHandler(team) {
+    for (var i = 0; i < minigameModules.length; i++) {
+        var g = minigameModules[i];
+        if (g.module && g.module.isActive && g.module.isActive()) {
+            if (g.module.onTeamGoal) {
+                try { g.module.onTeamGoal(room, team); } catch(e) { reportBug('gameGoalHandler(' + g.name + ')', e); }
+            }
+            return;
+        }
     }
 }
 
-room.onTeamGoal = buhoGoalHandler;
+room.onTeamGoal = gameGoalHandler;
 
 room.onGameTick = function() {
-    if (BUHO && BUHO.isActive && BUHO.isActive()) {
-        try { BUHO.onGameTick(room); } catch(e) {}
+    for (var i = 0; i < minigameModules.length; i++) {
+        var g = minigameModules[i];
+        if (g.module && g.module.isActive && g.module.isActive() && g.module.onGameTick) {
+            try { g.module.onGameTick(room); } catch(e) { reportBug('onGameTick(' + g.name + ')', e); }
+        }
     }
 };
 
 room.onPositionsReset = function() {
-    if (BUHO && BUHO.isActive && BUHO.isActive()) {
-        try { BUHO.onPositionsReset(room); } catch(e) {}
+    for (var i = 0; i < minigameModules.length; i++) {
+        var g = minigameModules[i];
+        if (g.module && g.module.isActive && g.module.isActive() && g.module.onPositionsReset) {
+            try { g.module.onPositionsReset(room); } catch(e) { reportBug('onPositionsReset(' + g.name + ')', e); }
+        }
     }
 };
 
@@ -3736,9 +2832,11 @@ room.onPlayerLeave = function(player) {
     delete botState.authMap[player.id];
 
     // Notificar a los módulos activos sobre la salida del jugador
-    if (LALALA.isActive()) {
-        LALALA.onPlayerLeave(room, player);
-    }
+    minigameModules.forEach(function(g) {
+        if (g.module && g.module.isActive && g.module.isActive() && g.module.onPlayerLeave) {
+            try { g.module.onPlayerLeave(room, player); } catch(e) { reportBug('onPlayerLeave(' + g.name + ')', e); }
+        }
+    });
     if (LUCKY && LUCKY.isActive && LUCKY.isActive()) {
         try { LUCKY.onPlayerLeave(player); } catch(e){}
     }
@@ -3747,298 +2845,6 @@ room.onPlayerLeave = function(player) {
     }
     if (LUCKY_HELL && LUCKY_HELL.isActive && LUCKY_HELL.isActive() && LUCKY_HELL.onPlayerLeave) {
         try { LUCKY_HELL.onPlayerLeave(player); } catch(e){}
-    }
-
-    if (SURVIVAL.isActive()) {
-        SURVIVAL.onPlayerLeave(room, player);
-    }
-    if (METEORS.isActive()) {
-        METEORS.onPlayerLeave(room, player);
-    }
-    if (JUMPING.isActive()) {
-        JUMPING.onPlayerLeave(room, player);
-    }
-    if (WEBSURVIVAL.isActive()) {
-        WEBSURVIVAL.onPlayerLeave(room, player);
-    }
-    if (GALACTIC.isActive()) {
-        GALACTIC.onPlayerLeave(room, player);
-    }
-    if (SPACE_MELEE && SPACE_MELEE.isActive && SPACE_MELEE.isActive()) {
-        try { SPACE_MELEE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (GYM.isActive()) {
-        GYM.onPlayerLeave(room, player);
-    }
-    if (MULTIBALLS.isActive()) {
-        MULTIBALLS.onPlayerLeave(room, player);
-    }
-    if (DODGEBALL.isActive()) {
-        DODGEBALL.onPlayerLeave(room, player);
-    }
-    if (DODGEBALL_V2 && DODGEBALL_V2.isActive && DODGEBALL_V2.isActive()) {
-        try { DODGEBALL_V2.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SUPERMAN && SUPERMAN.isActive && SUPERMAN.isActive()) {
-        try { SUPERMAN.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (ULTRABALL && ULTRABALL.isActive && ULTRABALL.isActive()) {
-        ULTRABALL.onPlayerLeave(room, player);
-    }
-    if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) {
-        NUMBERCHAIRS.onPlayerLeave(room, player);
-    }
-    if (SURVIVAL_SQ && SURVIVAL_SQ.isActive && SURVIVAL_SQ.isActive()) {
-        try { SURVIVAL_SQ.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (COLLISION_TEAM_RACING && COLLISION_TEAM_RACING.isActive && COLLISION_TEAM_RACING.isActive()) {
-        try { COLLISION_TEAM_RACING.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SPOT_BONK && SPOT_BONK.isActive && SPOT_BONK.isActive()) {
-        try { SPOT_BONK.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (CHAIRMIX && CHAIRMIX.isActive && CHAIRMIX.isActive()) {
-        try { CHAIRMIX.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (COVID19 && COVID19.isActive && COVID19.isActive()) {
-        try { COVID19.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (GYMMIX && GYMMIX.isActive && GYMMIX.isActive()) {
-        try { GYMMIX.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) {
-        try { TRIVIA.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (GOT && GOT.isActive && GOT.isActive()) {
-        try { GOT.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SPACE_CASE && SPACE_CASE.isActive && SPACE_CASE.isActive()) {
-        try { SPACE_CASE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (AMERICAN_CARRYBALL && AMERICAN_CARRYBALL.isActive && AMERICAN_CARRYBALL.isActive()) {
-        try { AMERICAN_CARRYBALL.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (RING_SURVIVAL && RING_SURVIVAL.isActive && RING_SURVIVAL.isActive()) {
-        try { RING_SURVIVAL.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BONK_ARENA && BONK_ARENA.isActive && BONK_ARENA.isActive()) {
-        try { BONK_ARENA.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BONK_BERU && BONK_BERU.isActive && BONK_BERU.isActive()) {
-        try { BONK_BERU.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (ANIMALCHAIRS_WHALE && ANIMALCHAIRS_WHALE.isActive && ANIMALCHAIRS_WHALE.isActive()) {
-        try { ANIMALCHAIRS_WHALE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BONK_BERU_HAX && BONK_BERU_HAX.isActive && BONK_BERU_HAX.isActive()) {
-        try { BONK_BERU_HAX.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (COVID2 && COVID2.isActive && COVID2.isActive()) {
-        try { COVID2.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (COVID_NAMAJUNAS && COVID_NAMAJUNAS.isActive && COVID_NAMAJUNAS.isActive()) {
-        try { COVID_NAMAJUNAS.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (DOMINIC_SURVIVOR && DOMINIC_SURVIVOR.isActive && DOMINIC_SURVIVOR.isActive()) {
-        try { DOMINIC_SURVIVOR.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (AIR_HOCKEY && AIR_HOCKEY.isActive && AIR_HOCKEY.isActive()) {
-        try { AIR_HOCKEY.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive && SURVIVOR_VOL17.isActive()) {
-        try { SURVIVOR_VOL17.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (FIT_IN_TREN && FIT_IN_TREN.isActive && FIT_IN_TREN.isActive()) {
-        try { FIT_IN_TREN.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (FITANIC && FITANIC.isActive && FITANIC.isActive()) {
-        try { FITANIC.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (FORTUNATE_RACE && FORTUNATE_RACE.isActive && FORTUNATE_RACE.isActive()) {
-        try { FORTUNATE_RACE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (KAFA_TOPU && KAFA_TOPU.isActive && KAFA_TOPU.isActive()) {
-        try { KAFA_TOPU.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (KAFA_TOPU_SHADOW && KAFA_TOPU_SHADOW.isActive && KAFA_TOPU_SHADOW.isActive()) {
-        try { KAFA_TOPU_SHADOW.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (KURU_KAFA_BONK && KURU_KAFA_BONK.isActive && KURU_KAFA_BONK.isActive()) {
-        try { KURU_KAFA_BONK.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (LASER_RACE && LASER_RACE.isActive && LASER_RACE.isActive()) {
-        try { LASER_RACE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (CAPTURE_THE_FLAG && CAPTURE_THE_FLAG.isActive && CAPTURE_THE_FLAG.isActive()) {
-        try { CAPTURE_THE_FLAG.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) {
-        try { COPS_ROBBERS.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (JUMP_QUA && JUMP_QUA.isActive && JUMP_QUA.isActive()) {
-        try { JUMP_QUA.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BOOMERANG_LEAGUE && BOOMERANG_LEAGUE.isActive && BOOMERANG_LEAGUE.isActive()) {
-        try { BOOMERANG_LEAGUE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (XD_GOALS && XD_GOALS.isActive && XD_GOALS.isActive()) {
-        try { XD_GOALS.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (WWECROSS && WWECROSS.isActive && WWECROSS.isActive()) {
-        try { WWECROSS.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (WEB_SURVIVAL_3 && WEB_SURVIVAL_3.isActive && WEB_SURVIVAL_3.isActive()) {
-        try { WEB_SURVIVAL_3.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (TRAMPOLIN && TRAMPOLIN.isActive && TRAMPOLIN.isActive()) {
-        try { TRAMPOLIN.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SWING_TRAMPOLIN && SWING_TRAMPOLIN.isActive && SWING_TRAMPOLIN.isActive()) {
-        try { SWING_TRAMPOLIN.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SUPER_GRAVEDAD && SUPER_GRAVEDAD.isActive && SUPER_GRAVEDAD.isActive()) {
-        try { SUPER_GRAVEDAD.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (ENDURE_SURVIVAL && ENDURE_SURVIVAL.isActive && ENDURE_SURVIVAL.isActive()) {
-        try { ENDURE_SURVIVAL.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (LUCKY_RACE && LUCKY_RACE.isActive && LUCKY_RACE.isActive()) {
-        try { LUCKY_RACE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (STREET_RACE && STREET_RACE.isActive && STREET_RACE.isActive()) {
-        try { STREET_RACE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SHOOTING_SURVIVAL && SHOOTING_SURVIVAL.isActive && SHOOTING_SURVIVAL.isActive()) {
-        try { SHOOTING_SURVIVAL.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SPACEBOUNCE_RACE && SPACEBOUNCE_RACE.isActive && SPACEBOUNCE_RACE.isActive()) {
-        try { SPACEBOUNCE_RACE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (RUN_REBOUND && RUN_REBOUND.isActive && RUN_REBOUND.isActive()) {
-        try { RUN_REBOUND.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (MEADOWLANDS && MEADOWLANDS.isActive && MEADOWLANDS.isActive()) {
-        try { MEADOWLANDS.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive && SURVIVOR_VOL17.isActive()) {
-        try { SURVIVOR_VOL17.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (WIND && WIND.isActive && WIND.isActive()) {
-        try { WIND.onPlayerLeave(player); } catch(e){}
-    }
-    if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) {
-        try { IMPOSTOR.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) {
-        try { PISTOLERO.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BONK_MOVABLE && BONK_MOVABLE.isActive && BONK_MOVABLE.isActive()) {
-        try { BONK_MOVABLE.onPlayerLeave(player); } catch(e){}
-    }
-    if (ENDURE_BOMBS && ENDURE_BOMBS.isActive && ENDURE_BOMBS.isActive()) {
-        try { ENDURE_BOMBS.onPlayerLeave(player); } catch(e){}
-    }
-    if (MUSICAL_FIT && MUSICAL_FIT.isActive && MUSICAL_FIT.isActive()) {
-        try { MUSICAL_FIT.onPlayerLeave(player); } catch(e){}
-    }
-    if (NAMAJUNAS_RACE && NAMAJUNAS_RACE.isActive && NAMAJUNAS_RACE.isActive()) {
-        try { NAMAJUNAS_RACE.onPlayerLeave(player); } catch(e){}
-    }
-    if (NAMAJUNAS_RACE_2 && NAMAJUNAS_RACE_2.isActive && NAMAJUNAS_RACE_2.isActive()) {
-        try { NAMAJUNAS_RACE_2.onPlayerLeave(player); } catch(e){}
-    }
-    if (FCT1 && FCT1.isActive && FCT1.isActive()) {
-        try { FCT1.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (FIT_IN_GRAVEYARD && FIT_IN_GRAVEYARD.isActive && FIT_IN_GRAVEYARD.isActive()) {
-        try { FIT_IN_GRAVEYARD.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (FUTBOL_CALLEJERO && FUTBOL_CALLEJERO.isActive && FUTBOL_CALLEJERO.isActive()) {
-        try { FUTBOL_CALLEJERO.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (GOL_A_GOL && GOL_A_GOL.isActive && GOL_A_GOL.isActive()) {
-        try { GOL_A_GOL.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (GYM_COLORS && GYM_COLORS.isActive && GYM_COLORS.isActive()) {
-        try { GYM_COLORS.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (GYM9 && GYM9.isActive && GYM9.isActive()) {
-        try { GYM9.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (MATRIX_FIT && MATRIX_FIT.isActive && MATRIX_FIT.isActive()) {
-        try { MATRIX_FIT.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (RACE02 && RACE02.isActive && RACE02.isActive()) {
-        try { RACE02.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (PLUM && PLUM.isActive && PLUM.isActive()) {
-        try { PLUM.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (RUN_REBOUND_2 && RUN_REBOUND_2.isActive && RUN_REBOUND_2.isActive()) {
-        try { RUN_REBOUND_2.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SWING_CANNONS && SWING_CANNONS.isActive && SWING_CANNONS.isActive()) {
-        try { SWING_CANNONS.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SURVIVAL_INSECT && SURVIVAL_INSECT.isActive && SURVIVAL_INSECT.isActive()) {
-        try { SURVIVAL_INSECT.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (RUN_LUCK && RUN_LUCK.isActive && RUN_LUCK.isActive()) {
-        try { RUN_LUCK.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) {
-        try { PINBALL_ROULETTE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (JUMPING_SURVIVAL && JUMPING_SURVIVAL.isActive && JUMPING_SURVIVAL.isActive()) {
-        try { JUMPING_SURVIVAL.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SHAOLIN_SOCCER && SHAOLIN_SOCCER.isActive && SHAOLIN_SOCCER.isActive()) {
-        try { SHAOLIN_SOCCER.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SPACE_VORTEX && SPACE_VORTEX.isActive && SPACE_VORTEX.isActive()) {
-        try { SPACE_VORTEX.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) {
-        try { SPACEBOUNCE_POWER.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) {
-        try { BASKETBALL.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BTL && BTL.isActive && BTL.isActive()) {
-        try { BTL.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (CHARGE && CHARGE.isActive && CHARGE.isActive()) {
-        try { CHARGE.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) {
-        try { BONK_SUMMER.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) {
-        try { BONK_WINTER.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) {
-        try { ZOMBIE_RUN.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) {
-        try { RACING_GROUND.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (BUHO && BUHO.isActive && BUHO.isActive()) {
-        try { BUHO.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (JUEGO_1234 && JUEGO_1234.isActive && JUEGO_1234.isActive()) {
-        try { JUEGO_1234.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (WAR_CONQUEST && WAR_CONQUEST.isActive && WAR_CONQUEST.isActive()) {
-        try { WAR_CONQUEST.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (TANK_WAR && TANK_WAR.isActive && TANK_WAR.isActive()) {
-        try { TANK_WAR.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) {
-        try { RUN_MINI.onPlayerLeave(room, player); } catch(e){}
-    }
-    if (EARN_EASILY && EARN_EASILY.isActive && EARN_EASILY.isActive()) {
-        try { EARN_EASILY.onPlayerLeave(room, player); } catch(e){}
     }
 
     // Limpiar actividad AFK del jugador que sale
@@ -4543,473 +3349,12 @@ room.onPlayerChat = function(player, message) {
         if (result === false) return false; // Si retorna false, bloquear chat
     }
     
-    if (LALALA.isActive()) {
-        var result = LALALA.onPlayerChat(player);
-        if (result === false) return false;
+    for (var mgi = 0; mgi < minigameModules.length; mgi++) {
+        var mg = minigameModules[mgi];
+        if (mg.module && mg.module.isActive && mg.module.isActive() && mg.module.onPlayerChat) {
+            try { var mgr = mg.module.onPlayerChat(player, message); if (mgr === false) return false; } catch(e) { reportBug('onPlayerChat(' + mg.name + ')', e); }
+        }
     }
-    
-    if (SURVIVAL.isActive()) {
-        var result = SURVIVAL.onPlayerChat(player);
-        if (result === false) return false;
-    }
-    
-    if (METEORS.isActive()) {
-        var result = METEORS.onPlayerChat(player);
-        if (result === false) return false;
-    }
-    
-    if (JUMPING.isActive()) {
-        var result = JUMPING.onPlayerChat(player);
-        if (result === false) return false;
-    }
-    if (CHAIRMIX && CHAIRMIX.isActive && CHAIRMIX.isActive()) {
-        try {
-            var result = CHAIRMIX.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (COVID19 && COVID19.isActive && COVID19.isActive()) {
-        try {
-            var result = COVID19.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (GYMMIX && GYMMIX.isActive && GYMMIX.isActive()) {
-        try {
-            var result = GYMMIX.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) {
-        try {
-            var result = TRIVIA.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (GOT && GOT.isActive && GOT.isActive()) {
-        try {
-            var result = GOT.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-
-    if (WEBSURVIVAL.isActive()) {
-        var result = WEBSURVIVAL.onPlayerChat(player);
-        if (result === false) return false;
-    }
-    
-    if (GALACTIC.isActive()) {
-        var result = GALACTIC.onPlayerChat(player);
-        if (result === false) return false;
-    }
-    // Control de chat de SPACE_MELEE (bloqueo durante explicación)
-    if (SPACE_MELEE && SPACE_MELEE.isActive && SPACE_MELEE.isActive()) {
-        var result = SPACE_MELEE.onPlayerChat(player);
-        if (result === false) return false;
-    }
-    
-    if (GYM.isActive()) {
-        var result = GYM.onPlayerChat(player);
-        if (result === false) return false;
-    }
-    
-    if (MULTIBALLS.isActive()) {
-        var result = MULTIBALLS.onPlayerChat(player);
-        if (result === false) return false;
-    }
-    
-    if (DODGEBALL.isActive()) {
-        var result = DODGEBALL.onPlayerChat(player, message);
-        if (result === false) return false;
-    }
-
-    if (DODGEBALL_V2 && DODGEBALL_V2.isActive && DODGEBALL_V2.isActive()) {
-        try { var r = DODGEBALL_V2.onPlayerChat(room, player, message); if (r === false) return false; } catch(e){}
-    }
-
-    if (ULTRABALL && ULTRABALL.isActive && ULTRABALL.isActive()) {
-        var result = ULTRABALL.onPlayerChat(player, message);
-        if (result === false) return false;
-    }
-    if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) {
-        var result = NUMBERCHAIRS.onPlayerChat(player, message);
-        if (result === false) return false;
-    }
-    if (SURVIVAL_SQ && SURVIVAL_SQ.isActive && SURVIVAL_SQ.isActive()) {
-        var result = SURVIVAL_SQ.onPlayerChat(player, message);
-        if (result === false) return false;
-    }
-    if (COLLISION_TEAM_RACING && COLLISION_TEAM_RACING.isActive && COLLISION_TEAM_RACING.isActive()) {
-        try {
-            var result = COLLISION_TEAM_RACING.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (SUPERMAN && SUPERMAN.isActive && SUPERMAN.isActive()) {
-        var result = SUPERMAN.onPlayerChat(player, message);
-        if (result === false) return false;
-    }
-    if (SPOT_BONK && SPOT_BONK.isActive && SPOT_BONK.isActive()) {
-        try {
-            var result = SPOT_BONK.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (SPACE_CASE && SPACE_CASE.isActive && SPACE_CASE.isActive()) {
-        try {
-            var result = SPACE_CASE.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (AMERICAN_CARRYBALL && AMERICAN_CARRYBALL.isActive && AMERICAN_CARRYBALL.isActive()) {
-        try {
-            var result = AMERICAN_CARRYBALL.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (RING_SURVIVAL && RING_SURVIVAL.isActive && RING_SURVIVAL.isActive()) {
-        try {
-            var result = RING_SURVIVAL.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (BONK_ARENA && BONK_ARENA.isActive && BONK_ARENA.isActive()) {
-        try {
-            var result = BONK_ARENA.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (BONK_BERU && BONK_BERU.isActive && BONK_BERU.isActive()) {
-        try {
-            var result = BONK_BERU.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (ANIMALCHAIRS_WHALE && ANIMALCHAIRS_WHALE.isActive && ANIMALCHAIRS_WHALE.isActive()) {
-        try {
-            var result = ANIMALCHAIRS_WHALE.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (BONK_BERU_HAX && BONK_BERU_HAX.isActive && BONK_BERU_HAX.isActive()) {
-        try {
-            var result = BONK_BERU_HAX.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (COVID2 && COVID2.isActive && COVID2.isActive()) {
-        try {
-            var result = COVID2.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (COVID_NAMAJUNAS && COVID_NAMAJUNAS.isActive && COVID_NAMAJUNAS.isActive()) {
-        try {
-            var result = COVID_NAMAJUNAS.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (DOMINIC_SURVIVOR && DOMINIC_SURVIVOR.isActive && DOMINIC_SURVIVOR.isActive()) {
-        try {
-            var result = DOMINIC_SURVIVOR.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (AIR_HOCKEY && AIR_HOCKEY.isActive && AIR_HOCKEY.isActive()) {
-        try {
-            var result = AIR_HOCKEY.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive && SURVIVOR_VOL17.isActive()) {
-        try {
-            var result = SURVIVOR_VOL17.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (FIT_IN_TREN && FIT_IN_TREN.isActive && FIT_IN_TREN.isActive()) {
-        try {
-            var result = FIT_IN_TREN.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (FITANIC && FITANIC.isActive && FITANIC.isActive()) {
-        try {
-            var result = FITANIC.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (FORTUNATE_RACE && FORTUNATE_RACE.isActive && FORTUNATE_RACE.isActive()) {
-        try {
-            var result = FORTUNATE_RACE.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (KAFA_TOPU && KAFA_TOPU.isActive && KAFA_TOPU.isActive()) {
-        try {
-            var result = KAFA_TOPU.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (KAFA_TOPU_SHADOW && KAFA_TOPU_SHADOW.isActive && KAFA_TOPU_SHADOW.isActive()) {
-        try {
-            var result = KAFA_TOPU_SHADOW.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (KURU_KAFA_BONK && KURU_KAFA_BONK.isActive && KURU_KAFA_BONK.isActive()) {
-        try {
-            var result = KURU_KAFA_BONK.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (LASER_RACE && LASER_RACE.isActive && LASER_RACE.isActive()) {
-        try {
-            var result = LASER_RACE.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (CAPTURE_THE_FLAG && CAPTURE_THE_FLAG.isActive && CAPTURE_THE_FLAG.isActive()) {
-        try {
-            var result = CAPTURE_THE_FLAG.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) {
-        try {
-            var result = COPS_ROBBERS.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (JUMP_QUA && JUMP_QUA.isActive && JUMP_QUA.isActive()) {
-        try {
-            var result = JUMP_QUA.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (BOOMERANG_LEAGUE && BOOMERANG_LEAGUE.isActive && BOOMERANG_LEAGUE.isActive()) {
-        try {
-            var result = BOOMERANG_LEAGUE.onPlayerChat(room, player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (XD_GOALS && XD_GOALS.isActive && XD_GOALS.isActive()) {
-        try {
-            var result = XD_GOALS.onPlayerChat(room, player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (WWECROSS && WWECROSS.isActive && WWECROSS.isActive()) {
-        try {
-            var result = WWECROSS.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (WEB_SURVIVAL_3 && WEB_SURVIVAL_3.isActive && WEB_SURVIVAL_3.isActive()) {
-        try {
-            var result = WEB_SURVIVAL_3.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (TRAMPOLIN && TRAMPOLIN.isActive && TRAMPOLIN.isActive()) {
-        try {
-            var result = TRAMPOLIN.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (SWING_TRAMPOLIN && SWING_TRAMPOLIN.isActive && SWING_TRAMPOLIN.isActive()) {
-        try {
-            var result = SWING_TRAMPOLIN.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (SUPER_GRAVEDAD && SUPER_GRAVEDAD.isActive && SUPER_GRAVEDAD.isActive()) {
-        try {
-            var result = SUPER_GRAVEDAD.onPlayerChat(room, player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (ENDURE_SURVIVAL && ENDURE_SURVIVAL.isActive && ENDURE_SURVIVAL.isActive()) {
-        try {
-            var result = ENDURE_SURVIVAL.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (LUCKY_RACE && LUCKY_RACE.isActive && LUCKY_RACE.isActive()) {
-        try {
-            var result = LUCKY_RACE.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (STREET_RACE && STREET_RACE.isActive && STREET_RACE.isActive()) {
-        try {
-            var result = STREET_RACE.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (SHOOTING_SURVIVAL && SHOOTING_SURVIVAL.isActive && SHOOTING_SURVIVAL.isActive()) {
-        try {
-            var result = SHOOTING_SURVIVAL.onPlayerChat(room, player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (SPACEBOUNCE_RACE && SPACEBOUNCE_RACE.isActive && SPACEBOUNCE_RACE.isActive()) {
-        try {
-            var result = SPACEBOUNCE_RACE.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (RUN_REBOUND && RUN_REBOUND.isActive && RUN_REBOUND.isActive()) {
-        try {
-            var result = RUN_REBOUND.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (MEADOWLANDS && MEADOWLANDS.isActive && MEADOWLANDS.isActive()) {
-        try {
-            var result = MEADOWLANDS.onPlayerChat(player);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (SURVIVOR_VOL17 && SURVIVOR_VOL17.isActive && SURVIVOR_VOL17.isActive()) {
-        try {
-            var result = SURVIVOR_VOL17.onPlayerChat(room, player);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (WIND && WIND.isActive && WIND.isActive()) {
-        try {
-            var result = WIND.onPlayerChat(player);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) {
-        try {
-            var result = IMPOSTOR.onPlayerChat(player, message);
-            if (result === false) return false;
-        } catch(e){}
-    }
-    if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) {
-        try {
-            var pistResult = PISTOLERO.onPlayerChat(player, message);
-            if (pistResult === false) return false;
-        } catch(e){}
-    }
-    if (BONK_MOVABLE && BONK_MOVABLE.isActive && BONK_MOVABLE.isActive()) {
-        try {
-            var bmResult = BONK_MOVABLE.onPlayerChat(player);
-            if (bmResult === false) return false;
-        } catch(e){}
-    }
-    if (ENDURE_BOMBS && ENDURE_BOMBS.isActive && ENDURE_BOMBS.isActive()) {
-        try {
-            var ebResult = ENDURE_BOMBS.onPlayerChat(player);
-            if (ebResult === false) return false;
-        } catch(e){}
-    }
-    if (MUSICAL_FIT && MUSICAL_FIT.isActive && MUSICAL_FIT.isActive()) {
-        try {
-            var mfResult = MUSICAL_FIT.onPlayerChat(player);
-            if (mfResult === false) return false;
-        } catch(e){}
-    }
-    if (NAMAJUNAS_RACE && NAMAJUNAS_RACE.isActive && NAMAJUNAS_RACE.isActive()) {
-        try {
-            var nrResult = NAMAJUNAS_RACE.onPlayerChat(player);
-            if (nrResult === false) return false;
-        } catch(e){}
-    }
-    if (NAMAJUNAS_RACE_2 && NAMAJUNAS_RACE_2.isActive && NAMAJUNAS_RACE_2.isActive()) {
-        try {
-            var nr2Result = NAMAJUNAS_RACE_2.onPlayerChat(player);
-            if (nr2Result === false) return false;
-        } catch(e){}
-    }
-    if (FCT1 && FCT1.isActive && FCT1.isActive()) {
-        try { var fct1R = FCT1.onPlayerChat(player, message); if (fct1R === false) return false; } catch(e){}
-    }
-    if (FIT_IN_GRAVEYARD && FIT_IN_GRAVEYARD.isActive && FIT_IN_GRAVEYARD.isActive()) {
-        try { var figR = FIT_IN_GRAVEYARD.onPlayerChat(player, message); if (figR === false) return false; } catch(e){}
-    }
-    if (FUTBOL_CALLEJERO && FUTBOL_CALLEJERO.isActive && FUTBOL_CALLEJERO.isActive()) {
-        try { var fcR = FUTBOL_CALLEJERO.onPlayerChat(room, player, message); if (fcR === false) return false; } catch(e){}
-    }
-    if (GOL_A_GOL && GOL_A_GOL.isActive && GOL_A_GOL.isActive()) {
-        try { var gagR = GOL_A_GOL.onPlayerChat(player, message); if (gagR === false) return false; } catch(e){}
-    }
-    if (GYM_COLORS && GYM_COLORS.isActive && GYM_COLORS.isActive()) {
-        try { var gcR = GYM_COLORS.onPlayerChat(player, message); if (gcR === false) return false; } catch(e){}
-    }
-    if (GYM9 && GYM9.isActive && GYM9.isActive()) {
-        try { var g9R = GYM9.onPlayerChat(player, message); if (g9R === false) return false; } catch(e){}
-    }
-    if (MATRIX_FIT && MATRIX_FIT.isActive && MATRIX_FIT.isActive()) {
-        try { var mfitR = MATRIX_FIT.onPlayerChat(player, message); if (mfitR === false) return false; } catch(e){}
-    }
-    if (RACE02 && RACE02.isActive && RACE02.isActive()) {
-        try { var r02R = RACE02.onPlayerChat(player, message); if (r02R === false) return false; } catch(e){}
-    }
-    if (PLUM && PLUM.isActive && PLUM.isActive()) {
-        try { var plmR = PLUM.onPlayerChat(player, message); if (plmR === false) return false; } catch(e){}
-    }
-    if (RUN_REBOUND_2 && RUN_REBOUND_2.isActive && RUN_REBOUND_2.isActive()) {
-        try { var rr2R = RUN_REBOUND_2.onPlayerChat(player, message); if (rr2R === false) return false; } catch(e){}
-    }
-    if (SWING_CANNONS && SWING_CANNONS.isActive && SWING_CANNONS.isActive()) {
-        try { var scR = SWING_CANNONS.onPlayerChat(player, message); if (scR === false) return false; } catch(e){}
-    }
-    if (SURVIVAL_INSECT && SURVIVAL_INSECT.isActive && SURVIVAL_INSECT.isActive()) {
-        try { var siR = SURVIVAL_INSECT.onPlayerChat(player, message); if (siR === false) return false; } catch(e){}
-    }
-    if (RUN_LUCK && RUN_LUCK.isActive && RUN_LUCK.isActive()) {
-        try { var rlR = RUN_LUCK.onPlayerChat(player, message); if (rlR === false) return false; } catch(e){}
-    }
-    if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) {
-        try { var prR = PINBALL_ROULETTE.onPlayerChat(player, message); if (prR === false) return false; } catch(e){}
-    }
-    if (JUMPING_SURVIVAL && JUMPING_SURVIVAL.isActive && JUMPING_SURVIVAL.isActive()) {
-        try { var jsR = JUMPING_SURVIVAL.onPlayerChat(player, message); if (jsR === false) return false; } catch(e){}
-    }
-    if (SHAOLIN_SOCCER && SHAOLIN_SOCCER.isActive && SHAOLIN_SOCCER.isActive()) {
-        try { var ssR = SHAOLIN_SOCCER.onPlayerChat(player, message); if (ssR === false) return false; } catch(e){}
-    }
-    if (SPACE_VORTEX && SPACE_VORTEX.isActive && SPACE_VORTEX.isActive()) {
-        try { var svR = SPACE_VORTEX.onPlayerChat(player, message); if (svR === false) return false; } catch(e){}
-    }
-    if (SPACEBOUNCE_POWER && SPACEBOUNCE_POWER.isActive && SPACEBOUNCE_POWER.isActive()) {
-        try { var sbpR = SPACEBOUNCE_POWER.onPlayerChat(room, player, message); if (sbpR === false) return false; } catch(e){}
-    }
-    if (BASKETBALL && BASKETBALL.isActive && BASKETBALL.isActive()) {
-        try { var bballR = BASKETBALL.onPlayerChat(room, player, message); if (bballR === false) return false; } catch(e){}
-    }
-    if (BTL && BTL.isActive && BTL.isActive()) {
-        try { var btlR = BTL.onPlayerChat(player, message); if (btlR === false) return false; } catch(e){}
-    }
-    if (CHARGE && CHARGE.isActive && CHARGE.isActive()) {
-        try { var chR = CHARGE.onPlayerChat(room, player, message); if (chR === false) return false; } catch(e){}
-    }
-    if (RUN_MINI && RUN_MINI.isActive && RUN_MINI.isActive()) {
-        try { var rmR = RUN_MINI.onPlayerChat(player, message); if (rmR === false) return false; } catch(e){}
-    }
-    if (EARN_EASILY && EARN_EASILY.isActive && EARN_EASILY.isActive()) {
-        try { var eeR = EARN_EASILY.onPlayerChat(player, message); if (eeR === false) return false; } catch(e){}
-    }
-    if (BONK_SUMMER && BONK_SUMMER.isActive && BONK_SUMMER.isActive()) {
-        try { var bsR = BONK_SUMMER.onPlayerChat(player, message); if (bsR === false) return false; } catch(e){}
-    }
-    if (BONK_WINTER && BONK_WINTER.isActive && BONK_WINTER.isActive()) {
-        try { var bwR = BONK_WINTER.onPlayerChat(player, message); if (bwR === false) return false; } catch(e){}
-    }
-    if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) {
-        try { var zrR = ZOMBIE_RUN.onPlayerChat(player, message); if (zrR === false) return false; } catch(e){}
-    }
-    if (RACING_GROUND && RACING_GROUND.isActive && RACING_GROUND.isActive()) {
-        try { var rgR = RACING_GROUND.onPlayerChat(player, message); if (rgR === false) return false; } catch(e){}
-    }
-    if (BUHO && BUHO.isActive && BUHO.isActive()) {
-        try { var buhoR = BUHO.onPlayerChat(player, message); if (buhoR === false) return false; } catch(e){}
-    }
-
     // Sistema de etiquetas: mostrar tag antes del nombre
     // Solo para mensajes normales (no comandos)
     // NOTA: debe ir DESPUES de los checks de modulos para que el chat
@@ -5536,10 +3881,16 @@ room.onPlayerChat = function(player, message) {
             "!clan - Sistema de clanes\n" +
             "!topclanes - Ranking de clanes\n" +
             "!fix - Votar para reiniciar si hay bug\n" +
-            "!reiniciar - Reiniciar bot (solo admin)",
+            "!reiniciar - Reiniciar bot (solo admin)\n" +
+            "!version - Ver versión del bot",
             player.id,
             0x00FF00
         );
+        return false;
+    }
+
+    if (message === "!version") {
+        room.sendAnnouncement("📦 Minijuegos_Isagi v" + BOT_VERSION, player.id, 0x00BFFF);
         return false;
     }
 
@@ -6032,62 +4383,10 @@ room.onPlayerChat = function(player, message) {
             return false;
         }
         var escogerArg = message.substring(8).trim();
-        var escogerGames = [
-            {n:'LALALA', d:'LALALA', s:startLALALA}, {n:'SURVIVAL', d:'Survival', s:startSURVIVAL},
-            {n:'METEORS', d:'Meteors', s:startMETEORS}, {n:'JUMPING', d:'Jumping Arena', s:startJUMPING},
-            {n:'WEBSURVIVAL', d:'Web Survival', s:startWEBSURVIVAL}, {n:'GALACTIC', d:'Galactic Fit', s:startGALACTIC},
-            {n:'SPACE_MELEE', d:'Space Melee', s:startSPACE_MELEE}, {n:'GYM', d:'Gym', s:startGYM},
-            {n:'MULTIBALLS', d:'MultiBalls', s:startMULTIBALLS}, {n:'DODGEBALL', d:'Dodgeball', s:startDODGEBALL},
-            {n:'DODGEBALL_V2', d:'Dodgeball V2', s:startDODGEBALL_V2}, {n:'SUPERMAN', d:'Superman Chair', s:startSUPERMAN},
-            {n:'ULTRABALL', d:'Ultraball', s:startULTRABALL}, {n:'NUMBERCHAIRS', d:'Number Chairs', s:startNUMBERCHAIRS},
-            {n:'SURVIVAL_SQ', d:'Survival Square', s:startSURVIVAL_SQ}, {n:'COLLISION', d:'Collision Racing', s:startCOLLISION},
-            {n:'SPOT_BONK', d:'Spot Bonk', s:startSPOT_BONK}, {n:'CHAIRMIX', d:'ChairMix', s:startCHAIRMIX},
-            {n:'COVID19', d:'COVID-19', s:startCOVID19}, {n:'GYMMIX', d:'GymMix', s:startGYMMIX},
-            {n:'TRIVIA', d:'Trivia', s:startTRIVIA},
-            {n:'SPACE_CASE', d:'Space Case', s:startSPACE_CASE}, {n:'AMERICAN_CARRYBALL', d:'American Carryball', s:startAMERICAN_CARRYBALL},
-            {n:'RING_SURVIVAL', d:'Ring Survival', s:startRING_SURVIVAL}, {n:'BONK_ARENA', d:'Bonk Arena', s:startBONK_ARENA},
-            {n:'BONK_BERU', d:'Bonk Beru', s:startBONK_BERU}, {n:'ANIMALCHAIRS_WHALE', d:'AnimalChairs Whale', s:startANIMALCHAIRS_WHALE},
-            {n:'BONK_BERU_HAX', d:'Bonk Beru Hax', s:startBONK_BERU_HAX}, {n:'COVID2', d:'COVID-2 Survival', s:startCOVID2},
-            {n:'COVID_NAMAJUNAS', d:'COVID Namajunas', s:startCOVID_NAMAJUNAS},
-            {n:'FIT_IN_TREN', d:'Fit in Tren', s:startFIT_IN_TREN}, {n:'FITANIC', d:'Fitanic', s:startFITANIC},
-            {n:'FORTUNATE_RACE', d:'Fortunate Race', s:startFORTUNATE_RACE}, {n:'KAFA_TOPU', d:'Kafa Topu', s:startKAFA_TOPU},
-            {n:'KAFA_TOPU_SHADOW', d:'Kafa Topu Shadow', s:startKAFA_TOPU_SHADOW}, {n:'KURU_KAFA_BONK', d:'Kuru Kafa Bonk', s:startKURU_KAFA_BONK},
-            {n:'LASER_RACE', d:'Laser Race', s:startLASER_RACE},
-            {n:'JUMP_QUA', d:'Jump', s:startJUMP_QUA},
-            {n:'BOOMERANG_LEAGUE', d:'Boomerang League', s:startBOOMERANG_LEAGUE}, {n:'XD_GOALS', d:'XD', s:startXD_GOALS},
-            {n:'WWECROSS', d:'WWECross', s:startWWECROSS}, {n:'WEB_SURVIVAL_3', d:'Web Survival III', s:startWEB_SURVIVAL_3},
-            {n:'TRAMPOLIN', d:'Trampolin', s:startTRAMPOLIN}, {n:'SWING_TRAMPOLIN', d:'Swing Trampolin', s:startSWING_TRAMPOLIN},
-            {n:'SUPER_GRAVEDAD', d:'Super Gravedad x4', s:startSUPER_GRAVEDAD}, {n:'ENDURE_SURVIVAL', d:'Endure Survival 2', s:startENDURE_SURVIVAL},
-            {n:'WIND', d:'Wind', s:startWIND},
-            {n:'IMPOSTOR', d:'Impostor', s:startIMPOSTOR}, {n:'PISTOLERO', d:'Pistolero', s:startPISTOLERO},
-            {n:'BONK_MOVABLE', d:'Bonk Movable', s:startBONK_MOVABLE}, {n:'ENDURE_BOMBS', d:'Endure Bombs', s:startENDURE_BOMBS},
-            {n:'MUSICAL_FIT', d:'Musical Fit', s:startMUSICAL_FIT},
-            {n:'NAMAJUNAS_RACE', d:'Namajunas Race', s:startNAMAJUNAS_RACE}, {n:'NAMAJUNAS_RACE_2', d:'Namajunas Race 2', s:startNAMAJUNAS_RACE_2},
-            {n:'FCT1', d:'FCT 1', s:startFCT1}, {n:'FIT_IN_GRAVEYARD', d:'Fit in Graveyard', s:startFIT_IN_GRAVEYARD},
-            {n:'FUTBOL_CALLEJERO', d:'Futbol Callejero', s:startFUTBOL_CALLEJERO}, {n:'GYM_COLORS', d:'Gym Colors', s:startGYM_COLORS},
-            {n:'GYM9', d:'Gym 9', s:startGYM9}, {n:'MATRIX_FIT', d:'Matrix Fit', s:startMATRIX_FIT},
-            {n:'RACE02', d:'Race 02', s:startRACE02}, {n:'ZOMBIE_RUN', d:'Zombie Run', s:startZOMBIE_RUN},
-            {n:'PLUM', d:'Plum', s:startPLUM}, {n:'RUN_REBOUND_2', d:'Run Rebound 2', s:startRUN_REBOUND_2},
-            {n:'GOT', d:'Game of Thrones', s:startGOT}, {n:'CAPTURE_THE_FLAG', d:'Capture the Flag', s:startCAPTURE_THE_FLAG},
-            {n:'LUCKY_RACE', d:'Lucky Race', s:startLUCKY_RACE}, {n:'STREET_RACE', d:'Street Race', s:startSTREET_RACE},
-            {n:'SHOOTING_SURVIVAL', d:'Shooting Survival', s:startSHOOTING_SURVIVAL}, {n:'SPACEBOUNCE_RACE', d:'Spacebounce Race', s:startSPACEBOUNCE_RACE},
-            {n:'RUN_REBOUND', d:'Run Rebound', s:startRUN_REBOUND}, {n:'MEADOWLANDS', d:'Meadowlands', s:startMEADOWLANDS},
-            {n:'SPACEBOUNCE_POWER', d:'Spacebounce Power', s:startSPACEBOUNCE_POWER},
-            {n:'SHAOLIN_SOCCER', d:'Shaolin Soccer', s:startSHAOLIN_SOCCER},
-            {n:'BASKETBALL', d:'Basketball', s:startBASKETBALL}, {n:'BTL', d:'B.T.L', s:startBTL}, {n:'CHARGE', d:'Charge', s:startCHARGE},
-            {n:'BONK_SUMMER', d:'Bonk Summer', s:startBONK_SUMMER}, {n:'BONK_WINTER', d:'Bonk Winter', s:startBONK_WINTER},
-            {n:'SWING_CANNONS', d:'Swing Cannons', s:startSWING_CANNONS}, {n:'SURVIVAL_INSECT', d:'Survival Insect', s:startSURVIVAL_INSECT},
-            {n:'RUN_LUCK', d:'Run Luck', s:startRUN_LUCK}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette', s:startPINBALL_ROULETTE},
-            {n:'JUMPING_SURVIVAL', d:'Jumping Survival', s:startJUMPING_SURVIVAL},
-            {n:'RACING_GROUND', d:'Racing Ground', s:startRACING_GROUND},
-            {n:'BUHO', d:'Buho', s:startBUHO},
-            {n:'JUEGO_1234', d:'Juego 1234', s:startJUEGO_1234},
-            {n:'WAR_CONQUEST', d:'War of Conquest', s:startWAR_CONQUEST},
-            {n:'CHARGE', d:'Charge', s:startCHARGE},
-            {n:'RUN_MINI', d:'Run Mini', s:startRUN_MINI},
-            {n:'EARN_EASILY', d:'Earn Easily', s:startEARN_EASILY},
-            {n:'TANK_WAR', d:'Tank War', s:startTANK_WAR}
-        ];
+        var escogerGames = [];
+        minigameModules.forEach(function(g) {
+            escogerGames.push({n: g.name, d: g.displayName, s: function() { startMinigame(g); }});
+        });
         if (!escogerArg || escogerArg.toLowerCase() === 'lista') {
             var eThird = Math.ceil(escogerGames.length / 3);
             var ecol1 = []; var ecol2 = []; var ecol3 = [];
@@ -6181,59 +4480,10 @@ room.onPlayerChat = function(player, message) {
     if (message.startsWith('!elegir')) {
         var elegirArg = message.substring(7).trim();
         // Lista de juegos con nombre interno y nombre bonito
-        var elegirGames = [
-            {n:'LALALA', d:'LALALA'}, {n:'SURVIVAL', d:'Survival'}, {n:'METEORS', d:'Meteors'},
-            {n:'JUMPING', d:'Jumping Arena'}, {n:'WEBSURVIVAL', d:'Web Survival'}, {n:'GALACTIC', d:'Galactic Fit'},
-            {n:'SPACE_MELEE', d:'Space Melee'}, {n:'GYM', d:'Gym'}, {n:'MULTIBALLS', d:'MultiBalls'},
-            {n:'DODGEBALL', d:'Dodgeball'}, {n:'DODGEBALL_V2', d:'Dodgeball V2'}, {n:'SUPERMAN', d:'Superman Chair'}, {n:'ULTRABALL', d:'Ultraball'},
-            {n:'NUMBERCHAIRS', d:'Number Chairs'}, {n:'SURVIVAL_SQ', d:'Survival Square'},
-            {n:'COLLISION', d:'Collision Racing'}, {n:'SPOT_BONK', d:'Spot Bonk'},
-            {n:'CHAIRMIX', d:'ChairMix'}, {n:'COVID19', d:'COVID-19'}, {n:'GYMMIX', d:'GymMix'},
-            {n:'TRIVIA', d:'Trivia'}, {n:'SPACE_CASE', d:'Space Case'},
-            {n:'AMERICAN_CARRYBALL', d:'American Carryball'}, {n:'RING_SURVIVAL', d:'Ring Survival'},
-            {n:'BONK_ARENA', d:'Bonk Arena'}, {n:'BONK_BERU', d:'Bonk Beru'},
-            {n:'ANIMALCHAIRS_WHALE', d:'AnimalChairs Whale'}, {n:'BONK_BERU_HAX', d:'Bonk Beru Hax'},
-            {n:'COVID2', d:'COVID-2 Survival'}, {n:'COVID_NAMAJUNAS', d:'COVID Namajunas'}, {n:'FIT_IN_TREN', d:'Fit in Tren'},
-            {n:'FITANIC', d:'Fitanic'}, {n:'FORTUNATE_RACE', d:'Fortunate Race'},
-            {n:'KAFA_TOPU', d:'Kafa Topu'}, {n:'KAFA_TOPU_SHADOW', d:'Kafa Topu Shadow'},
-            {n:'KURU_KAFA_BONK', d:'Kuru Kafa Bonk'}, {n:'LASER_RACE', d:'Laser Race'},
-            {n:'JUMP_QUA', d:'Jump'}, {n:'BOOMERANG_LEAGUE', d:'Boomerang League'},
-            {n:'XD_GOALS', d:'XD'}, {n:'WWECROSS', d:'WWECross'},
-            {n:'WEB_SURVIVAL_3', d:'Web Survival III'}, {n:'TRAMPOLIN', d:'Trampolin'},
-            {n:'SWING_TRAMPOLIN', d:'Swing Trampolin'}, {n:'SUPER_GRAVEDAD', d:'Super Gravedad x4'},
-            {n:'ENDURE_SURVIVAL', d:'Endure Survival 2'},
-            {n:'WIND', d:'Wind'},
-            {n:'IMPOSTOR', d:'Impostor'},
-            {n:'PISTOLERO', d:'Pistolero'},
-            {n:'BONK_MOVABLE', d:'Bonk Movable'},
-            {n:'ENDURE_BOMBS', d:'Endure Bombs'},
-            {n:'MUSICAL_FIT', d:'Musical Fit'},
-            {n:'NAMAJUNAS_RACE', d:'Namajunas Race'},
-            {n:'NAMAJUNAS_RACE_2', d:'Namajunas Race 2'},
-            {n:'FCT1', d:'FCT 1'}, {n:'FIT_IN_GRAVEYARD', d:'Fit in Graveyard'},
-            {n:'FUTBOL_CALLEJERO', d:'Futbol Callejero'}, {n:'GYM_COLORS', d:'Gym Colors'},
-            {n:'GYM9', d:'Gym 9'}, {n:'MATRIX_FIT', d:'Matrix Fit'},
-            {n:'RACE02', d:'Race 02'}, {n:'ZOMBIE_RUN', d:'Zombie Run'},
-            {n:'PLUM', d:'Plum'}, {n:'RUN_REBOUND_2', d:'Run Rebound 2'},
-            {n:'GOT', d:'Game of Thrones'}, {n:'CAPTURE_THE_FLAG', d:'Capture the Flag'},
-            {n:'LUCKY_RACE', d:'Lucky Race'}, {n:'STREET_RACE', d:'Street Race'},
-            {n:'SHOOTING_SURVIVAL', d:'Shooting Survival'}, {n:'SPACEBOUNCE_RACE', d:'Spacebounce Race'},
-            {n:'RUN_REBOUND', d:'Run Rebound'}, {n:'MEADOWLANDS', d:'Meadowlands'},
-            {n:'SPACEBOUNCE_POWER', d:'Spacebounce Power'},
-            {n:'SHAOLIN_SOCCER', d:'Shaolin Soccer'},
-            {n:'BASKETBALL', d:'Basketball'}, {n:'BTL', d:'B.T.L'},
-            {n:'BONK_SUMMER', d:'Bonk Summer'}, {n:'BONK_WINTER', d:'Bonk Winter'},
-            {n:'SWING_CANNONS', d:'Swing Cannons'}, {n:'SURVIVAL_INSECT', d:'Survival Insect'},
-            {n:'RUN_LUCK', d:'Run Luck'}, {n:'PINBALL_ROULETTE', d:'Pinball Roulette'},
-            {n:'JUMPING_SURVIVAL', d:'Jumping Survival'},
-            {n:'RACING_GROUND', d:'Racing Ground'},
-            {n:'BUHO', d:'Buho'},
-            {n:'JUEGO_1234', d:'Juego 1234'},
-            {n:'WAR_CONQUEST', d:'War of Conquest'},
-            {n:'CHARGE', d:'Charge'},
-            {n:'RUN_MINI', d:'Run Mini'}, {n:'EARN_EASILY', d:'Earn Easily'},
-            {n:'TANK_WAR', d:'Tank War'}
-        ];
+        var elegirGames = [];
+        minigameModules.forEach(function(g) {
+            elegirGames.push({n: g.name, d: g.displayName});
+        });
         if (!elegirArg || elegirArg.toLowerCase() === 'lista') {
             var third = Math.ceil(elegirGames.length / 3);
             var col1 = []; var col2 = []; var col3 = [];
