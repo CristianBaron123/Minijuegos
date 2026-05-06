@@ -1058,17 +1058,35 @@ var minigameModules = [
 // Función genérica para iniciar minijuego
 function startMinigame(gameEntry) {
     botState.gameActive = true;
+    botState.minigameStartTime = Date.now();
     var mod = gameEntry.module;
     if (typeof mod !== 'undefined' && mod.start) {
-        mod.start(room, function(winner) {
-            if (typeof showGameStats === 'function') showGameStats(mod);
-            if (winner) {
-                loadLuckyMap(winner);
-            } else {
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
+        // Timeout de seguridad: si el juego no termina en 5 minutos, forzar reinicio
+        if (botState.gameSafetyTimeout) clearTimeout(botState.gameSafetyTimeout);
+        botState.gameSafetyTimeout = setTimeout(function() {
+            if (botState.gameActive) {
+                reportBug('startMinigame.safetyTimeout', gameEntry.name + ' no termino en 5 minutos, forzando reinicio');
+                forceStopAllGames();
+                setTimeout(checkAndStart, 3000);
             }
-        });
+        }, 300000);
+        try {
+            mod.start(room, function(winner) {
+                if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
+                if (typeof showGameStats === 'function' && mod) showGameStats(mod);
+                if (winner) {
+                    loadLuckyMap(winner);
+                } else {
+                    botState.gameActive = false;
+                    setTimeout(checkAndStart, 5000);
+                }
+            });
+        } catch(e) {
+            reportBug('startMinigame(' + gameEntry.name + ')', e);
+            if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
+            botState.gameActive = false;
+            setTimeout(checkAndStart, 5000);
+        }
     } else {
         botState.gameActive = false;
         setTimeout(checkAndStart, 5000);
@@ -1340,64 +1358,76 @@ function startWIND() {
 
 function startIMPOSTOR() {
     botState.gameActive = true;
+    botState.minigameStartTime = Date.now();
+    if (botState.gameSafetyTimeout) clearTimeout(botState.gameSafetyTimeout);
+    botState.gameSafetyTimeout = setTimeout(function() {
+        if (botState.gameActive) {
+            reportBug('startIMPOSTOR.safetyTimeout', 'IMPOSTOR no termino en 5 minutos');
+            forceStopAllGames();
+            setTimeout(checkAndStart, 3000);
+        }
+    }, 300000);
 
-    // Guardar y quitar admin a admins temporales durante el juego
     var savedTempAdmins = botState.tempAdmins.slice();
     for (var ta = 0; ta < savedTempAdmins.length; ta++) {
         var taId = savedTempAdmins[ta];
         try { room.setPlayerAdmin(taId, false); } catch(e) {}
-        room.sendAnnouncement('⚠️ Tu admin ha sido removido temporalmente durante IMPOSTOR. Se te devolverá al terminar.', taId, 0xFFFF00, 'bold');
+        room.sendAnnouncement('\u26A0\uFE0F Tu admin ha sido removido temporalmente durante IMPOSTOR. Se te devolver\u00E1 al terminar.', taId, 0xFFFF00, 'bold');
     }
 
-    if (typeof IMPOSTOR !== 'undefined') {
-        IMPOSTOR.start(room, function(result) {
-            // Restaurar admin a los temp admins que sigan conectados
-            for (var ra = 0; ra < savedTempAdmins.length; ra++) {
-                var raId = savedTempAdmins[ra];
-                var raPlayer = room.getPlayer(raId);
-                if (raPlayer && botState.tempAdmins.indexOf(raId) !== -1) {
-                    try { room.setPlayerAdmin(raId, true); } catch(e) {}
-                    room.sendAnnouncement('👑 Tu admin temporal ha sido restaurado.', raId, 0xFFD700, 'bold');
-                }
-            }
-
-            if (result && result.type === 'inocentes_win') {
-                // Dar $2.000 a cada inocente vivo
-                for (var i = 0; i < result.inocenteIds.length; i++) {
-                    var pAuth = botState.authMap[result.inocenteIds[i]];
-                    if (pAuth && typeof window.__dbAddBalance === 'function') {
-                        try { window.__dbAddBalance(pAuth, result.inocenteNames[i], 2000); } catch(e) {}
+    if (typeof IMPOSTOR !== 'undefined' && IMPOSTOR.start) {
+        try {
+            IMPOSTOR.start(room, function(result) {
+                if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
+                for (var ra = 0; ra < savedTempAdmins.length; ra++) {
+                    var raId = savedTempAdmins[ra];
+                    var raPlayer = room.getPlayer(raId);
+                    if (raPlayer && botState.tempAdmins.indexOf(raId) !== -1) {
+                        try { room.setPlayerAdmin(raId, true); } catch(e) {}
+                        room.sendAnnouncement('\uD83D\uDC51 Tu admin temporal ha sido restaurado.', raId, 0xFFD700, 'bold');
                     }
                 }
-            } else if (result && result.type === 'impostor_win') {
-                // Dar premio a los impostores (array)
-                var impPrize = (result.impostorIds && result.impostorIds.length === 2) ? 5000 : 10000;
-                if (result.impostorIds) {
-                    for (var ii = 0; ii < result.impostorIds.length; ii++) {
-                        var impAuth = botState.authMap[result.impostorIds[ii]];
-                        var impName = result.impostorNames ? result.impostorNames[ii] : 'Impostor';
-                        if (impAuth && typeof window.__dbAddBalance === 'function') {
-                            try { window.__dbAddBalance(impAuth, impName, impPrize); } catch(e) {}
+
+                try {
+                    if (result && result.type === 'inocentes_win') {
+                        for (var i = 0; i < result.inocenteIds.length; i++) {
+                            var pAuth = botState.authMap[result.inocenteIds[i]];
+                            if (pAuth && typeof window.__dbAddBalance === 'function') {
+                                try { window.__dbAddBalance(pAuth, result.inocenteNames[i], 2000); } catch(e) {}
+                            }
+                        }
+                    } else if (result && result.type === 'impostor_win') {
+                        var impPrize = (result.impostorIds && result.impostorIds.length === 2) ? 5000 : 10000;
+                        if (result.impostorIds) {
+                            for (var ii = 0; ii < result.impostorIds.length; ii++) {
+                                var impAuth = botState.authMap[result.impostorIds[ii]];
+                                var impName = result.impostorNames ? result.impostorNames[ii] : 'Impostor';
+                                if (impAuth && typeof window.__dbAddBalance === 'function') {
+                                    try { window.__dbAddBalance(impAuth, impName, impPrize); } catch(e) {}
+                                }
+                            }
+                        }
+                    } else if (result && result.type === 'bufon_win') {
+                        var bufonAuth = botState.authMap[result.bufonId];
+                        if (bufonAuth && typeof window.__dbAddBalance === 'function') {
+                            try { window.__dbAddBalance(bufonAuth, result.bufonName, 10000); } catch(e) {}
                         }
                     }
-                }
-            } else if (result && result.type === 'bufon_win') {
-                // Dar premio al bufon ($10.000)
-                var bufonAuth = botState.authMap[result.bufonId];
-                if (bufonAuth && typeof window.__dbAddBalance === 'function') {
-                    try { window.__dbAddBalance(bufonAuth, result.bufonName, 10000); } catch(e) {}
-                }
-            }
+                } catch(e) { reportBug('IMPOSTOR.premios', e); }
+
+                botState.gameActive = false;
+                setTimeout(checkAndStart, 5000);
+            });
+        } catch(e) {
+            reportBug('startIMPOSTOR', e);
+            if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
             botState.gameActive = false;
             setTimeout(checkAndStart, 5000);
-        });
+        }
     } else {
-        // Restaurar admins si el módulo no existe
         for (var rb = 0; rb < savedTempAdmins.length; rb++) {
             var rbPlayer = room.getPlayer(savedTempAdmins[rb]);
-            if (rbPlayer) {
-                try { room.setPlayerAdmin(savedTempAdmins[rb], true); } catch(e) {}
-            }
+            if (rbPlayer) { try { room.setPlayerAdmin(savedTempAdmins[rb], true); } catch(e) {} }
         }
         botState.gameActive = false;
         setTimeout(checkAndStart, 5000);
@@ -2114,6 +2144,7 @@ function forceStopAllGames() {
     try { room.stopGame(); } catch(e){}
     room.onTeamGoal = gameGoalHandler;
     botState.gameActive = false;
+    if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
     if (botState.startTimeout) {
         clearTimeout(botState.startTimeout);
         botState.startTimeout = null;
