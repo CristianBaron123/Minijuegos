@@ -492,6 +492,39 @@ async function stopSala(salaId) {
     addLog(s, 'Sala apagada', true);
 }
 
+async function maintenanceSala(salaId) {
+    const s = salas[salaId];
+    if (!s) throw new Error('Sala no encontrada');
+    if (!s.page) throw new Error('La sala no esta corriendo');
+
+    addLog(s, 'Modo mantenimiento: kickeando jugadores...', true);
+    try {
+        await s.page.evaluate(() => {
+            if (typeof room !== 'undefined') {
+                room.sendAnnouncement('🔧 MANTENIMIENTO PROGRAMADO - La sala se reiniciará en unos momentos para aplicar actualizaciones. ¡Vuelvan pronto!', null, 0xFF6600, 'bold', 2);
+            }
+        });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await s.page.evaluate(() => {
+            if (typeof room !== 'undefined') {
+                var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+                players.forEach(function(p) {
+                    try { room.kickPlayer(p.id, '🔧 Mantenimiento - Volvemos pronto', false); } catch(e) {}
+                });
+            }
+        });
+        addLog(s, 'Jugadores kickeados. Esperando 3s antes de apagar...', true);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+    } catch(e) {
+        addLog(s, 'Error kickeando: ' + e.message, true);
+    }
+
+    try { await s.page.close(); } catch(e) {}
+    s.page = null;
+    s.status = 'stopped';
+    addLog(s, 'Sala apagada (mantenimiento completo)', true);
+}
+
 function addLog(s, text, forceConsole) {
     s.logs.push({ time: Date.now(), text });
     if (s.logs.length > MAX_LOGS) s.logs.shift();
@@ -546,6 +579,16 @@ app.post('/api/stop', async (req, res) => {
     try {
         await stopSala(salaId);
         res.json({ ok: true, message: 'Sala apagada' });
+    } catch(e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+app.post('/api/maintenance', async (req, res) => {
+    const { salaId } = req.body;
+    try {
+        await maintenanceSala(salaId);
+        res.json({ ok: true, message: 'Mantenimiento completado, sala apagada' });
     } catch(e) {
         res.status(400).json({ error: e.message });
     }
