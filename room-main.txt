@@ -3051,7 +3051,7 @@ room.onPlayerAdminChange = function(changedPlayer, byPlayer) {
     // Si alguien recibió admin y NO es creador, quitárselo
     if (changedPlayer.admin) {
         var changedAuth = getAuth(changedPlayer);
-        if (!changedAuth || CREATOR_AUTHS.indexOf(changedAuth) === -1) {
+        if (!changedAuth || (CREATOR_AUTHS.indexOf(changedAuth) === -1 && MODERATOR_AUTHS.indexOf(changedAuth) === -1)) {
             // Permitir temp admins de Lucky (solo cosmético, ya están limitados)
             if (botState.tempAdmins.indexOf(changedPlayer.id) !== -1) return;
             // Permitir KING
@@ -3096,17 +3096,8 @@ room.onPlayerTeamChange = function(changedPlayer, byPlayer) {
         if (changedPlayer.team !== 0) {
             try { room.setPlayerTeam(changedPlayer.id, 0); } catch(e){}
             try { room.sendAnnouncement('👻 No puedes unirte al equipo: estás bloqueado para el siguiente minijuego', changedPlayer.id, 0xFF6600, 'bold'); } catch(e){}
-            // Notificar a todos los módulos activos para que quiten al jugador de su lista interna
-            var _mods = [LALALA, SURVIVAL, METEORS, JUMPING, WEBSURVIVAL, GALACTIC, GYM, MULTIBALLS,
-                DODGEBALL, SUPERMAN, ULTRABALL, NUMBERCHAIRS, SURVIVAL_SQ, COLLISION_TEAM_RACING,
-                SPOT_BONK, CHAIRMIX, COVID19, GYMMIX, TRIVIA, SPACE_CASE, SPACE_MELEE,
-                FCT1, FIT_IN_GRAVEYARD, FUTBOL_CALLEJERO, GYM_COLORS, GYM9, MATRIX_FIT, RACE02, ZOMBIE_RUN,
-                AMERICAN_CARRYBALL, RING_SURVIVAL, BONK_ARENA, BONK_BERU,
-                ANIMALCHAIRS_WHALE, BONK_BERU_HAX, COVID2, COVID_NAMAJUNAS, DOMINIC_SURVIVOR, AIR_HOCKEY,
-                FIT_IN_TREN, FITANIC, FORTUNATE_RACE, KAFA_TOPU, KAFA_TOPU_SHADOW,
-                KURU_KAFA_BONK, LASER_RACE, IMPOSTOR, RUN_MINI, EARN_EASILY];
-            _mods.forEach(function(m) {
-                try { if (m && m.isActive && m.isActive() && m.onPlayerLeave) m.onPlayerLeave(room, changedPlayer); } catch(e){}
+            minigameModules.forEach(function(g) {
+                try { if (g.module && g.module.isActive && g.module.isActive() && g.module.onPlayerLeave) g.module.onPlayerLeave(room, changedPlayer); } catch(e){}
             });
         }
         return;
