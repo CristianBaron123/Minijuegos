@@ -56,6 +56,7 @@ function start(room, onGameEnd) {
     gameState.players = players.map(function(p) { return { id: p.id, name: p.name }; });
     gameState.eliminated = [];
     gameState.hasBeenInBounds = {};
+    gameState.gracePeriod = true;
 
     shuffleTeams(room);
 
@@ -84,6 +85,7 @@ function start(room, onGameEnd) {
             try { room.pauseGame(false); } catch(e){}
             gameState.chatBlocked = false;
             room.sendAnnouncement('🟢 ¡COMIENZA WWECROSS!', null, 0x00FF00, 'bold', 2);
+            gameState.gracePeriod = false;
         }, config.explanationMs);
     }, 1500);
 
@@ -113,8 +115,7 @@ function checkPlayers(room, onGameEnd) {
         if (!pos) return;
 
         if (pos.x < config.minX || pos.x > config.maxX || pos.y < config.minY || pos.y > config.maxY) {
-            // Protección de spawn
-            if (!gameState.hasBeenInBounds[p.id]) return;
+            if (gameState.gracePeriod && !gameState.hasBeenInBounds[p.id]) return;
             gameState.eliminated.push(p.id);
             try { room.setPlayerTeam(p.id, 0); } catch(e){}
             var remaining = gameState.players.length - gameState.eliminated.length;
@@ -163,6 +164,7 @@ function stop(room) {
     gameState.players = [];
     gameState.eliminated = [];
     gameState.chatBlocked = false;
+    gameState.gracePeriod = true;
     try { room.stopGame(); } catch(e){}
 }
 

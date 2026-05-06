@@ -8,7 +8,7 @@ const db = require('./db');
 // ============================================
 // VERSIÓN DEL BOT — Incrementar al subir cambios
 // ============================================
-const BOT_VERSION = '2.1.1';
+const BOT_VERSION = '2.1.2';
 
 // Token de Haxball (puede venir de variable de entorno o hardcoded)
 const HAXBALL_TOKEN = process.env.HAXBALL_TOKEN || "thr1.AAAAAGl_okIBMBkfgD5Nuw._Rjq_nJJiH4";
