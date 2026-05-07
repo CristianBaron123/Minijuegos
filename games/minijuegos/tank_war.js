@@ -166,7 +166,7 @@ function runTournament(room) {
                 if (gameState.players.length === 1) {
                     var wp = room.getPlayer(gameState.players[0]);
                     if (wp && gameState.callback) { var cb = gameState.callback; gameState.callback = null; stop(room); cb({ id: wp.id, name: wp.name }); }
-                    else { stop(room); }
+                    else { var cb2 = gameState.callback; gameState.callback = null; stop(room); if (cb2) cb2(null); }
                 } else { var cb = gameState.callback; gameState.callback = null; stop(room); if (cb) cb(null); }
                 return;
             }
@@ -190,28 +190,6 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         playerIds = validIds;
         if (playerIds.length < 2) { resolve(null); return; }
 
-        // Limitar a jugadores disponibles (mitad por equipo)
-        var maxPlayers = playerIds.length;
-        if (playerIds.length > maxPlayers) {
-            var extras = playerIds.splice(maxPlayers);
-            for (var ei = 0; ei < extras.length; ei++) {
-                if (gameState.spectatorPool.indexOf(extras[ei]) === -1) gameState.spectatorPool.push(extras[ei]);
-                try { room.setPlayerTeam(extras[ei], 0); } catch(e){}
-            }
-        }
-
-        if ((playerIds.length % 2) === 1 && gameState.spectatorPool.length > 0) {
-            for (var si = 0; si < gameState.spectatorPool.length; si++) {
-                var sp = gameState.spectatorPool[si];
-                if (room.getPlayer(sp) && playerIds.length < maxPlayers) {
-                    gameState.spectatorPool.splice(si, 1);
-                    playerIds.push(sp);
-                    if (gameState.players.indexOf(sp) === -1) gameState.players.push(sp);
-                    room.sendAnnouncement('ℹ️ Se trajo un jugador de espectador para equilibrar equipos.', null, 0xFFFF00);
-                    break;
-                }
-            }
-        }
         if ((playerIds.length % 2) === 1) {
             var moveIdx = Math.floor(Math.random() * playerIds.length);
             var movedToSpec = playerIds.splice(moveIdx, 1)[0];
@@ -339,19 +317,6 @@ function onPlayerLeave(room, player) {
     if (idx !== -1) gameState.players.splice(idx, 1);
     var idx2 = gameState.spectatorPool.indexOf(player.id);
     if (idx2 !== -1) gameState.spectatorPool.splice(idx2, 1);
-    if (gameState.active && gameState.players.length >= 2) {
-        var _t1 = gameState.players.filter(function(id) { var p = room.getPlayer(id); return p && p.team === 1; });
-        var _t2 = gameState.players.filter(function(id) { var p = room.getPlayer(id); return p && p.team === 2; });
-        if (Math.abs(_t1.length - _t2.length) >= 2) {
-            var _big = _t1.length > _t2.length ? _t1 : _t2;
-            var _toSpec = _big[Math.floor(Math.random() * _big.length)];
-            var _si = gameState.players.indexOf(_toSpec); if (_si !== -1) gameState.players.splice(_si, 1);
-            gameState.spectatorPool.push(_toSpec);
-            var _sp = room.getPlayer(_toSpec);
-            try { room.setPlayerTeam(_toSpec, 0); } catch(e){}
-            room.sendAnnouncement('ℹ️ ' + (_sp ? _sp.name : '?') + ' pasa a espectadores por desbalance.', null, 0xFFFF00);
-        }
-    }
     if (gameState.active && gameState.players.length === 1) {
         var winnerId = gameState.players[0];
         var winner = room.getPlayerList().find(function(p) { return p.id === winnerId; });
