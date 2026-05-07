@@ -5447,6 +5447,7 @@ room.onPlayerChat = function(player, message) {
         try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Zombie Run', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Policias y Ladrones', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (SPACE_CASE && SPACE_CASE.isActive && SPACE_CASE.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Space Case', player.id, 0xFF6600); return false; } } catch(e){}
         var invCtrlTargetId = parseInt(invCtrlParts[1].replace('#', ''));
         if (isNaN(invCtrlTargetId)) { room.sendAnnouncement('⚠️ ID invalido', player.id, 0xFF6600); return false; }
         if (invCtrlTargetId === player.id) { room.sendAnnouncement('⚠️ No puedes invertirte a ti mismo', player.id, 0xFF6600); return false; }
@@ -5485,6 +5486,7 @@ room.onPlayerChat = function(player, message) {
         try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Zombie Run', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Policias y Ladrones', player.id, 0xFF6600); return false; } } catch(e){}
+        try { if (SPACE_CASE && SPACE_CASE.isActive && SPACE_CASE.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Space Case', player.id, 0xFF6600); return false; } } catch(e){}
         if (player.team === 0) { room.sendAnnouncement('⚠️ Debes estar en el campo de juego', player.id, 0xFF6600); return false; }
         if (playerAuth && botState.powerCooldownGames[playerAuth] > 0) { room.sendAnnouncement('⚠️ Poderes en cooldown. Faltan ' + botState.powerCooldownGames[playerAuth] + ' partidas', player.id, 0xFF6600); return false; }
         shopBuy(playerAuth, player.name, player.id, 30000, '!theworld', 600000, function() {
