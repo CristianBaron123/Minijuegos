@@ -105,12 +105,13 @@ function runTournament(room) {
                     var p = room.getPlayerList().find(function(x) { return x.id === winnerId; });
                     if (p) {
                         room.sendAnnouncement('\n🏆 ¡' + p.name.toUpperCase() + ' HA GANADO SUPER GRAVEDAD! 🏆', null, 0xFFD700, 'bold', 2);
-                        setTimeout(function() {
-                            if (gameState.callback) gameState.callback({ id: p.id, name: p.name });
-                        }, 2000);
+                        var cb1 = gameState.callback; gameState.callback = null; stop(room);
+                        if (cb1) cb1({ id: p.id, name: p.name });
+                        return;
                     }
                 }
-                stop(room);
+                var cb0 = gameState.callback; gameState.callback = null; stop(room);
+                if (cb0) cb0(null);
                 return;
             }
 
@@ -303,20 +304,6 @@ function onPlayerLeave(room, player) {
     if (idx !== -1) gameState.players.splice(idx, 1);
     var idx2 = gameState.spectatorPool.indexOf(player.id);
     if (idx2 !== -1) gameState.spectatorPool.splice(idx2, 1);
-    // 2v1: si queda un equipo con mas jugadores, mover uno al spectatorPool
-    if (gameState.active && gameState.players.length >= 2) {
-        var _t1 = gameState.players.filter(function(id) { var p = room.getPlayer(id); return p && p.team === 1; });
-        var _t2 = gameState.players.filter(function(id) { var p = room.getPlayer(id); return p && p.team === 2; });
-        if (Math.abs(_t1.length - _t2.length) >= 2) {
-            var _big = _t1.length > _t2.length ? _t1 : _t2;
-            var _toSpec = _big[Math.floor(Math.random() * _big.length)];
-            var _si = gameState.players.indexOf(_toSpec); if (_si !== -1) gameState.players.splice(_si, 1);
-            gameState.spectatorPool.push(_toSpec);
-            var _sp = room.getPlayer(_toSpec);
-            try { room.setPlayerTeam(_toSpec, 0); } catch(e) {}
-            room.sendAnnouncement('ℹ️ ' + (_sp ? _sp.name : '?') + ' pasa a espectadores (' + _t1.length + 'v' + _t2.length + ' detectado).', null, 0xFFFF00);
-        }
-    }
     if (gameState.active && gameState.players.length === 1) {
         var winnerId = gameState.players[0];
         var winner = room.getPlayerList().find(function(p) { return p.id === winnerId; });

@@ -771,6 +771,7 @@ const earnEasilyModuleCode = fs.readFileSync(earnEasilyModulePath, 'utf8');
 const buhoMapsDir = path.join(__dirname, 'Buho', 'mapas');
 const buhoMapsData = {};
 const buhoGoalCenters = {};
+var buhoSpawnPoints = {};
 if (fs.existsSync(buhoMapsDir)) {
     fs.readdirSync(buhoMapsDir).forEach(function(file) {
         if (!file.endsWith('.hbs')) return;
