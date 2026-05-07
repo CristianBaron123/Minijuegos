@@ -142,7 +142,7 @@ var botState = {
     crashActive: null,
     currentMinigame: null,
     dailyRewards: {},
-    elegirCooldownGames: 0,
+    elegirCooldownGames: {},
     fixPlayerCooldowns: {},
     gamesUntilEvent: 0,
     impuestoCooldown: 0,
@@ -3783,91 +3783,6 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
-    // Comando !reiniciar solo para admins
-    if (message === "!reiniciar") {
-        var playerObj = room.getPlayer(player.id);
-        if (playerObj && playerObj.admin) {
-            room.sendAnnouncement(
-                "🔄 REINICIANDO BOT...",
-                null,
-                0xFF6600,
-                "bold",
-                2
-            );
-            
-            setTimeout(function() {
-                // Detener todos los módulos
-                if (LALALA.isActive()) LALALA.stop(room);
-                if (SURVIVAL.isActive()) SURVIVAL.stop(room);
-                if (METEORS.isActive()) METEORS.stop(room);
-                if (JUMPING.isActive()) JUMPING.stop(room);
-                if (WEBSURVIVAL.isActive()) WEBSURVIVAL.stop(room);
-                if (GALACTIC.isActive()) GALACTIC.stop(room);
-                if (GYM.isActive()) GYM.stop(room);
-                if (MULTIBALLS.isActive()) MULTIBALLS.stop(room);
-                if (DODGEBALL.isActive()) DODGEBALL.stop(room);
-                if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) NUMBERCHAIRS.stop(room);
-                if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) TRIVIA.stop(room);
-                if (GOT && GOT.isActive && GOT.isActive()) GOT.stop(room);
-                if (LUCKY.isActive()) LUCKY.stop(room);
-                if (LUCKY_HELL.isActive()) LUCKY_HELL.stop(room);
-                if (LUCKY_DIOS.isActive()) LUCKY_DIOS.stop(room);
-                
-                // Resetear estado del bot
-                botState.gameActive = false;
-                botState.tempAdmins = [];
-                botState.bannedPlayers = [];
-                botState.spectatorNext = {};
-                botState.spectatorLocked = {};
-                botState.kickedByGame = {};
-                botState.chatBlocked = false;
-                
-                // Limpiar todos los timers de ban
-                for (var id in botState.banTimers) {
-                    clearTimeout(botState.banTimers[id]);
-                }
-                botState.banTimers = {};
-                
-                if (botState.startTimeout) {
-                    clearTimeout(botState.startTimeout);
-                    botState.startTimeout = null;
-                }
-                
-                // Detener juego y resetear mapa
-                room.stopGame();
-                room.onTeamGoal = buhoGoalHandler;
-                
-                // Mover todos los jugadores a espectadores
-                var players = room.getPlayerList();
-                for (var i = 0; i < players.length; i++) {
-                    if (players[i].id !== 0) {
-                        room.setPlayerTeam(players[i].id, 0);
-                    }
-                }
-                
-                setTimeout(function() {
-                    room.sendAnnouncement(
-                        "✅ Bot reiniciado - Esperando jugadores...",
-                        null,
-                        0x00FF00,
-                        "bold",
-                        2
-                    );
-                    checkAndStart();
-                }, 1000);
-            }, 2000);
-            
-            return false;
-        } else {
-            room.sendAnnouncement(
-                "⛔ Solo los admins pueden usar !reiniciar",
-                player.id,
-                0xFF0000,
-                "bold"
-            );
-            return false;
-        }
-    }
     
     // Comando !afk - proteger de ser movido a equipos (solo espectadores)
     if (message === "!afk") {
