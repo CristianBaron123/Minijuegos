@@ -2512,7 +2512,7 @@ function checkAndStart() {
         });
         botState.startTimeout = setTimeout(function() {
             startReplay(selectedGame.displayName);
-            selectedGame.starter();
+            startMinigame(selectedGame);
         }, 3500);
     }
 }
