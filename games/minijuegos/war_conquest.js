@@ -168,7 +168,17 @@ function runTournament(room) {
             }
             winners = winners.slice(0, keepCount);
 
-            // Ganadores que quedan → equipo 1
+            if (gameState.players.length <= 1) {
+                if (gameState.players.length === 1) {
+                    var wp = room.getPlayer(gameState.players[0]);
+                    if (wp && gameState.callback) { var cb = gameState.callback; gameState.callback = null; stop(room); cb({ id: wp.id, name: wp.name }); }
+                    else { stop(room); }
+                } else {
+                    var cb = gameState.callback; gameState.callback = null; stop(room); if (cb) cb(null);
+                }
+                return;
+            }
+
             var team1 = winners.slice();
             var team2 = [];
             for (var i = 0; i < team1.length; i++) {

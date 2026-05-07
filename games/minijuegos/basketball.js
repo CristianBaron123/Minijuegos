@@ -53,13 +53,12 @@ function start(room, onGameEnd) {
         setTimeout(function() {
         try { room.startGame(); } catch(e){}
 
-        // Teletransportar jugadores al medio de su lado (evitar que salgan volando)
         var _allP = room.getPlayerList();
         for (var _i = 0; _i < _allP.length; _i++) {
             if (_allP[_i].team === 1) {
-                try { room.setPlayerDiscProperties(_allP[_i].id, { x: -200, y: 0, xspeed: 0, yspeed: 0 }); } catch(e){}
+                try { room.setPlayerDiscProperties(_allP[_i].id, { x: -300, y: 100, xspeed: 0, yspeed: 0 }); } catch(e){}
             } else if (_allP[_i].team === 2) {
-                try { room.setPlayerDiscProperties(_allP[_i].id, { x: 200, y: 0, xspeed: 0, yspeed: 0 }); } catch(e){}
+                try { room.setPlayerDiscProperties(_allP[_i].id, { x: 300, y: 100, xspeed: 0, yspeed: 0 }); } catch(e){}
             }
         }
 

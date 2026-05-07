@@ -232,22 +232,22 @@ function onPlayerChat(room, player, message) {
 function isActive() { return gameState.active; }
 
 function repositionSpawns(room) {
-    var active = gameState.players.filter(function(p) { return p.alive; });
-    var n = active.length;
-    if (n === 0) return;
-    var b = config.arena;
-    var margin = 120;
-    var sMinX = b.minX + margin, sMaxX = b.maxX - margin;
-    var sMinY = b.minY + margin, sMaxY = b.maxY - margin;
-    var cols = Math.ceil(Math.sqrt(n));
-    var rows = Math.ceil(n / cols);
-    var cellW = (sMaxX - sMinX) / cols;
-    var cellH = (sMaxY - sMinY) / rows;
-    for (var i = 0; i < n; i++) {
-        var col = i % cols, row = Math.floor(i / cols);
-        var sx = Math.round(sMinX + cellW * (col + 0.5));
-        var sy = Math.round(sMinY + cellH * (row + 0.5));
-        try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
+    var blues = gameState.players.filter(function(p) { return p.alive && p.team === 2; });
+    var reds = gameState.players.filter(function(p) { return p.alive && p.team === 1; });
+
+    var blueSpacing = 80;
+    for (var i = 0; i < blues.length; i++) {
+        var sx = -350;
+        var sy = Math.round((-blues.length + 1 + 2 * i) * blueSpacing / 2);
+        try { room.setPlayerDiscProperties(blues[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
+    }
+
+    var redXs = [80, 180, 280, 380];
+    var redYs = [-130, -45, 45, 130];
+    for (var i = 0; i < reds.length; i++) {
+        var sx = redXs[i % redXs.length];
+        var sy = redYs[Math.floor(i / redXs.length) % redYs.length];
+        try { room.setPlayerDiscProperties(reds[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
     }
 }
 
