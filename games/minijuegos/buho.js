@@ -34,7 +34,20 @@ function loadMapForPlayers(room, n) {
         room.setCustomStadium(maps[key]);
         gameState.currentMapSize = parseInt(key);
         gameState.goalCenters = buhoData.goalCenters[key] || [];
-        console.log('[BUHO] loadMap: key=' + key + ' goalCenters=' + gameState.goalCenters.length + ' buhoData.goalCenters keys=' + Object.keys(buhoData.goalCenters).join(','));
+        if (gameState.goalCenters.length === 0) {
+            try {
+                var mapParsed = JSON.parse(maps[key]);
+                if (mapParsed.goals && mapParsed.goals.length > 0) {
+                    gameState.goalCenters = mapParsed.goals.map(function(g) {
+                        return { x: Math.round((g.p0[0] + g.p1[0]) / 2), y: Math.round((g.p0[1] + g.p1[1]) / 2) };
+                    });
+                    console.log('[BUHO] Fallback: calculated ' + gameState.goalCenters.length + ' goalCenters from map JSON for key=' + key);
+                }
+            } catch(e2) {
+                console.error('[BUHO] Fallback goalCenter parse failed for key=' + key + ': ' + e2.message);
+            }
+        }
+        console.log('[BUHO] loadMap: key=' + key + ' goalCenters=' + gameState.goalCenters.length);
         return true;
     } catch(e) {
         console.error('[BUHO] Error cargando mapa ' + key + '-MAN: ' + e.message);
@@ -47,7 +60,6 @@ function getAlivePlayers() {
     for (var id in gameState.players) {
         if (gameState.players[id].alive) result.push(parseInt(id));
     }
-    result.sort(function(a, b) { return a - b; });
     return result;
 }
 
@@ -56,13 +68,15 @@ function assignGoals(room) {
     var goals = gameState.goalCenters;
     if (goals.length === 0 || alive.length === 0) return;
 
-    // Asignar porterías por orden fijo del array goals (el mapa garantiza orden consistente)
-    // jugador en alive[0] -> portería 0, alive[1] -> portería 1, etc.
-    for (var i = 0; i < alive.length; i++) {
-        gameState.players[alive[i]].goalIndex = i % goals.length;
+    for (var ri = 0; ri < alive.length; ri++) {
+        gameState.players[alive[ri]].goalIndex = -1;
     }
 
-    // Teletransportar jugadores cerca de su portería (0.7 para no spawnear sobre el arco)
+    for (var i = 0; i < alive.length; i++) {
+        var goalIdx = i % goals.length;
+        gameState.players[alive[i]].goalIndex = goalIdx;
+    }
+
     for (var m = 0; m < alive.length; m++) {
         var pid2 = alive[m];
         var gi2 = gameState.players[pid2].goalIndex;
@@ -73,6 +87,8 @@ function assignGoals(room) {
             room.setPlayerDiscProperties(pid2, { x: Math.round(gx * 0.7), y: Math.round(gy * 0.7), xspeed: 0, yspeed: 0 });
         } catch(e) {}
     }
+
+    room.sendAnnouncement('🎯 ' + alive.length + ' jugadores asignados a sus porterías', null, 0x00FFFF);
 }
 
 function checkRemaining(room) {
@@ -161,10 +177,15 @@ function start(room, onGameEnd) {
         if (onGameEnd) onGameEnd(null);
         return;
     }
+    var _gcKeys = Object.keys(buhoData.goalCenters || {});
+    var _gcEmpty = _gcKeys.filter(function(k) { return !buhoData.goalCenters[k] || buhoData.goalCenters[k].length === 0; });
+    if (_gcEmpty.length > 0) {
+        console.log('[BUHO] WARNING: goalCenters vacios para keys: ' + _gcEmpty.join(','));
+    }
 
-    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
-    if (players.length < 3) {
-        room.sendAnnouncement('⚠️ Se necesitan al menos 3 jugadores para Buho', null, 0xFF6600);
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+    if (players.length < 2) {
+        room.sendAnnouncement('⚠️ Se necesitan al menos 2 jugadores para Buho', null, 0xFF6600);
         if (onGameEnd) onGameEnd(null);
         return;
     }
