@@ -259,7 +259,7 @@ var DISCORD_INVITE = "https://discord.gg/YvFHkSZUvE";
 // ============================================
 // SISTEMA DE BANS PERMANENTES
 // ============================================
-var PERMA_BANNED_AUTHS = ["IUlr_LaSrufIt5X940oRHknY95EWXBx9LVJe5RVqwcE", "ex4yjefsWJqZMeWtfUu63hBbvIofa-EZOSw6f2UczeQ", "rkJf6HcY4qq7jRHzB0epYT-DLW9OdZE4DkBDXpmXJuM"];
+var PERMA_BANNED_AUTHS = ["TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc", "ex4yjefsWJqZMeWtfUu63hBbvIofa-EZOSw6f2UczeQ", "rkJf6HcY4qq7jRHzB0epYT-DLW9OdZE4DkBDXpmXJuM"];
 
 // ============================================
 // SISTEMA DE ETIQUETAS
