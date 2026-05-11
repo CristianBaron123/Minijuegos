@@ -129,7 +129,9 @@ function runTournament(room) {
                     if (p1 && p2) {
                         var _chosenFinale = _finaleGames[Math.floor(Math.random() * _finaleGames.length)];
                         room.sendAnnouncement('\n🎮 ¡FINAL ESPECIAL 1v1! Mapa sorpresa', null, 0xFF69B4, 'bold', 2);
+                        console.log('[EARN_EASILY] Iniciando final especial: ' + _chosenFinale.name + ' entre ' + p1.name + ' y ' + p2.name);
                         _chosenFinale.start(room, p1, p2, function(winner) {
+                            console.log('[EARN_EASILY] Callback del final especial. winner=' + (winner ? winner.name + ' (id=' + winner.id + ')' : 'null') + ' callbackExists=' + !!gameState.callback);
                             if (winner && gameState.callback) {
                                 gameState.callback(winner);
                             } else if (gameState.callback) {
@@ -142,14 +144,21 @@ function runTournament(room) {
                 }
 
                 try { room.setPlayerTeam(ids[0], 1); room.setPlayerTeam(ids[1], 2); } catch(e){}
+                console.log('[EARN_EASILY] Iniciando 1v1 normal entre ' + ids[0] + ' y ' + ids[1]);
                 var result = await playMatch(room, ids, config.goalsToWin, config.matchTimeMs);
+                console.log('[EARN_EASILY] Resultado 1v1: result=' + (result ? 'winners=' + result.winners.length : 'null'));
                 if (result && result.winners && result.winners.length > 0) {
                     var winnerId = result.winners[0];
                     var p = room.getPlayerList().find(function(x) { return x.id === winnerId; });
                     if (p) {
                         room.sendAnnouncement('\n🏆 ¡' + p.name.toUpperCase() + ' HA GANADO EARN EASILY! 🏆', null, 0xFFD700, 'bold', 2);
+                        console.log('[EARN_EASILY] Ganador 1v1: ' + p.name + ' (id=' + p.id + '). Llamando callback...');
                         setTimeout(function() { if (gameState.callback) gameState.callback({ id: p.id, name: p.name }); }, 2000);
+                    } else {
+                        console.log('[EARN_EASILY] Ganador no encontrado en sala. winnerId=' + winnerId);
                     }
+                } else {
+                    console.log('[EARN_EASILY] 1v1 sin ganador. result=' + JSON.stringify(result));
                 }
                 stop(room);
                 return;

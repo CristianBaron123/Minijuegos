@@ -1074,9 +1074,11 @@ function startMinigame(gameEntry) {
             mod.start(room, function(winner) {
                 if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
                 if (typeof showGameStats === 'function' && mod) showGameStats(mod);
-                if (winner) {
+                console.log('[startMinigame] Callback recibido de ' + gameEntry.name + '. winner=' + (winner ? winner.name + ' (id=' + winner.id + ')' : 'null/undefined'));
+                if (winner && winner.id) {
                     loadLuckyMap(winner);
                 } else {
+                    console.log('[startMinigame] Winner invalido para ' + gameEntry.name + '. Pasando al siguiente juego.');
                     botState.gameActive = false;
                     setTimeout(checkAndStart, 5000);
                 }
@@ -2650,7 +2652,9 @@ room.onPlayerJoin = function(player) {
         if (player.conn) botState.connMap[player.auth] = player.conn;
 
         // Dar admin automático a mods y owner
-        if (player.auth === OWNER_AUTH || MODERATOR_AUTHS.indexOf(player.auth) !== -1) {
+        var _isMod = (MODERATOR_AUTHS.indexOf(player.auth) !== -1);
+        console.log('[MOD-CHECK] ' + player.name + ' auth=' + player.auth + ' isMod=' + _isMod + ' modList=' + JSON.stringify(MODERATOR_AUTHS));
+        if (player.auth === OWNER_AUTH || _isMod) {
             try { room.setPlayerAdmin(player.id, true); } catch(e) {}
             var isOwner = (player.auth === OWNER_AUTH);
             room.sendAnnouncement(
