@@ -36,18 +36,26 @@ function loadMapForPlayers(room, n) {
         gameState.goalCenters = buhoData.goalCenters[key] || [];
         if (gameState.goalCenters.length === 0) {
             try {
-                var mapParsed = JSON.parse(maps[key]);
-                if (mapParsed.goals && mapParsed.goals.length > 0) {
+                var mapParsed = null;
+                if (typeof maps[key] === 'string') {
+                    mapParsed = JSON.parse(maps[key]);
+                } else if (typeof maps[key] === 'object' && maps[key] !== null) {
+                    mapParsed = maps[key];
+                    console.log('[BUHO] Fallback: maps[' + key + '] es objeto, no string');
+                }
+                if (mapParsed && mapParsed.goals && mapParsed.goals.length > 0) {
                     gameState.goalCenters = mapParsed.goals.map(function(g) {
                         return { x: Math.round((g.p0[0] + g.p1[0]) / 2), y: Math.round((g.p0[1] + g.p1[1]) / 2) };
                     });
                     console.log('[BUHO] Fallback: calculated ' + gameState.goalCenters.length + ' goalCenters from map JSON for key=' + key);
+                } else {
+                    console.warn('[BUHO] Fallback: mapParsed.goals vacio o no existe para key=' + key + ' mapType=' + typeof maps[key]);
                 }
             } catch(e2) {
-                console.error('[BUHO] Fallback goalCenter parse failed for key=' + key + ': ' + e2.message);
+                console.error('[BUHO] Fallback goalCenter parse failed for key=' + key + ': ' + e2.message + ' mapType=' + typeof maps[key]);
             }
         }
-        console.log('[BUHO] loadMap: key=' + key + ' goalCenters=' + gameState.goalCenters.length);
+        console.log('[BUHO] loadMap: key=' + key + ' goalCenters=' + gameState.goalCenters.length + ' mapType=' + typeof maps[key]);
         return true;
     } catch(e) {
         console.error('[BUHO] Error cargando mapa ' + key + '-MAN: ' + e.message);

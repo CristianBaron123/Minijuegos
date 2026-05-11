@@ -761,12 +761,14 @@ if (fs.existsSync(buhoMapsDir)) {
             buhoMapsData[key] = content;
             try {
                 const parsed = JSON.parse(content);
-                if (parsed.goals) {
+                if (parsed.goals && parsed.goals.length > 0) {
                     buhoGoalCenters[key] = parsed.goals.map(function(g) {
                         return { x: Math.round((g.p0[0] + g.p1[0]) / 2), y: Math.round((g.p0[1] + g.p1[1]) / 2) };
                     });
+                    console.log('[BUHO-LOADER] Mapa ' + key + '-MAN cargado: ' + buhoGoalCenters[key].length + ' goals');
                 } else {
                     buhoGoalCenters[key] = [];
+                    console.warn('[BUHO-LOADER] Mapa ' + key + '-MAN no tiene goals. parsed.goals=' + (parsed.goals ? parsed.goals.length : 'undefined'));
                 }
                 // Guardar spawn points para asignar porterías correctamente
                 if (parsed.redSpawnPoints && parsed.blueSpawnPoints) {
@@ -774,7 +776,10 @@ if (fs.existsSync(buhoMapsDir)) {
                     buhoSpawnPoints[key].red = parsed.redSpawnPoints;
                     buhoSpawnPoints[key].blue = parsed.blueSpawnPoints;
                 }
-            } catch(e) { buhoGoalCenters[key] = []; }
+            } catch(e) {
+                buhoGoalCenters[key] = [];
+                console.error('[BUHO-LOADER] ERROR parseando mapa ' + key + '-MAN: ' + e.message);
+            }
         }
     });
     console.log('Mapas Buho cargados: ' + Object.keys(buhoMapsData).length);
