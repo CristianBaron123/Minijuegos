@@ -259,7 +259,7 @@ var DISCORD_INVITE = "https://discord.gg/YvFHkSZUvE";
 // ============================================
 // SISTEMA DE BANS PERMANENTES
 // ============================================
-var PERMA_BANNED_AUTHS = ["TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc", "ex4yjefsWJqZMeWtfUu63hBbvIofa-EZOSw6f2UczeQ", "rkJf6HcY4qq7jRHzB0epYT-DLW9OdZE4DkBDXpmXJuM"];
+var PERMA_BANNED_AUTHS = ["TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc", "ex4yjefsWJqZMeWtfUu63hBbvIofa-EZOSw6f2UczeQ", "rkJf6HcY4qq7jRHzB0epYT-DLW9OdZE4DkBDXpmXJuM", "dK_ucYo4B-jczy_wNeEMz0vaik9vG7pdncOnxgsIVog", "Lnyhx2-ggMF7y8IKPajaox24xdAAEeOoWZyC57La06o4"];
 
 // ============================================
 // SISTEMA DE ETIQUETAS
@@ -3249,7 +3249,7 @@ room.onPlayerChat = function(player, message) {
 
     // !ban #ID minutos - CREADORES: banear temporalmente a un jugador
     if (message.startsWith('!ban')) {
-        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && playerAuth !== '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE' && playerAuth !== 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4')) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !ban', player.id, 0xFF0000);
             return false;
         }
@@ -3290,12 +3290,14 @@ room.onPlayerChat = function(player, message) {
         var isOwner = (rAuth === OWNER_AUTH);
         var isCreador = (CREATOR_AUTHS.indexOf(rAuth) !== -1);
         var isMod = (MODERATOR_AUTHS.indexOf(rAuth) !== -1);
-        if (!isOwner && !isCreador && !isMod) {
+        var isTHEBEST = (rAuth === '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE');
+        var isTGW = (rAuth === 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4');
+        if (!isOwner && !isCreador && !isMod && !isTHEBEST && !isTGW) {
             room.sendAnnouncement('⛔ Solo los administradores pueden usar !reiniciar', player.id, 0xFF0000);
             return false;
         }
         // Determinar rol para mensajes
-        var rolMsg = (isOwner || isCreador) ? 'Creador' : 'Moderador';
+        var rolMsg = (isOwner || isCreador) ? 'Creador' : isTHEBEST ? 'THE BEST' : isTGW ? 'JUST TGW' : 'Moderador';
         // Log de debug
         console.log('🔄 !reiniciar por: ' + player.name + ' | Rol: ' + rolMsg + ' | Auth: ' + rAuth);
         // Notificar a Discord (webhook mods)
