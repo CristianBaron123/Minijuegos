@@ -8,20 +8,22 @@ var mapData = null;
 
 var gameState = {
     active: false,
-    players: [],  // [{id, name, team}] solo 2 jugadores
+    players: [],
     chatBlocked: false,
     gameStartTime: null,
     prevOnGoal: null,
     onGameEnd: null,
     goalEnabled: false,
-    scores: {1: 0, 2: 0}
+    scores: {1: 0, 2: 0},
+    safetyTimeout: null
 };
 
 var config = {
     explanationMs: 5000,
     graceMs: 2000,
-    goalGraceMs: 1500,  // gracia despues de cada gol
-    goalsToWin: 3
+    goalGraceMs: 1500,
+    goalsToWin: 3,
+    maxGameMs: 300000
 };
 
 function start(room, player1, player2, onGameEnd) {
@@ -58,6 +60,7 @@ function start(room, player1, player2, onGameEnd) {
     );
 
     setTimeout(function() {
+        if (!gameState.active) return;
         try { room.startGame(); } catch(e){}
         try { room.pauseGame(true); } catch(e){}
         gameState.chatBlocked = true;
@@ -72,6 +75,7 @@ function start(room, player1, player2, onGameEnd) {
         );
 
         setTimeout(function() {
+            if (!gameState.active) return;
             try { room.pauseGame(false); } catch(e){}
             gameState.chatBlocked = false;
             gameState.gameStartTime = Date.now();
@@ -98,7 +102,7 @@ function start(room, player1, player2, onGameEnd) {
 
                 if (gameState.scores[team] >= config.goalsToWin) {
                     room.sendAnnouncement('⚽ ¡GOL de ' + scorerName + '!\n' + scoreStr + '\n🏆 ¡' + scorerName.toUpperCase() + ' GANA!', null, 0xFFD700, 'bold', 2);
-                    declareWinner(room, scorer, '⚽ Primero en anotar ' + config.goalsToWin + ' goles!');
+                    if (scorer) declareWinner(room, scorer, '⚽ Primero en anotar ' + config.goalsToWin + ' goles!');
                 } else {
                     room.sendAnnouncement('⚽ ¡GOL de ' + scorerName + '!\n' + scoreStr, null, 0x00BFFF, 'bold', 2);
                     // Breve gracia despues de cada gol para evitar auto-goles en kickoff
@@ -113,6 +117,20 @@ function start(room, player1, player2, onGameEnd) {
             setTimeout(function() {
                 gameState.goalEnabled = true;
             }, config.graceMs);
+
+            if (gameState.safetyTimeout) clearTimeout(gameState.safetyTimeout);
+            gameState.safetyTimeout = setTimeout(function() {
+                if (!gameState.active) return;
+                console.log('[AIR_HOCKEY] Safety timeout');
+                if (gameState.scores[1] > gameState.scores[2]) {
+                    declareWinner(room, gameState.players[0], '⏱️ Tiempo agotado - gana por marcador');
+                } else if (gameState.scores[2] > gameState.scores[1]) {
+                    declareWinner(room, gameState.players[1], '⏱️ Tiempo agotado - gana por marcador');
+                } else {
+                    room.sendAnnouncement('⏱️ Tiempo agotado - empate, sin ganador', null, 0xFF6600);
+                    stop(room);
+                }
+            }, config.maxGameMs);
         }, config.explanationMs);
     }, 1500);
 }
@@ -140,14 +158,17 @@ function declareWinner(room, winner, reason) {
 }
 
 function stop(room) {
+    var cb = gameState.onGameEnd;
     gameState.active = false;
     gameState.goalEnabled = false;
+    if (gameState.safetyTimeout) { clearTimeout(gameState.safetyTimeout); gameState.safetyTimeout = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e){}
     gameState.players = [];
     gameState.chatBlocked = false;
     gameState.onGameEnd = null;
     gameState.scores = {1: 0, 2: 0};
     try { room.stopGame(); } catch(e){}
+    if (cb) cb(null);
 }
 
 function onPlayerLeave(room, player) {

@@ -25,7 +25,8 @@ var config = {
     graceMs: 2000,
     // Mapa: 850x350
     teleportThreshold: 100,
-    bounds: { minX: -700, maxX: 700, minY: -300, maxY: 150 }
+    bounds: { minX: -700, maxX: 700, minY: -300, maxY: 150 },
+    spawnArea: { minX: -380, maxX: 380, minY: -120, maxY: -40 }
 };
 
 function start(room, onGameEnd) {
@@ -215,18 +216,15 @@ function repositionSpawns(room) {
     var active = gameState.players;
     var n = active.length;
     if (n === 0) return;
-    var b = config.bounds;
-    var margin = 170;
-    var sMinX = b.minX + margin, sMaxX = b.maxX - margin;
-    var sMinY = b.minY + margin, sMaxY = b.maxY - margin;
+    var s = config.spawnArea;
     var cols = Math.ceil(Math.sqrt(n));
     var rows = Math.ceil(n / cols);
-    var cellW = (sMaxX - sMinX) / cols;
-    var cellH = (sMaxY - sMinY) / rows;
+    var cellW = (s.maxX - s.minX) / cols;
+    var cellH = (s.maxY - s.minY) / rows;
     for (var i = 0; i < n; i++) {
         var col = i % cols, row = Math.floor(i / cols);
-        var sx = Math.round(sMinX + cellW * (col + 0.5));
-        var sy = Math.round(sMinY + cellH * (row + 0.5));
+        var sx = Math.round(s.minX + cellW * (col + 0.5));
+        var sy = Math.round(s.minY + cellH * (row + 0.5));
         try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
     }
 }

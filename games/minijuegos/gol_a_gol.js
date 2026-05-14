@@ -15,13 +15,15 @@ var gameState = {
     prevOnGoal: null,
     onGameEnd: null,
     goalEnabled: false,
-    scores: { 1: 0, 2: 0 }
+    scores: { 1: 0, 2: 0 },
+    safetyTimeout: null
 };
 
 var config = {
     explanationMs: 5000,
     graceMs: 3000,
-    goalsToWin: 2
+    goalsToWin: 2,
+    maxGameMs: 300000
 };
 
 function start(room, player1, player2, onGameEnd) {
@@ -98,6 +100,20 @@ function start(room, player1, player2, onGameEnd) {
             setTimeout(function() {
                 gameState.goalEnabled = true;
             }, config.graceMs);
+
+            if (gameState.safetyTimeout) clearTimeout(gameState.safetyTimeout);
+            gameState.safetyTimeout = setTimeout(function() {
+                if (!gameState.active) return;
+                console.log('[GOL_A_GOL] Safety timeout');
+                if (gameState.scores[1] > gameState.scores[2]) {
+                    declareWinner(room, gameState.players[0], '⏱️ Tiempo agotado - gana por marcador');
+                } else if (gameState.scores[2] > gameState.scores[1]) {
+                    declareWinner(room, gameState.players[1], '⏱️ Tiempo agotado - gana por marcador');
+                } else {
+                    room.sendAnnouncement('⏱️ Tiempo agotado - empate, sin ganador', null, 0xFF6600);
+                    stop(room);
+                }
+            }, config.maxGameMs);
         }, config.explanationMs);
     }, 1500);
 }
@@ -124,14 +140,17 @@ function declareWinner(room, winner, reason) {
 }
 
 function stop(room) {
+    var cb = gameState.onGameEnd;
     gameState.active = false;
     gameState.goalEnabled = false;
+    if (gameState.safetyTimeout) { clearTimeout(gameState.safetyTimeout); gameState.safetyTimeout = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e) {}
     gameState.players = [];
     gameState.chatBlocked = false;
     gameState.onGameEnd = null;
     gameState.scores = { 1: 0, 2: 0 };
     try { room.stopGame(); } catch(e) {}
+    if (cb) cb(null);
 }
 
 function onPlayerLeave(room, player) {
