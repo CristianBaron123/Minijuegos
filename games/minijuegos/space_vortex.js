@@ -16,13 +16,15 @@ var gameState = {
     goalEnabled: false,
     scores: { 1: 0, 2: 0 },
     gameTimer: null,
+    suddenDeathTimeout: null,
     timeWarnings: {}
 };
 
 var config = {
     explanationMs: 5000,
     graceMs: 3000,
-    gameDurationMs: 120000
+    gameDurationMs: 120000,
+    suddenDeathMs: 60000
 };
 
 function start(room, player1, player2, onGameEnd) {
@@ -106,7 +108,12 @@ function start(room, player1, player2, onGameEnd) {
                 } else if (gameState.scores[2] > gameState.scores[1]) {
                     declareWinner(room, gameState.players[1], '⏰ Tiempo! Mas goles (' + gameState.scores[1] + '-' + gameState.scores[2] + ')');
                 } else {
-                    room.sendAnnouncement('⏰ Tiempo agotado! Empate ' + gameState.scores[1] + '-' + gameState.scores[2] + '. Muerte subita!', null, 0xFFFF00, 'bold', 2);
+                    room.sendAnnouncement('⏰ Tiempo agotado! Empate ' + gameState.scores[1] + '-' + gameState.scores[2] + '. Muerte subita! (60s)', null, 0xFFFF00, 'bold', 2);
+                    gameState.suddenDeathTimeout = setTimeout(function() {
+                        if (!gameState.active) return;
+                        room.sendAnnouncement('⏱️ Muerte subita sin gol - sin ganador', null, 0xFF6600);
+                        stop(room);
+                    }, config.suddenDeathMs);
                 }
             }, config.gameDurationMs);
 
@@ -134,6 +141,7 @@ function declareWinner(room, winner, reason) {
     gameState.active = false;
     gameState.goalEnabled = false;
     if (gameState.gameTimer) { clearTimeout(gameState.gameTimer); gameState.gameTimer = null; }
+    if (gameState.suddenDeathTimeout) { clearTimeout(gameState.suddenDeathTimeout); gameState.suddenDeathTimeout = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e) {}
 
     var elapsed = '';
@@ -152,9 +160,11 @@ function declareWinner(room, winner, reason) {
 }
 
 function stop(room) {
+    var cb = gameState.onGameEnd;
     gameState.active = false;
     gameState.goalEnabled = false;
     if (gameState.gameTimer) { clearTimeout(gameState.gameTimer); gameState.gameTimer = null; }
+    if (gameState.suddenDeathTimeout) { clearTimeout(gameState.suddenDeathTimeout); gameState.suddenDeathTimeout = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e) {}
     gameState.players = [];
     gameState.chatBlocked = false;
@@ -162,6 +172,7 @@ function stop(room) {
     gameState.scores = { 1: 0, 2: 0 };
     gameState.timeWarnings = {};
     try { room.stopGame(); } catch(e) {}
+    if (cb) cb(null);
 }
 
 function onPlayerLeave(room, player) {

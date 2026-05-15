@@ -259,7 +259,7 @@ var DISCORD_INVITE = "https://discord.gg/YvFHkSZUvE";
 // ============================================
 // SISTEMA DE BANS PERMANENTES
 // ============================================
-var PERMA_BANNED_AUTHS = ["TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc", "ex4yjefsWJqZMeWtfUu63hBbvIofa-EZOSw6f2UczeQ", "rkJf6HcY4qq7jRHzB0epYT-DLW9OdZE4DkBDXpmXJuM"];
+var PERMA_BANNED_AUTHS = ["TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc", "ex4yjefsWJqZMeWtfUu63hBbvIofa-EZOSw6f2UczeQ", "rkJf6HcY4qq7jRHzB0epYT-DLW9OdZE4DkBDXpmXJuM", "dK_ucYo4B-jczy_wNeEMz0vaik9vG7pdncOnxgsIVog", "Lnyhx2-ggMF7y8IKPajaox24xdAAEeOoWZyC57La06o4"];
 
 // ============================================
 // SISTEMA DE ETIQUETAS
@@ -3249,7 +3249,8 @@ room.onPlayerChat = function(player, message) {
 
     // !ban #ID minutos - CREADORES: banear temporalmente a un jugador
     if (message.startsWith('!ban')) {
-        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+        var _customAuths = ['1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE', 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4', 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic', 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I'];
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && _customAuths.indexOf(playerAuth) === -1)) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !ban', player.id, 0xFF0000);
             return false;
         }
@@ -3286,16 +3287,26 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ No se pudo verificar tu identidad.', player.id, 0xFF6600);
             return false;
         }
-        // Verificar permisos: Owner, Creador, Moderador
+        // Verificar permisos: Owner, Creador, Moderador, Custom Admins
+        var CUSTOM_ADMIN_AUTHS = [
+            { auth: '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE', label: 'THE BEST' },
+            { auth: 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4', label: 'JUST TGW' },
+            { auth: 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic', label: 'KING' },
+            { auth: 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I', label: 'LEO' }
+        ];
         var isOwner = (rAuth === OWNER_AUTH);
         var isCreador = (CREATOR_AUTHS.indexOf(rAuth) !== -1);
         var isMod = (MODERATOR_AUTHS.indexOf(rAuth) !== -1);
-        if (!isOwner && !isCreador && !isMod) {
+        var customAdmin = null;
+        for (var _cai = 0; _cai < CUSTOM_ADMIN_AUTHS.length; _cai++) {
+            if (rAuth === CUSTOM_ADMIN_AUTHS[_cai].auth) { customAdmin = CUSTOM_ADMIN_AUTHS[_cai]; break; }
+        }
+        if (!isOwner && !isCreador && !isMod && !customAdmin) {
             room.sendAnnouncement('⛔ Solo los administradores pueden usar !reiniciar', player.id, 0xFF0000);
             return false;
         }
         // Determinar rol para mensajes
-        var rolMsg = (isOwner || isCreador) ? 'Creador' : 'Moderador';
+        var rolMsg = (isOwner || isCreador) ? 'Creador' : customAdmin ? customAdmin.label : 'Moderador';
         // Log de debug
         console.log('🔄 !reiniciar por: ' + player.name + ' | Rol: ' + rolMsg + ' | Auth: ' + rAuth);
         // Notificar a Discord (webhook mods)
