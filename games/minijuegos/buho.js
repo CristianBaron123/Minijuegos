@@ -191,7 +191,7 @@ function start(room, onGameEnd) {
         console.log('[BUHO] WARNING: goalCenters vacios para keys: ' + _gcEmpty.join(','));
     }
 
-    var players = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+    var players = room.getPlayerList().filter(function(p) { return p.id !== 0; });
     if (players.length < 2) {
         room.sendAnnouncement('⚠️ Se necesitan al menos 2 jugadores para Buho', null, 0xFF6600);
         if (onGameEnd) onGameEnd(null);

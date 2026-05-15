@@ -24,6 +24,7 @@ const OWNER_AUTH = "JHcYct4vfesGbi6tGaauh08AxSwWnZq3QCm4rnzn2GE";
 const MODERATOR_AUTHS = [
     "4BTZsdo-dxI9p_wBCBtBpZHvxo91eqYQHUWGuWOkzqk",
     "py-h0135hpGNwKNn_I7n00W04x4tc6k2THJv1-Xj2ik",
+    "r5DJwZYJYYwSc-ALRV3zBRSmhX1D3IcEBp9zq8MzcuM",
 ];
 
 // ============================================

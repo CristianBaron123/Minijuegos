@@ -8,17 +8,19 @@ var mapData = null;
 
 var gameState = {
     active: false,
-    players: [],  // solo 2 jugadores (1v1)
+    players: [],
     chatBlocked: false,
     gameStartTime: null,
     prevOnGoal: null,
     onGameEnd: null,
-    goalEnabled: false
+    goalEnabled: false,
+    safetyTimeout: null
 };
 
 var config = {
     explanationMs: 5000,
-    graceMs: 3000   // gracia antes de aceptar goles (evita auto-gol por fisica)
+    graceMs: 3000,
+    maxGameMs: 180000
 };
 
 function start(room, player1, player2, onGameEnd) {
@@ -55,6 +57,7 @@ function start(room, player1, player2, onGameEnd) {
     );
 
     setTimeout(function() {
+        if (!gameState.active) return;
         try { room.startGame(); } catch(e){}
         try { room.pauseGame(true); } catch(e){}
         gameState.chatBlocked = true;
@@ -70,6 +73,7 @@ function start(room, player1, player2, onGameEnd) {
         );
 
         setTimeout(function() {
+            if (!gameState.active) return;
             try { room.pauseGame(false); } catch(e){}
             gameState.chatBlocked = false;
             gameState.gameStartTime = Date.now();
@@ -102,6 +106,17 @@ function start(room, player1, player2, onGameEnd) {
             setTimeout(function() {
                 gameState.goalEnabled = true;
             }, config.graceMs);
+
+            if (gameState.safetyTimeout) clearTimeout(gameState.safetyTimeout);
+            gameState.safetyTimeout = setTimeout(function() {
+                if (!gameState.active) return;
+                console.log('[DOMINIC] Safety timeout - sin gol en ' + (config.maxGameMs / 1000) + 's');
+                var p1 = room.getPlayer(gameState.players[0].id);
+                var p2 = room.getPlayer(gameState.players[1].id);
+                if (p1 && !p2) { declareWinner(room, gameState.players[0], '⏱️ Tiempo agotado'); }
+                else if (p2 && !p1) { declareWinner(room, gameState.players[1], '⏱️ Tiempo agotado'); }
+                else { room.sendAnnouncement('⏱️ Tiempo agotado - sin ganador', null, 0xFF6600); stop(room); var cb = gameState.onGameEnd; if (cb) cb(null); }
+            }, config.maxGameMs);
         }, config.explanationMs);
     }, 1500);
 }
@@ -131,13 +146,16 @@ function declareWinner(room, winner, reason) {
 }
 
 function stop(room) {
+    var cb = gameState.onGameEnd;
     gameState.active = false;
     gameState.goalEnabled = false;
+    if (gameState.safetyTimeout) { clearTimeout(gameState.safetyTimeout); gameState.safetyTimeout = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e){}
     gameState.players = [];
     gameState.chatBlocked = false;
     gameState.onGameEnd = null;
     try { room.stopGame(); } catch(e){}
+    if (cb) cb(null);
 }
 
 function onPlayerLeave(room, player) {
