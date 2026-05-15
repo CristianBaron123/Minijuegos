@@ -817,6 +817,15 @@ const mapRacingGroundData = fs.readFileSync(mapRacingGroundPath, 'utf8');
 const roomMainCodePath = path.join(__dirname, 'room-main.txt');
 const roomMainCode = fs.readFileSync(roomMainCodePath, 'utf8');
 
+// Cargar TournamentBalancer (utilidad global para minijuegos de torneo de goles)
+const tournamentBalancerPath = path.join(__dirname, 'games', 'shared', 'tournament_balancer.js');
+let tournamentBalancerCode = '';
+try {
+    tournamentBalancerCode = fs.readFileSync(tournamentBalancerPath, 'utf8');
+} catch (e) {
+    console.error('⚠️ No se pudo cargar tournament_balancer.js:', e.message);
+}
+
 // Función helper para transformar módulos Node.js a navegador
 function transformBuhoForBrowser(moduleCode, maps, goalCenters) {
     const buhoDataJson = JSON.stringify({ maps: maps, goalCenters: goalCenters });
@@ -956,7 +965,7 @@ const getBotScript = () => {
     const escapedLuckyDiosCode = luckyDiosModuleCode;
     
      // Reemplazar variables dinámicas en room-main.txt
-     let mainCode = roomMainCode
+     let mainCode = tournamentBalancerCode + '\n' + roomMainCode
          .replace(/##TOKEN##/g, HAXBALL_TOKEN)
          .replace(/##OWNER_AUTH##/g, OWNER_AUTH)
          .replace(/##MODERATOR_AUTHS##/g, JSON.stringify(MODERATOR_AUTHS))
