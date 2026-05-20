@@ -24,7 +24,8 @@ var config = {
     explanationMs: 5000,
     // Mapa: 550x550 → campo ±550 x ±550
     teleportThreshold: 130,  // salto brusco = eliminado
-    bounds: { minX: -530, maxX: 530, minY: -530, maxY: 530 }
+    bounds: { minX: -530, maxX: 530, minY: -530, maxY: 530 },
+    spawnArea: { minX: -300, maxX: 300, minY: -200, maxY: 0 }
 };
 
 function start(room, onGameEnd) {
@@ -203,18 +204,15 @@ function repositionSpawns(room) {
     var active = gameState.players;
     var n = active.length;
     if (n === 0) return;
-    var b = config.bounds;
-    var margin = 130;
-    var sMinX = b.minX + margin, sMaxX = b.maxX - margin;
-    var sMinY = b.minY + margin, sMaxY = b.maxY - margin;
+    var s = config.spawnArea;
     var cols = Math.ceil(Math.sqrt(n));
     var rows = Math.ceil(n / cols);
-    var cellW = (sMaxX - sMinX) / cols;
-    var cellH = (sMaxY - sMinY) / rows;
+    var cellW = (s.maxX - s.minX) / cols;
+    var cellH = (s.maxY - s.minY) / rows;
     for (var i = 0; i < n; i++) {
         var col = i % cols, row = Math.floor(i / cols);
-        var sx = Math.round(sMinX + cellW * (col + 0.5));
-        var sy = Math.round(sMinY + cellH * (row + 0.5));
+        var sx = Math.round(s.minX + cellW * (col + 0.5));
+        var sy = Math.round(s.minY + cellH * (row + 0.5));
         try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
     }
 }

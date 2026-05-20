@@ -93,7 +93,11 @@ function checkPlayers(room, onGameEnd) {
         }
 
         var pos = player.position;
-        if (!pos) return;
+        if (!pos) {
+            // Si no se puede leer posición, asumir vivo (no eliminar)
+            alivePlayers.push(p);
+            return;
+        }
 
         var eliminated = false;
         var reason = '';

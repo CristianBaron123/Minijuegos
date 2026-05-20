@@ -633,6 +633,7 @@ var mapCollision = ##MAP_COLLISION##;
 var mapSpaceMelee = ##MAP_SPACE_MELEE##;
 var mapSpotBonk = ##MAP_SPOT_BONK##;
 var mapChairMix = ##MAP_CHAIRMIX##;
+var mapPinballRoulette = ##MAP_PINBALL_ROULETTE##;
 var mapCovid19 = ##MAP_COVID19##;
 var mapGymmix = ##MAP_GYMMIX##;
 var mapTrivia = ##MAP_TRIVIA##;
@@ -3807,36 +3808,99 @@ room.onPlayerChat = function(player, message) {
 
     if (message === "!ayuda" || message === "!help") {
         room.sendAnnouncement(
-            "📋 COMANDOS:\n" +
-            "!help / !ayuda - Ver comandos\n" +
-            "!stats - Ver tus estadísticas\n" +
-            "!saldo / !dinero - Ver tu dinero\n" +
-            "!trabajar - Trabajar para ganar dinero (CD: 10min)\n" +
-            "!pasar #ID MONTO - Transferir dinero\n" +
-            "!top - Ver top 5 jugadores\n" +
-            "!toprich - Top 5 mas ricos\n" +
-            "!topracha - Top 5 mejores rachas\n" +
-            "!topgeis - Top 5 mas geis\n" +
-            "!topkick - Top 5 mas kickeados\n" +
-            "!topban - Top 5 mas baneados\n" +
-            "!diario - Recompensa diaria (racha 7 dias)\n" +
-            "!tienda - Ver la tienda\n" +
-            "!ruleta / !rifa / !crash / !dados / !slots - Apostar\n" +
-            "!casarse #ID - Proponer matrimonio ($25k, +10% bonus)\n" +
-            "!divorcio / !pareja - Divorciarse o ver tu pareja\n" +
-            "!afk - Activar/desactivar modo AFK (en espectador)\n" +
-            "!calladmin [razón] - Llamar admin por Discord\n" +
-            "!report #ID [razón] - Reportar jugador\n" +
-            "!bug [descripcion] - Reportar un bug\n" +
-            "!miauth - Ver tu token\n" +
-            "!discord - Link de Discord\n" +
-            "!clan - Sistema de clanes\n" +
-            "!topclanes - Ranking de clanes\n" +
-            "!fix - Votar para reiniciar si hay bug\n" +
-            "!reiniciar - Reiniciar bot (solo admin)\n" +
-            "!version - Ver versión del bot",
-            player.id,
-            0x00FF00
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "           📋 COMANDOS DISPONIBLES 📋\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            player.id, 0x00FF00, 'bold', 2
+        );
+        
+        room.sendAnnouncement(
+            "💰 ECONOMÍA:\n" +
+            "  !saldo / !dinero - Ver tu dinero\n" +
+            "  !trabajar / !work - Ganar dinero (CD: 10min)\n" +
+            "  !pasar #ID MONTO - Transferir dinero\n" +
+            "  !diario - Recompensa diaria (racha 7 días)\n" +
+            "  !tienda / !shop - Ver la tienda\n" +
+            "  !inversion MONTO - Invertir (madura en 5 juegos)",
+            player.id, 0x00BFFF
+        );
+        
+        room.sendAnnouncement(
+            "🎰 CASINO:\n" +
+            "  !ruleta MONTO [rojo/negro/0] - Ruleta de colores\n" +
+            "  !rifa MONTO - Adivina número 1-10\n" +
+            "  !crash MONTO - Multiplicador creciente\n" +
+            "  !dados MONTO - 7+ = x2 | Doble = x3 | Doble 6 = x5\n" +
+            "  !slots MONTO - 777 = x50 | Triple = x10 | Doble = x3",
+            player.id, 0xFF69B4
+        );
+        
+        room.sendAnnouncement(
+            "🏆 RANKINGS:\n" +
+            "  !top - Top 5 general\n" +
+            "  !toprich - Top 5 más ricos\n" +
+            "  !topracha - Top 5 mejores rachas\n" +
+            "  !topgeis - Top 5 más geis\n" +
+            "  !topkick - Top 5 más kickeados\n" +
+            "  !topban - Top 5 más baneados\n" +
+            "  !topclanes / !topclan - Ranking de clanes\n" +
+            "  !toptitan - Top medidas",
+            player.id, 0xFFD700
+        );
+        
+        room.sendAnnouncement(
+            "💍 SOCIAL:\n" +
+            "  !casarse #ID - Proponer matrimonio ($25k, +10% bonus)\n" +
+            "  !divorcio - Separarse\n" +
+            "  !pareja - Ver tu pareja\n" +
+            "  !clan - Sistema de clanes (!clan ayuda)\n" +
+            "  !titan - Medir tu titan\n" +
+            "  !anon MENSAJE - Mensaje anónimo",
+            player.id, 0xFF69B4
+        );
+        
+        room.sendAnnouncement(
+            "🎮 MINIJUEGOS (durante partida):\n" +
+            "  !cambio #ID - Cambiar posición (primeros 20s)\n" +
+            "  !equipo [1/2] - Cambiar de equipo\n" +
+            "  !invertir #ID - Invertir controles 10s\n" +
+            "  !theworld - Pausar minijuego\n" +
+            "  !bitesthedust - Eliminar jugador",
+            player.id, 0x00FF00
+        );
+        
+        room.sendAnnouncement(
+            "💳 PRÉSTAMOS:\n" +
+            "  !prestamo MONTO - Pedir préstamo\n" +
+            "  !prestar #ID MONTO - Prestar a alguien\n" +
+            "  !deuda - Ver deudas\n" +
+            "  !mideudap2p - Ver deudas P2P\n" +
+            "  !misdeudores - Ver quién te debe\n" +
+            "  !pagar [MONTO/todo] - Pagar préstamo\n" +
+            "  !pagarp2p [MONTO/todo] - Pagar P2P\n" +
+            "  !prestamista - Ver prestamistas",
+            player.id, 0xFFFF00
+        );
+        
+        room.sendAnnouncement(
+            "📢 REPORTES Y AYUDA:\n" +
+            "  !calladmin [razón] - Llamar admin\n" +
+            "  !report #ID [razón] - Reportar jugador\n" +
+            "  !bug [descripción] - Reportar bug\n" +
+            "  !fix - Votar para reiniciar si hay bug",
+            player.id, 0xFF6600
+        );
+        
+        room.sendAnnouncement(
+            "ℹ️ OTROS:\n" +
+            "  !stats - Ver estadísticas\n" +
+            "  !miauth - Ver tu token\n" +
+            "  !discord - Link de Discord\n" +
+            "  !version - Versión del bot\n" +
+            "  !proteccion - Protección contra bans\n" +
+            "  !impuesto - Cobrar impuestos (admin+)\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            player.id, 0xAAAAAA
         );
         return false;
     }

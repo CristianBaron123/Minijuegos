@@ -51,8 +51,8 @@ var gameState = {
 var config = {
     firstExplanationMs: 5000,
     roundTimeMs: 60000,      // 60s por ronda para encontrar silla
-    chairRadius: 30,
-    tolerance: 12,
+    chairRadius: 45,         // Aumentado de 30 a 45 (círculos más grandes en mapas)
+    tolerance: 15,           // Aumentado de 12 a 15
     requiredMs: 1500,        // 1.5s para asegurar silla
     checkIntervalMs: 100,
     maxVersion: 21           // mapa maximo disponible
@@ -257,7 +257,20 @@ function checkPlayersInChairs(room, chairs, numChairs) {
         var p = playersList[pi];
         var ps = gameState.players.find(function(x) { return x.id === p.id; });
         if (!ps) continue;
+
+        // Fallback para obtener posición
         var pos = p.position;
+        if (!pos) {
+            try {
+                var discProps = room.getPlayerDiscProperties(p.id);
+                if (discProps) pos = { x: discProps.x, y: discProps.y };
+            } catch(e) {}
+        }
+        if (!pos) {
+            try {
+                if (typeof p.x === 'number' && typeof p.y === 'number') pos = { x: p.x, y: p.y };
+            } catch(e) {}
+        }
         if (!pos) continue;
 
         var inAnyChair = -1;
@@ -318,6 +331,14 @@ function endRound(room, chairs, numChairs) {
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
     if (gameState.roundTimeout) { clearTimeout(gameState.roundTimeout); gameState.roundTimeout = null; }
 
+    // Limpiar desconectados de occupiedChairs
+    for (var chairIdx in gameState.occupiedChairs) {
+        var pid = gameState.occupiedChairs[chairIdx];
+        if (!room.getPlayer(pid)) {
+            delete gameState.occupiedChairs[chairIdx];
+        }
+    }
+
     // Determinar quienes tienen silla asegurada
     var safe = {};
     for (var chairIdx in gameState.occupiedChairs) {
@@ -333,8 +354,27 @@ function endRound(room, chairs, numChairs) {
         }
     }
 
-    // Si nadie fue eliminado (nadie aseguro silla a tiempo), eliminar random
-    if (toRemove.length === 0) {
+    // Si nadie fue eliminado pero hay mas jugadores que sillas, eliminar por tiempo (los que aseguraron ultimos)
+    if (toRemove.length === 0 && gameState.players.length > numChairs) {
+        // Crear lista de jugadores con tiempo de aseguramiento
+        var withTimes = [];
+        for (var chairIdx in gameState.occupiedChairs) {
+            var pid = gameState.occupiedChairs[chairIdx];
+            var playerInfo = gameState.players.find(function(pl) { return pl.id === pid; });
+            if (playerInfo) {
+                withTimes.push({ player: playerInfo, time: gameState.timers[pid] ? gameState.timers[pid].time : 0 });
+            }
+        }
+        // Ordenar por tiempo (menor primero) y eliminar los que aseguraron mas tarde
+        withTimes.sort(function(a, b) { return a.time - b.time; });
+        var toEliminateCount = gameState.players.length - numChairs;
+        for (var ei = 0; ei < toEliminateCount && ei < withTimes.length; ei++) {
+            toRemove.push(withTimes[ei].player);
+        }
+    }
+
+    // Si aun asi nadie fue eliminado (imposible, pero por seguridad), eliminar random
+    if (toRemove.length === 0 && gameState.players.length > 1) {
         var rndIdx = Math.floor(Math.random() * gameState.players.length);
         toRemove.push(gameState.players[rndIdx]);
     }
