@@ -212,22 +212,25 @@ const LUCKY_HELL = (function() {
                 room.sendAnnouncement('🔀 '+(gameState.currentPlayer?gameState.currentPlayer.name:'Jugador')+' le pasa LUCKY HELL a '+target.name, null, 0x00FF00, 'bold', 2);
                 var prevPlayer = gameState.currentPlayer;
                 gameState.currentPlayer = target;
-                setTimeout(function(){
-                    try { room.stopGame(); } catch(e){}
-                    try { room.setCustomStadium(map); } catch(e){}
-                    try { room.startGame(); } catch(e){}
+                    setTimeout(function(){
+                        try { room.stopGame(); } catch(e){}
+                        try { room.setCustomStadium(map); } catch(e){}
+                        try { room.startGame(); } catch(e){}
 
-                    if (prevPlayer) {
-                        try { room.setPlayerTeam(prevPlayer.id, 0); } catch(e){}
-                    }
-                    try { room.setPlayerTeam(target.id, 1); } catch(e){}
+                        // Mover balón a posición neutral para evitar re-detección inmediata
+                        try { room.setBallPosition(0, 0); } catch(e){}
 
-                    resetDetection();
-                    if (gameState.globalTimeout) { clearTimeout(gameState.globalTimeout); gameState.globalTimeout = null; }
-                    gameState.globalTimeout = setTimeout(function(){ if (gameState.active) { room.sendAnnouncement('⏱️ Tiempo agotado en Lucky HELL!', null, 0xFF6600, 'bold'); stop(room); if (gameState.onGameEnd) gameState.onGameEnd(); } }, config.maxGameTime);
-                    if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
-                    setTimeout(function(){ if (gameState.active) gameState.checkInterval = setInterval(detectLoop, config.checkIntervalMs); }, config.detectionDelay);
-                },800);
+                        if (prevPlayer) {
+                            try { room.setPlayerTeam(prevPlayer.id, 0); } catch(e){}
+                        }
+                        try { room.setPlayerTeam(target.id, 1); } catch(e){}
+
+                        resetDetection();
+                        if (gameState.globalTimeout) { clearTimeout(gameState.globalTimeout); gameState.globalTimeout = null; }
+                        gameState.globalTimeout = setTimeout(function(){ if (gameState.active) { room.sendAnnouncement('⏱️ Tiempo agotado en Lucky HELL!', null, 0xFF6600, 'bold'); stop(room); if (gameState.onGameEnd) gameState.onGameEnd(); } }, config.maxGameTime);
+                        if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
+                        setTimeout(function(){ if (gameState.active) gameState.checkInterval = setInterval(detectLoop, config.checkIntervalMs); }, config.detectionDelay);
+                    },800);
                 break;
             default:
                 finishEffect(room);

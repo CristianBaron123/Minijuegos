@@ -12,7 +12,10 @@ var gameState = {
     spectatorPool: [],
     stopRequested: false,
     chatBlocked: false,
-    callback: null
+    callback: null,
+    matchInProgress: false,
+    currentMatchPlayers: [],
+    currentMatchHalf: 0
 };
 
 var config = {
@@ -160,6 +163,9 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
 
         // Assign teams
         TournamentBalancer.assignTeams(room, playerIds);
+        gameState.matchInProgress = true;
+        gameState.currentMatchPlayers = playerIds.slice();
+        gameState.currentMatchHalf = Math.floor(playerIds.length / 2);
         room.startGame();
 
         var prevOnGoal = room.onTeamGoal;
@@ -174,7 +180,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
 
         var to = gameState.matchTimeout = setTimeout(function() {
             if (stopped) return;
-            if (gameState.stopRequested) { resolve(null); return; }
+            if (gameState.stopRequested) { gameState.matchInProgress = false; gameState.currentMatchPlayers = []; gameState.currentMatchHalf = 0; resolve(null); return; }
             stopped = true;
             if (scores[1] === scores[2]) {
                 room.sendAnnouncement('\n⚡ Empate. Muerte Subita!', null, 0xFFFF00);
@@ -193,12 +199,16 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         function cleanupAndResolve(team) {
             clearTimeout(to);
             try { room.onTeamGoal = prevOnGoal; } catch(e){}
+            gameState.matchInProgress = false;
+            var matchPlayers = gameState.currentMatchPlayers;
+            var matchHalf = gameState.currentMatchHalf;
+            gameState.currentMatchPlayers = [];
+            gameState.currentMatchHalf = 0;
             if (team === null) { resolve(null); return; }
             var winners = [], losers = [];
-            var half = Math.floor(playerIds.length / 2);
-            for (var i = 0; i < playerIds.length; i++) {
-                if (!room.getPlayer(playerIds[i])) continue;
-                if ((i < half ? 1 : 2) === team) winners.push(playerIds[i]); else losers.push(playerIds[i]);
+            for (var i = 0; i < matchPlayers.length; i++) {
+                if (!room.getPlayer(matchPlayers[i])) continue;
+                if ((i < matchHalf ? 1 : 2) === team) winners.push(matchPlayers[i]); else losers.push(matchPlayers[i]);
             }
             room.sendAnnouncement('\n🏁 Ronda finalizada. Gano el equipo ' + (team === 1 ? '🔴' : '🔵') + ' (' + scores[1] + ' : ' + scores[2] + ')', null, 0xFFD700);
             resolve({ team: team, winners: winners, losers: losers });
@@ -212,13 +222,40 @@ function stop(room) {
     gameState.firstRound = true;
     gameState.players = [];
     gameState.spectatorPool = [];
+    gameState.matchInProgress = false;
+    gameState.currentMatchPlayers = [];
+    gameState.currentMatchHalf = 0;
     try { room.stopGame(); } catch(e){}
 }
 
 function onPlayerLeave(room, player) {
     if (!gameState.active) return;
 
-    // SINGLE handleDisconnect replaces all manual rebalancing
+    // Mid-match replacement: if player is in current match and spectators exist
+    if (gameState.matchInProgress) {
+        var idx = -1;
+        for (var i = 0; i < gameState.currentMatchPlayers.length; i++) {
+            if (gameState.currentMatchPlayers[i] === player.id) { idx = i; break; }
+        }
+        if (idx !== -1 && gameState.spectatorPool.length > 0) {
+            var team = (idx < gameState.currentMatchHalf) ? 1 : 2;
+            var repIdx = Math.floor(Math.random() * gameState.spectatorPool.length);
+            var replacement = gameState.spectatorPool.splice(repIdx, 1)[0];
+            gameState.currentMatchPlayers[idx] = replacement;
+            try { room.setPlayerTeam(replacement, team); } catch(e){}
+            var repName = room.getPlayer(replacement);
+            room.sendAnnouncement('🔄 ' + player.name + ' se desconectó. ' + (repName ? repName.name : 'Alguien') + ' entra al equipo ' + (team === 1 ? '🔴' : '🔵') + '.', null, 0xFFFF00);
+
+            // Update tournament pools
+            var pIdx = -1;
+            for (var j = 0; j < gameState.players.length; j++) {
+                if (gameState.players[j] === player.id) { pIdx = j; break; }
+            }
+            if (pIdx !== -1) gameState.players[pIdx] = replacement;
+            return;
+        }
+    }
+
     var result = TournamentBalancer.handleDisconnect(room, player.id, gameState.players, gameState.spectatorPool);
     gameState.players = result.activePlayers;
     gameState.spectatorPool = result.spectators;

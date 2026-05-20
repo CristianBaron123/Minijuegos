@@ -289,9 +289,13 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         room.onTeamGoal = function(team) {
             if (stopped) return;
             if (team === 1 || team === 2) {
-                scores[team]++;
-                room.sendAnnouncement('⚽ Gol del equipo ' + (team === 1 ? '🔴' : '🔵') + ' — ' + scores[1] + ' : ' + scores[2], null, 0x00FF00);
-                if (scores[team] >= goalsToWin) { stopped = true; cleanupAndResolve(team); }
+                // FIX: El mapa de EARN_EASILY tiene los goals invertidos
+                // RED spawnea izquierda pero goal "red" está a la derecha
+                // BLUE spawnea derecha pero goal "blue" está a la izquierda
+                var actualTeam = (team === 1) ? 2 : 1;
+                scores[actualTeam]++;
+                room.sendAnnouncement('⚽ Gol del equipo ' + (actualTeam === 1 ? '🔴' : '🔵') + ' — ' + scores[1] + ' : ' + scores[2], null, 0x00FF00);
+                if (scores[actualTeam] >= goalsToWin) { stopped = true; cleanupAndResolve(actualTeam); }
             }
         };
 
