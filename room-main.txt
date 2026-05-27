@@ -6060,8 +6060,9 @@ room.onPlayerChat = function(player, message) {
             for (var _pAuth in botState.prestamos) {
                 if (_pAuth !== playerAuth && botState.connMap[_pAuth] === myConn) {
                     room.sendAnnouncement('⛔ Ya hay un préstamo activo desde tu conexión. No se permiten cuentas múltiples para pedir préstamos.', player.id, 0xFF0000, 'bold');
-            return false;
-    }
+                    return false;
+                }
+            }
         }
         if (botState.prestamos[playerAuth]) {
             var miPrest = botState.prestamos[playerAuth];
