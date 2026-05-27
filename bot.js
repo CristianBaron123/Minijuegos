@@ -1819,6 +1819,34 @@ var BUHO = ` + buhoModule + `;
             await page.exposeFunction('__dbLoadDailyRewards', async () => {
                 return await db.loadDailyRewards();
             });
+            // Warnings, VIP, Admin
+            await page.exposeFunction('__dbAddWarning', async (auth, name, reason, byAuth, byName) => {
+                await db.addWarning(auth, name, reason, byAuth, byName);
+            });
+            await page.exposeFunction('__dbRemoveWarning', async (auth, index) => {
+                return await db.removeWarning(auth, index);
+            });
+            await page.exposeFunction('__dbGetWarnings', async (auth) => {
+                return await db.getWarnings(auth);
+            });
+            await page.exposeFunction('__dbGetAllWarnings', async () => {
+                return await db.getAllWarnings();
+            });
+            await page.exposeFunction('__dbSetVip', async (auth, name, status) => {
+                await db.setVip(auth, name, status);
+            });
+            await page.exposeFunction('__dbGetAllVips', async () => {
+                return await db.getAllVips();
+            });
+            await page.exposeFunction('__dbSetAdmin', async (auth, name, level) => {
+                await db.setAdmin(auth, name, level);
+            });
+            await page.exposeFunction('__dbRemoveAdmin', async (auth) => {
+                await db.removeAdmin(auth);
+            });
+            await page.exposeFunction('__dbGetAllAdmins', async () => {
+                return await db.getAllAdmins();
+            });
             console.log('🧪 Funciones expuestas en MODO TEST (escrituras desactivadas)');
         } else {
             await page.exposeFunction('__dbSaveWin', async (auth, name, minigame) => {
@@ -1915,6 +1943,34 @@ var BUHO = ` + buhoModule + `;
             });
             await page.exposeFunction('__dbLoadDailyRewards', async () => {
                 return await db.loadDailyRewards();
+            });
+            // Warnings, VIP, Admin
+            await page.exposeFunction('__dbAddWarning', async (auth, name, reason, byAuth, byName) => {
+                await db.addWarning(auth, name, reason, byAuth, byName);
+            });
+            await page.exposeFunction('__dbRemoveWarning', async (auth, index) => {
+                return await db.removeWarning(auth, index);
+            });
+            await page.exposeFunction('__dbGetWarnings', async (auth) => {
+                return await db.getWarnings(auth);
+            });
+            await page.exposeFunction('__dbGetAllWarnings', async () => {
+                return await db.getAllWarnings();
+            });
+            await page.exposeFunction('__dbSetVip', async (auth, name, status) => {
+                await db.setVip(auth, name, status);
+            });
+            await page.exposeFunction('__dbGetAllVips', async () => {
+                return await db.getAllVips();
+            });
+            await page.exposeFunction('__dbSetAdmin', async (auth, name, level) => {
+                await db.setAdmin(auth, name, level);
+            });
+            await page.exposeFunction('__dbRemoveAdmin', async (auth) => {
+                await db.removeAdmin(auth);
+            });
+            await page.exposeFunction('__dbGetAllAdmins', async () => {
+                return await db.getAllAdmins();
             });
             console.log('✅ Funciones de DB, Discord y Replays expuestas al navegador');
         }

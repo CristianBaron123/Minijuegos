@@ -748,10 +748,117 @@ async function getLatestBackup() {
     }
 }
 
+async function addWarning(auth, playerName, reason, byAuth, byName) {
+    await ensureConnected();
+    if (!db) return;
+    try {
+        var warning = { reason: reason || 'Sin razón', byAuth: byAuth, byName: byName || 'Sistema', date: new Date().toISOString() };
+        await db.collection('players').updateOne(
+            { auth: auth },
+            { $push: { warnings: warning }, $set: { name: playerName } },
+            { upsert: true }
+        );
+    } catch(e) { console.error('❌ DB addWarning error:', e.message); }
+}
+
+async function removeWarning(auth, index) {
+    await ensureConnected();
+    if (!db) return null;
+    try {
+        var player = await db.collection('players').findOne({ auth: auth });
+        if (!player || !player.warnings || player.warnings.length === 0) return { error: 'No tiene advertencias' };
+        var idx = (index !== undefined) ? index : player.warnings.length - 1;
+        if (idx < 0 || idx >= player.warnings.length) return { error: 'Índice inválido' };
+        player.warnings.splice(idx, 1);
+        await db.collection('players').updateOne(
+            { auth: auth },
+            { $set: { warnings: player.warnings } }
+        );
+        return { removed: true, remaining: player.warnings.length };
+    } catch(e) { console.error('❌ DB removeWarning error:', e.message); return { error: e.message }; }
+}
+
+async function getWarnings(auth) {
+    await ensureConnected();
+    if (!db) return [];
+    try {
+        var player = await db.collection('players').findOne({ auth: auth });
+        return (player && player.warnings) ? player.warnings : [];
+    } catch(e) { console.error('❌ DB getWarnings error:', e.message); return []; }
+}
+
+async function getAllWarnings() {
+    await ensureConnected();
+    if (!db) return [];
+    try {
+        return await db.collection('players').find(
+            { warnings: { $exists: true, $ne: [] } },
+            { projection: { auth: 1, name: 1, warnings: 1 } }
+        ).toArray();
+    } catch(e) { console.error('❌ DB getAllWarnings error:', e.message); return []; }
+}
+
+async function setVip(auth, playerName, status) {
+    await ensureConnected();
+    if (!db) return;
+    try {
+        await db.collection('players').updateOne(
+            { auth: auth },
+            { $set: { vip: status, name: playerName } },
+            { upsert: true }
+        );
+    } catch(e) { console.error('❌ DB setVip error:', e.message); }
+}
+
+async function getAllVips() {
+    await ensureConnected();
+    if (!db) return [];
+    try {
+        return await db.collection('players').find(
+            { vip: true },
+            { projection: { auth: 1, name: 1 } }
+        ).toArray();
+    } catch(e) { console.error('❌ DB getAllVips error:', e.message); return []; }
+}
+
+async function setAdmin(auth, playerName, level) {
+    await ensureConnected();
+    if (!db) return;
+    try {
+        await db.collection('players').updateOne(
+            { auth: auth },
+            { $set: { adminLevel: level, name: playerName } },
+            { upsert: true }
+        );
+    } catch(e) { console.error('❌ DB setAdmin error:', e.message); }
+}
+
+async function removeAdmin(auth) {
+    await ensureConnected();
+    if (!db) return;
+    try {
+        await db.collection('players').updateOne(
+            { auth: auth },
+            { $unset: { adminLevel: '' } }
+        );
+    } catch(e) { console.error('❌ DB removeAdmin error:', e.message); }
+}
+
+async function getAllAdmins() {
+    await ensureConnected();
+    if (!db) return [];
+    try {
+        return await db.collection('players').find(
+            { adminLevel: { $exists: true } },
+            { projection: { auth: 1, name: 1, adminLevel: 1 } }
+        ).toArray();
+    } catch(e) { console.error('❌ DB getAllAdmins error:', e.message); return []; }
+}
+
 async function close() {
     if (client) {
         try { await client.close(); } catch(e) {}
     }
 }
 
-module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close };
+module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins };

@@ -62,12 +62,26 @@ var VIP2_AUTHS = [
 ];
 
 function getVIPLevel(player) {
+    return 0;
     var auth = getAuth(player);
     if (!auth) return 0;
     if (VIP2_AUTHS.indexOf(auth) !== -1) return 2;
     if (VIP1_AUTHS.indexOf(auth) !== -1) return 1;
     return 0;
 }
+
+var EMOJI_AVATARS = {
+    "x": "😡", "xd": "😂", "lol": "😂", "ole": "⚡", "ego": "💀", ":9": "💥", "🛡️": "2",
+    "si": "👍", "s": "👍", "no": "👎", "n": "👎", "ok": "👌", "bn": "👌",
+    "gg": "😮‍💨", "meme": "🦧", "nt": "👍", "tld": "💎",
+    "mb": "😢", "😐": "😐", "lag": "🛜", "perdon": "😭",
+    "erra": "👟", "q erra": "🤯",
+    "?": "❓", "aura": "🗿", "luck": "🎁",
+    "1": "🥅", "ez": "🥱", "tocala": "👟", "mia": "🙋", "yo": "🙋",
+    "dios": "🙏", "rip": "💀", "q": "🤨"
+};
+
+var _emojiAvatarTimers = {};
 
 // Estado del bot
 var botState = {
@@ -156,7 +170,11 @@ var botState = {
     replayRecording: null,
     theWorldActive: false,
     titanTaken: {},
-    titanValues: {}
+    titanValues: {},
+    frozenPlayers: {},
+    ghostPlayers: {},
+    antiSmurf: false,
+    whitelist: { enabled: false, list: [] }
 };
 
 // ============================================
@@ -259,7 +277,7 @@ var DISCORD_INVITE = "https://discord.gg/YvFHkSZUvE";
 // ============================================
 // SISTEMA DE BANS PERMANENTES
 // ============================================
-var PERMA_BANNED_AUTHS = ["TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc", "ex4yjefsWJqZMeWtfUu63hBbvIofa-EZOSw6f2UczeQ", "rkJf6HcY4qq7jRHzB0epYT-DLW9OdZE4DkBDXpmXJuM", "dK_ucYo4B-jczy_wNeEMz0vaik9vG7pdncOnxgsIVog", "Lnyhx2-ggMF7y8IKPajaox24xdAAEeOoWZyC57La06o4"];
+var PERMA_BANNED_AUTHS = ["TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc", "ex4yjefsWJqZMeWtfUu63hBbvIofa-EZOSw6f2UczeQ", "rkJf6HcY4qq7jRHzB0epYT-DLW9OdZE4DkBDXpmXJuM", "dK_ucYo4B-jczy_wNeEMz0vaik9vG7pdncOnxgsIVog", "Lnyhx2-ggMF7y8IKPajaox24xdAAEeOoWZyC57La06o4", "LN5GtIVUDwLhdZqY2LZ1xDstkZqF2KqxaIxhqeGb0xw"];
 
 // ============================================
 // SISTEMA DE ETIQUETAS
@@ -1616,6 +1634,32 @@ setInterval(function() {
     if (expired) safeClearBans();
 }, 15000);
 
+// Frozen tick: mantener congelados como espectadores (cada 1s)
+setInterval(function() {
+    if (!botState.frozenPlayers) return;
+    for (var fzAuth in botState.frozenPlayers) {
+        var fzInfo = botState.frozenPlayers[fzAuth];
+        var fzP = room.getPlayer(fzInfo.id);
+        if (!fzP) { delete botState.frozenPlayers[fzAuth]; continue; }
+        if (fzP.team !== 0) {
+            try { room.setPlayerTeam(fzP.id, 0); } catch(e) {}
+        }
+    }
+}, 1000);
+
+// Ghost tick: mantener ghosts como espectadores (cada 500ms)
+setInterval(function() {
+    if (!botState.ghostPlayers) return;
+    for (var ghAuth in botState.ghostPlayers) {
+        var ghInfo = botState.ghostPlayers[ghAuth];
+        var ghP = room.getPlayer(ghInfo.id);
+        if (!ghP) { delete botState.ghostPlayers[ghAuth]; continue; }
+        if (ghP.team !== 0) {
+            try { room.setPlayerTeam(ghP.id, 0); } catch(e) {}
+        }
+    }
+}, 500);
+
 // ============================================
 // JUICIO PÚBLICO (Ban Vote)
 // ============================================
@@ -2639,6 +2683,14 @@ room.onPlayerJoin = function(player) {
             return;
         }
 
+        // Whitelist check
+        if (botState.whitelist && botState.whitelist.enabled) {
+            if (botState.whitelist.list.indexOf(player.auth) === -1 && CREATOR_AUTHS.indexOf(player.auth) === -1 && MODERATOR_AUTHS.indexOf(player.auth) === -1) {
+                room.kickPlayer(player.id, 'Sala en modo whitelist — No autorizado', false);
+                return;
+            }
+        }
+
         // Anti-multijoin: si ya hay alguien con el mismo auth, kickear al nuevo
         var existingIds = Object.keys(botState.authMap);
         for (var i = 0; i < existingIds.length; i++) {
@@ -2651,6 +2703,27 @@ room.onPlayerJoin = function(player) {
 
         botState.authMap[player.id] = player.auth;
         if (player.conn) botState.connMap[player.auth] = player.conn;
+
+        // Anti-smurf: si antiSmurf activo, kickear jugadores con misma conexión (distinto auth)
+        if (botState.antiSmurf && player.conn) {
+            for (var _smAuth in botState.connMap) {
+                if (_smAuth !== player.auth && botState.connMap[_smAuth] === player.conn) {
+                    var _smIds = Object.keys(botState.authMap);
+                    for (var _si = 0; _si < _smIds.length; _si++) {
+                        if (botState.authMap[_smIds[_si]] === _smAuth && parseInt(_smIds[_si]) !== player.id) {
+                            room.kickPlayer(player.id, '🚫 Ya hay un jugador con tu misma conexión en la sala.', false);
+                            console.log('🚫 Anti-smurf: ' + player.name + ' (conn: ' + player.conn + ') misma conexión que ID ' + _smIds[_si]);
+    var leavingAuth = botState.authMap[player.id];
+    delete botState.authMap[player.id];
+    if (leavingAuth && botState.connMap[leavingAuth]) {
+        delete botState.connMap[leavingAuth];
+    }
+                            return;
+                        }
+                    }
+                }
+            }
+        }
 
         // Dar admin automático a mods y owner
         var _isMod = (MODERATOR_AUTHS.indexOf(player.auth) !== -1);
@@ -2885,6 +2958,17 @@ room.onPlayerLeave = function(player) {
 
     // Limpiar actividad AFK del jugador que sale
     delete botState.afkLastActivity[player.id];
+
+    // Limpiar frozen/ghost del jugador que sale
+    var leavePlayerAuth = botState.authMap[player.id];
+    if (leavePlayerAuth) {
+        if (botState.frozenPlayers && botState.frozenPlayers[leavePlayerAuth]) {
+            delete botState.frozenPlayers[leavePlayerAuth];
+        }
+        if (botState.ghostPlayers && botState.ghostPlayers[leavePlayerAuth]) {
+            delete botState.ghostPlayers[leavePlayerAuth];
+        }
+    }
 
     // Limpiar inversion activa del jugador que sale
     var leaveAuth = botState.authMap[player.id];
@@ -3206,7 +3290,7 @@ room.onPlayerChat = function(player, message) {
     // COMANDO ADMIN: !mute #ID minutos
     // Solo CREADORES pueden usar este comando
     // ============================================
-    if (message.startsWith('!mute')) {
+    if (message.startsWith('!mute') && message !== '!mutelist' && !message.startsWith('!unmute')) {
         if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !mute', player.id, 0xFF0000);
             return false;
@@ -3249,7 +3333,7 @@ room.onPlayerChat = function(player, message) {
     }
 
     // !ban #ID minutos - CREADORES: banear temporalmente a un jugador
-    if (message.startsWith('!ban')) {
+    if (message.startsWith('!ban') && message !== '!banlist' && message !== '!bans' && !message.startsWith('!unban')) {
         var _customAuths = ['1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE', 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4', 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic', 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I'];
         if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && _customAuths.indexOf(playerAuth) === -1)) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !ban', player.id, 0xFF0000);
@@ -3275,6 +3359,1016 @@ room.onPlayerChat = function(player, message) {
         var banDurationSec = banMinutes * 60;
         room.sendAnnouncement('🔨 ' + player.name + ' baneó a ' + banTarget.name + ' por ' + banMinutes + ' minuto(s)', null, 0xFF0000, 'bold');
         applyTempBan(banTargetId, banDurationSec);
+        return false;
+    }
+
+    // ============================================
+    // COMANDO ADMIN: !kick #ID [razón]
+    // ============================================
+    if (message.startsWith('!kick')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !kick', player.id, 0xFF0000);
+            return false;
+        }
+        var kickParts = message.split(' ');
+        if (kickParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !kick #ID [razón]\nEjemplo: !kick #3 tóxico', player.id, 0xFFFF00);
+            return false;
+        }
+        var kickTargetId = parseInt(kickParts[1].replace('#', ''));
+        if (isNaN(kickTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var kickTarget = room.getPlayer(kickTargetId);
+        if (!kickTarget) { room.sendAnnouncement('⚠️ Jugador #' + kickTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var kickTargetAuth = getAuth(kickTarget);
+        if (kickTargetAuth && CREATOR_AUTHS.indexOf(kickTargetAuth) !== -1) {
+            room.sendAnnouncement('⚠️ No puedes kickear a un creador', player.id, 0xFF6600);
+            return false;
+        }
+        var kickReason = kickParts.slice(2).join(' ') || 'Kickeado por admin';
+        room.kickPlayer(kickTargetId, kickReason, false);
+        room.sendAnnouncement('👢 ' + player.name + ' kickeó a ' + kickTarget.name + (kickReason !== 'Kickeado por admin' ? ' — Razón: ' + kickReason : ''), null, 0xFF6600, 'bold');
+        try { window.__dbAddKickCount(kickTargetAuth, kickTarget.name); } catch(e) {}
+        return false;
+    }
+
+    // ============================================
+    // COMANDO ADMIN: !unmute #ID
+    // ============================================
+    if (message.startsWith('!unmute') && !message.startsWith('!unmuteid')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !unmute', player.id, 0xFF0000);
+            return false;
+        }
+        var unmuteParts = message.split(' ');
+        if (unmuteParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !unmute #ID\nEjemplo: !unmute #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var unmuteTargetId = parseInt(unmuteParts[1].replace('#', ''));
+        if (isNaN(unmuteTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var unmuteTarget = room.getPlayer(unmuteTargetId);
+        if (!unmuteTarget) { room.sendAnnouncement('⚠️ Jugador #' + unmuteTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var unmuteTargetAuth = getAuth(unmuteTarget);
+        if (!unmuteTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (!botState.spamMutes[unmuteTargetAuth]) {
+            room.sendAnnouncement('⚠️ ' + unmuteTarget.name + ' no está muteado', player.id, 0xFF6600);
+            return false;
+        }
+        delete botState.spamMutes[unmuteTargetAuth];
+        if (botState.spamMuteTimers[unmuteTargetAuth]) { clearTimeout(botState.spamMuteTimers[unmuteTargetAuth]); delete botState.spamMuteTimers[unmuteTargetAuth]; }
+        room.sendAnnouncement('🔊 ' + player.name + ' desmuteó a ' + unmuteTarget.name, null, 0x00FF00, 'bold');
+        room.sendAnnouncement('🔊 Has sido desmuteado.', unmuteTargetId, 0x00FF00, 'bold');
+        return false;
+    }
+
+    // ============================================
+    // COMANDO ADMIN: !mutelist
+    // ============================================
+    if (message === '!mutelist') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !mutelist', player.id, 0xFF0000);
+            return false;
+        }
+        var mutedList = '';
+        var nowML = Date.now();
+        var playersML = room.getPlayerList();
+        for (var mAuth in botState.spamMutes) {
+            if (nowML < botState.spamMutes[mAuth].until) {
+                var mName = mAuth;
+                for (var pi = 0; pi < playersML.length; pi++) {
+                    if (getAuth(playersML[pi]) === mAuth) { mName = playersML[pi].name; break; }
+                }
+                var mRemain = Math.ceil((botState.spamMutes[mAuth].until - nowML) / 60000);
+                mutedList += '🔇 ' + mName + ' — ' + mRemain + ' min restante(s)\n';
+            }
+        }
+        if (!mutedList) { room.sendAnnouncement('📋 No hay jugadores muteados.', player.id, 0xAAAAAA); }
+        else { room.sendAnnouncement('📋 Jugadores muteados:\n' + mutedList, player.id, 0xFF6600); }
+        return false;
+    }
+
+    // ============================================
+    // COMANDO ADMIN: !unmuteid [auth]
+    // ============================================
+    if (message.startsWith('!unmuteid')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !unmuteid', player.id, 0xFF0000);
+            return false;
+        }
+        var umiAuth = message.split(' ')[1];
+        if (!umiAuth) { room.sendAnnouncement('⚠️ Usa: !unmuteid [auth]\nEjemplo: !unmuteid ABC123', player.id, 0xFFFF00); return false; }
+        if (!botState.spamMutes[umiAuth]) {
+            room.sendAnnouncement('⚠️ Ese auth no está muteado', player.id, 0xFF6600);
+            return false;
+        }
+        delete botState.spamMutes[umiAuth];
+        if (botState.spamMuteTimers[umiAuth]) { clearTimeout(botState.spamMuteTimers[umiAuth]); delete botState.spamMuteTimers[umiAuth]; }
+        room.sendAnnouncement('🔊 Desmuteado por auth: ' + umiAuth, player.id, 0x00FF00, 'bold');
+        var umiPlayers = room.getPlayerList();
+        for (var umi = 0; umi < umiPlayers.length; umi++) {
+            if (getAuth(umiPlayers[umi]) === umiAuth) {
+                room.sendAnnouncement('🔊 Has sido desmuteado.', umiPlayers[umi].id, 0x00FF00, 'bold');
+                break;
+            }
+        }
+        return false;
+    }
+
+    // ============================================
+    // COMANDO ADMIN: !banlist / !bans
+    // ============================================
+    if (message === '!banlist' || message === '!bans') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !banlist', player.id, 0xFF0000);
+            return false;
+        }
+        var banListStr = '';
+        var nowBL = Date.now();
+        for (var bAuth in botState.tempBans) {
+            if (nowBL < botState.tempBans[bAuth].until) {
+                var bRemain = Math.ceil((botState.tempBans[bAuth].until - nowBL) / 60000);
+                banListStr += '🔨 ' + botState.tempBans[bAuth].name + ' — ' + bRemain + ' min restante(s)\n';
+            }
+        }
+        if (PERMA_BANNED_AUTHS.length > 0) {
+            banListStr += '\n⛔ Bans permanentes: ' + PERMA_BANNED_AUTHS.length;
+        }
+        if (!banListStr) { room.sendAnnouncement('📋 No hay jugadores baneados.', player.id, 0xAAAAAA); }
+        else { room.sendAnnouncement('📋 Jugadores baneados:\n' + banListStr, player.id, 0xFF0000); }
+        return false;
+    }
+
+    // ============================================
+    // COMANDO ADMIN: !unban [auth o nombre]
+    // ============================================
+    if (message.startsWith('!unban')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !unban', player.id, 0xFF0000);
+            return false;
+        }
+        var unbanArg = message.split(' ').slice(1).join(' ').trim();
+        if (!unbanArg) { room.sendAnnouncement('⚠️ Usa: !unban [auth]\nEjemplo: !unban ABC123', player.id, 0xFFFF00); return false; }
+        if (botState.tempBans[unbanArg]) {
+            var unbannedName = botState.tempBans[unbanArg].name;
+            delete botState.tempBans[unbanArg];
+            safeClearBans();
+            room.sendAnnouncement('✅ ' + player.name + ' desbaneó a ' + unbannedName, null, 0x00FF00, 'bold');
+            return false;
+        }
+        var unbFound = false;
+        for (var ubAuth in botState.tempBans) {
+            if (botState.tempBans[ubAuth].name && botState.tempBans[ubAuth].name.toLowerCase().indexOf(unbanArg.toLowerCase()) !== -1) {
+                var unbName = botState.tempBans[ubAuth].name;
+                delete botState.tempBans[ubAuth];
+                safeClearBans();
+                room.sendAnnouncement('✅ ' + player.name + ' desbaneó a ' + unbName, null, 0x00FF00, 'bold');
+                unbFound = true;
+                break;
+            }
+        }
+        if (!unbFound) { room.sendAnnouncement('⚠️ No se encontró un ban para: ' + unbanArg, player.id, 0xFF6600); }
+        return false;
+    }
+
+    // ============================================
+    // COMANDO ADMIN: !clearbans
+    // ============================================
+    if (message === '!clearbans') {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !clearbans', player.id, 0xFF0000);
+            return false;
+        }
+        botState.tempBans = {};
+        for (var cbt in botState.banTimers) {
+            if (botState.banTimers[cbt]) clearTimeout(botState.banTimers[cbt]);
+        }
+        botState.banTimers = {};
+        botState.bannedPlayers = [];
+        safeClearBans();
+        room.sendAnnouncement('✅ ' + player.name + ' limpió todos los bans', null, 0x00FF00, 'bold');
+        return false;
+    }
+
+    // ============================================
+    // SISTEMA DE WARNINGS
+    // ============================================
+    // !warn #ID [razón]
+    if (message.startsWith('!warn') && message !== '!warns' && message !== '!warnlist') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !warn', player.id, 0xFF0000);
+            return false;
+        }
+        var warnParts = message.split(' ');
+        if (warnParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !warn #ID [razón]\nEjemplo: !warn #3 insultar', player.id, 0xFFFF00);
+            return false;
+        }
+        var warnTargetId = parseInt(warnParts[1].replace('#', ''));
+        if (isNaN(warnTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var warnTarget = room.getPlayer(warnTargetId);
+        if (!warnTarget) { room.sendAnnouncement('⚠️ Jugador #' + warnTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var warnTargetAuth = getAuth(warnTarget);
+        if (!warnTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (CREATOR_AUTHS.indexOf(warnTargetAuth) !== -1) {
+            room.sendAnnouncement('⚠️ No puedes advertir a un creador', player.id, 0xFF6600);
+            return false;
+        }
+        var warnReason = warnParts.slice(2).join(' ') || 'Sin razón';
+        if (typeof window.__dbAddWarning === 'function') {
+            window.__dbAddWarning(warnTargetAuth, warnTarget.name, warnReason, playerAuth, player.name);
+        }
+        room.sendAnnouncement('⚠️ ' + player.name + ' advirtió a ' + warnTarget.name + ' — Razón: ' + warnReason, null, 0xFFAA00, 'bold');
+        room.sendAnnouncement('⚠️ Has recibido una advertencia: ' + warnReason, warnTargetId, 0xFFAA00, 'bold');
+        if (typeof window.__dbGetWarnings === 'function') {
+            (function(tAuth, tId, tName) {
+                window.__dbGetWarnings(tAuth).then(function(warnings) {
+                    if (warnings.length >= 3) {
+                        room.sendAnnouncement('🔨 ' + tName + ' alcanzó 3 advertencias — Baneado 10 minutos', null, 0xFF0000, 'bold');
+                        applyTempBan(tId, 600);
+                        if (typeof window.__dbAddBanCount === 'function') {
+                            window.__dbAddBanCount(tAuth, tName);
+                        }
+                    }
+                });
+            })(warnTargetAuth, warnTargetId, warnTarget.name);
+        }
+        return false;
+    }
+
+    // !unwarn #ID [número]
+    if (message.startsWith('!unwarn')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !unwarn', player.id, 0xFF0000);
+            return false;
+        }
+        var uwParts = message.split(' ');
+        if (uwParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !unwarn #ID [número]\nEjemplo: !unwarn #3 1', player.id, 0xFFFF00);
+            return false;
+        }
+        var uwTargetId = parseInt(uwParts[1].replace('#', ''));
+        if (isNaN(uwTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var uwTarget = room.getPlayer(uwTargetId);
+        if (!uwTarget) { room.sendAnnouncement('⚠️ Jugador #' + uwTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var uwTargetAuth = getAuth(uwTarget);
+        if (!uwTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        var uwIndex = uwParts[2] ? parseInt(uwParts[2]) - 1 : undefined;
+        if (typeof window.__dbRemoveWarning === 'function') {
+            (function(tAuth, tName, idx, pid) {
+                window.__dbRemoveWarning(tAuth, idx).then(function(result) {
+                    if (result.error) { room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600); }
+                    else { room.sendAnnouncement('✅ Advertencia removida de ' + tName + ' (' + result.remaining + ' restante(s))', null, 0x00FF00, 'bold'); }
+                });
+            })(uwTargetAuth, uwTarget.name, uwIndex, player.id);
+        }
+        return false;
+    }
+
+    // !warns #ID
+    if (message.startsWith('!warns')) {
+        var warnsParts = message.split(' ');
+        var warnsTargetId = warnsParts[1] ? parseInt(warnsParts[1].replace('#', '')) : NaN;
+        if (isNaN(warnsTargetId)) {
+            if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+                room.sendAnnouncement('⚠️ Usa: !warns #ID', player.id, 0xFFFF00);
+                return false;
+            }
+        }
+        var warnsTarget = room.getPlayer(warnsTargetId);
+        if (!warnsTarget) { room.sendAnnouncement('⚠️ Jugador #' + warnsTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var warnsTargetAuth = getAuth(warnsTarget);
+        if (!warnsTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbGetWarnings === 'function') {
+            (function(tAuth, tName, pid) {
+                window.__dbGetWarnings(tAuth).then(function(warnings) {
+                    if (!warnings || warnings.length === 0) {
+                        room.sendAnnouncement('📋 ' + tName + ' no tiene advertencias.', pid, 0xAAAAAA);
+                    } else {
+                        var warnsList = '📋 Advertencias de ' + tName + ':\n';
+                        for (var wi = 0; wi < warnings.length; wi++) {
+                            warnsList += (wi + 1) + '. ' + warnings[wi].reason + ' — por ' + (warnings[wi].byName || '?') + '\n';
+                        }
+                        room.sendAnnouncement(warnsList, pid, 0xFFAA00);
+                    }
+                });
+            })(warnsTargetAuth, warnsTarget.name, player.id);
+        }
+        return false;
+    }
+
+    // !warnlist
+    if (message === '!warnlist') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !warnlist', player.id, 0xFF0000);
+            return false;
+        }
+        if (typeof window.__dbGetAllWarnings === 'function') {
+            window.__dbGetAllWarnings().then(function(allWarns) {
+                if (!allWarns || allWarns.length === 0) {
+                    room.sendAnnouncement('📋 No hay jugadores con advertencias.', player.id, 0xAAAAAA);
+                } else {
+                    var wlList = '📋 Jugadores con advertencias:\n';
+                    for (var wli = 0; wli < allWarns.length; wli++) {
+                        wlList += '⚠️ ' + (allWarns[wli].name || allWarns[wli].auth) + ' — ' + allWarns[wli].warnings.length + ' warn(s)\n';
+                    }
+                    room.sendAnnouncement(wlList, player.id, 0xFFAA00);
+                }
+            });
+        }
+        return false;
+    }
+
+    // ============================================
+    // SISTEMA DE RANGOS: Admin, Master Admin, VIP
+    // ============================================
+    // !setadmin #ID
+    if (message.startsWith('!setadmin')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !setadmin', player.id, 0xFF0000);
+            return false;
+        }
+        var saParts = message.split(' ');
+        if (saParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !setadmin #ID\nEjemplo: !setadmin #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var saTargetId = parseInt(saParts[1].replace('#', ''));
+        if (isNaN(saTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var saTarget = room.getPlayer(saTargetId);
+        if (!saTarget) { room.sendAnnouncement('⚠️ Jugador #' + saTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var saTargetAuth = getAuth(saTarget);
+        if (!saTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (CREATOR_AUTHS.indexOf(saTargetAuth) !== -1) {
+            room.sendAnnouncement('⚠️ Ese jugador ya es creador', player.id, 0xFF6600);
+            return false;
+        }
+        if (typeof window.__dbSetAdmin === 'function') {
+            window.__dbSetAdmin(saTargetAuth, saTarget.name, 'admin');
+        }
+        room.sendAnnouncement('👑 ' + player.name + ' otorgó rango Admin a ' + saTarget.name, null, 0x00BFFF, 'bold');
+        room.sendAnnouncement('👑 ¡Felicidades! Ahora eres Admin.', saTargetId, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !removeadmin #ID
+    if (message.startsWith('!removeadmin')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !removeadmin', player.id, 0xFF0000);
+            return false;
+        }
+        var raParts = message.split(' ');
+        if (raParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !removeadmin #ID\nEjemplo: !removeadmin #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var raTargetId = parseInt(raParts[1].replace('#', ''));
+        if (isNaN(raTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var raTarget = room.getPlayer(raTargetId);
+        if (!raTarget) { room.sendAnnouncement('⚠️ Jugador #' + raTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var raTargetAuth = getAuth(raTarget);
+        if (!raTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbRemoveAdmin === 'function') {
+            window.__dbRemoveAdmin(raTargetAuth);
+        }
+        room.sendAnnouncement('👑 ' + player.name + ' quitó el rango Admin a ' + raTarget.name, null, 0xFF6600, 'bold');
+        room.sendAnnouncement('👑 Se te ha quitado el rango Admin.', raTargetId, 0xFF6600, 'bold');
+        return false;
+    }
+
+    // !setmasteradmin #ID
+    if (message.startsWith('!setmasteradmin')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !setmasteradmin', player.id, 0xFF0000);
+            return false;
+        }
+        var smaParts = message.split(' ');
+        if (smaParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !setmasteradmin #ID\nEjemplo: !setmasteradmin #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var smaTargetId = parseInt(smaParts[1].replace('#', ''));
+        if (isNaN(smaTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var smaTarget = room.getPlayer(smaTargetId);
+        if (!smaTarget) { room.sendAnnouncement('⚠️ Jugador #' + smaTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var smaTargetAuth = getAuth(smaTarget);
+        if (!smaTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbSetAdmin === 'function') {
+            window.__dbSetAdmin(smaTargetAuth, smaTarget.name, 'masteradmin');
+        }
+        room.sendAnnouncement('👑 ' + player.name + ' otorgó rango Master Admin a ' + smaTarget.name, null, 0xFFD700, 'bold');
+        room.sendAnnouncement('👑 ¡Felicidades! Ahora eres Master Admin.', smaTargetId, 0xFFD700, 'bold');
+        return false;
+    }
+
+    // !removemasteradmin #ID
+    if (message.startsWith('!removemasteradmin')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !removemasteradmin', player.id, 0xFF0000);
+            return false;
+        }
+        var rmaParts = message.split(' ');
+        if (rmaParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !removemasteradmin #ID\nEjemplo: !removemasteradmin #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var rmaTargetId = parseInt(rmaParts[1].replace('#', ''));
+        if (isNaN(rmaTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var rmaTarget = room.getPlayer(rmaTargetId);
+        if (!rmaTarget) { room.sendAnnouncement('⚠️ Jugador #' + rmaTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var rmaTargetAuth = getAuth(rmaTarget);
+        if (!rmaTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbRemoveAdmin === 'function') {
+            window.__dbRemoveAdmin(rmaTargetAuth);
+        }
+        room.sendAnnouncement('👑 ' + player.name + ' quitó el rango Master Admin a ' + rmaTarget.name, null, 0xFF6600, 'bold');
+        room.sendAnnouncement('👑 Se te ha quitado el rango Master Admin.', rmaTargetId, 0xFF6600, 'bold');
+        return false;
+    }
+
+    // !admins
+    if (message === '!admins') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !admins', player.id, 0xFF0000);
+            return false;
+        }
+        var adminsOnline = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+        var adminsStr = '👑 Admins:\n';
+        var adminsFound = false;
+        for (var ai = 0; ai < adminsOnline.length; ai++) {
+            var aAuth = getAuth(adminsOnline[ai]);
+            if (!aAuth) continue;
+            if (CREATOR_AUTHS.indexOf(aAuth) !== -1) {
+                adminsStr += '🏆 ' + adminsOnline[ai].name + ' — CREADOR\n';
+                adminsFound = true;
+            } else if (MODERATOR_AUTHS.indexOf(aAuth) !== -1) {
+                adminsStr += '🛡️ ' + adminsOnline[ai].name + ' — Moderador\n';
+                adminsFound = true;
+            }
+        }
+        if (typeof window.__dbGetAllAdmins === 'function') {
+            window.__dbGetAllAdmins().then(function(dbAdmins) {
+                if (dbAdmins && dbAdmins.length > 0) {
+                    for (var dai = 0; dai < dbAdmins.length; dai++) {
+                        adminsStr += '👑 ' + dbAdmins[dai].name + ' — ' + (dbAdmins[dai].adminLevel || 'admin') + ' (DB)\n';
+                    }
+                    adminsFound = true;
+                }
+                if (!adminsFound) { room.sendAnnouncement('📋 No hay admins.', player.id, 0xAAAAAA); }
+                else { room.sendAnnouncement(adminsStr, player.id, 0x00BFFF); }
+            });
+        } else {
+            if (!adminsFound) { room.sendAnnouncement('📋 No hay admins.', player.id, 0xAAAAAA); }
+            else { room.sendAnnouncement(adminsStr, player.id, 0x00BFFF); }
+        }
+        return false;
+    }
+
+    // !setvip #ID
+    if (message.startsWith('!setvip')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !setvip', player.id, 0xFF0000);
+            return false;
+        }
+        var svParts = message.split(' ');
+        if (svParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !setvip #ID\nEjemplo: !setvip #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var svTargetId = parseInt(svParts[1].replace('#', ''));
+        if (isNaN(svTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var svTarget = room.getPlayer(svTargetId);
+        if (!svTarget) { room.sendAnnouncement('⚠️ Jugador #' + svTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var svTargetAuth = getAuth(svTarget);
+        if (!svTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbSetVip === 'function') {
+            window.__dbSetVip(svTargetAuth, svTarget.name, true);
+        }
+        if (VIP1_AUTHS.indexOf(svTargetAuth) === -1) VIP1_AUTHS.push(svTargetAuth);
+        room.sendAnnouncement('⭐ ' + player.name + ' otorgó VIP a ' + svTarget.name, null, 0xFFD700, 'bold');
+        room.sendAnnouncement('⭐ ¡Felicidades! Ahora eres VIP.', svTargetId, 0xFFD700, 'bold');
+        return false;
+    }
+
+    // !delvip #ID
+    if (message.startsWith('!delvip')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !delvip', player.id, 0xFF0000);
+            return false;
+        }
+        var dvParts = message.split(' ');
+        if (dvParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !delvip #ID\nEjemplo: !delvip #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var dvTargetId = parseInt(dvParts[1].replace('#', ''));
+        if (isNaN(dvTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var dvTarget = room.getPlayer(dvTargetId);
+        if (!dvTarget) { room.sendAnnouncement('⚠️ Jugador #' + dvTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var dvTargetAuth = getAuth(dvTarget);
+        if (!dvTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbSetVip === 'function') {
+            window.__dbSetVip(dvTargetAuth, dvTarget.name, false);
+        }
+        var idx1 = VIP1_AUTHS.indexOf(dvTargetAuth);
+        if (idx1 !== -1) VIP1_AUTHS.splice(idx1, 1);
+        var idx2 = VIP2_AUTHS.indexOf(dvTargetAuth);
+        if (idx2 !== -1) VIP2_AUTHS.splice(idx2, 1);
+        room.sendAnnouncement('⭐ ' + player.name + ' quitó el VIP a ' + dvTarget.name, null, 0xFF6600, 'bold');
+        room.sendAnnouncement('⭐ Se te ha quitado el VIP.', dvTargetId, 0xFF6600, 'bold');
+        return false;
+    }
+
+    // !vips
+    if (message === '!vips') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !vips', player.id, 0xFF0000);
+            return false;
+        }
+        if (typeof window.__dbGetAllVips === 'function') {
+            window.__dbGetAllVips().then(function(vips) {
+                if (!vips || vips.length === 0) {
+                    room.sendAnnouncement('📋 No hay jugadores VIP.', player.id, 0xAAAAAA);
+                } else {
+                    var vipsStr = '⭐ Jugadores VIP:\n';
+                    for (var vi = 0; vi < vips.length; vi++) {
+                        var vipOnline = room.getPlayerList().find(function(p) { return getAuth(p) === vips[vi].auth; });
+                        vipsStr += '⭐ ' + vips[vi].name + (vipOnline ? ' 🟢' : ' 🔴') + '\n';
+                    }
+                    room.sendAnnouncement(vipsStr, player.id, 0xFFD700);
+                }
+            });
+        }
+        return false;
+    }
+
+    // ============================================
+    // COMANDOS DE JUEGO
+    // ============================================
+    // !rr - Reiniciar partido
+    if (message === '!rr') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !rr', player.id, 0xFF0000);
+            return false;
+        }
+        try { room.stopGame(); } catch(e) {}
+        setTimeout(function() { try { room.startGame(); } catch(e) {} }, 500);
+        room.sendAnnouncement('🔄 ' + player.name + ' reinició el partido', null, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !3def - Activar modo 3 defensas
+    if (message === '!3def') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !3def', player.id, 0xFF0000);
+            return false;
+        }
+        var defPlayers = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.team !== 0; });
+        if (defPlayers.length < 6) {
+            room.sendAnnouncement('⚠️ Se necesitan al menos 6 jugadores para 3 defensas', player.id, 0xFF6600);
+            return false;
+        }
+        var sortedDef = defPlayers.slice().sort(function(a, b) { return a.id - b.id; });
+        for (var di = 0; di < sortedDef.length; di++) {
+            if (di < 3) { try { room.setPlayerTeam(sortedDef[di].id, 1); } catch(e) {} }
+            else if (di < 6) { try { room.setPlayerTeam(sortedDef[di].id, 2); } catch(e) {} }
+            else { try { room.setPlayerTeam(sortedDef[di].id, 0); } catch(e) {} }
+        }
+        room.sendAnnouncement('🛡️ ' + player.name + ' activó modo 3 vs 3', null, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !setlimit [número]
+    if (message.startsWith('!setlimit')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !setlimit', player.id, 0xFF0000);
+            return false;
+        }
+        var slVal = parseInt(message.split(' ')[1]);
+        if (isNaN(slVal) || slVal < 0 || slVal > 20) {
+            room.sendAnnouncement('⚠️ Usa: !setlimit [0-20]\nEjemplo: !setlimit 5', player.id, 0xFFFF00);
+            return false;
+        }
+        try { room.setScoreLimit(slVal); } catch(e) {}
+        room.sendAnnouncement('⚽ Límite de goles: ' + (slVal === 0 ? 'Sin límite' : slVal), null, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !settime [minutos]
+    if (message.startsWith('!settime')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !settime', player.id, 0xFF0000);
+            return false;
+        }
+        var stVal = parseInt(message.split(' ')[1]);
+        if (isNaN(stVal) || stVal < 0 || stVal > 60) {
+            room.sendAnnouncement('⚠️ Usa: !settime [0-60 minutos]\nEjemplo: !settime 5', player.id, 0xFFFF00);
+            return false;
+        }
+        try { room.setTimeLimit(stVal); } catch(e) {}
+        room.sendAnnouncement('⏱️ Tiempo del partido: ' + (stVal === 0 ? 'Sin límite' : stVal + ' minutos'), null, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !unisrand - Uniformes aleatorios
+    if (message === '!unisrand') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !unisrand', player.id, 0xFF0000);
+            return false;
+        }
+        var uniColors = [
+            [0xFF0000, 0xCC0000, 0x990000],
+            [0x0000FF, 0x0000CC, 0x000099],
+            [0x00FF00, 0x00CC00, 0x009900],
+            [0xFFFF00, 0xCCCC00, 0x999900],
+            [0xFF00FF, 0xCC00CC, 0x990099],
+            [0x00FFFF, 0x00CCCC, 0x009999],
+            [0xFF6600, 0xCC5200, 0x993D00],
+            [0x6600FF, 0x5200CC, 0x3D0099],
+            [0x0066FF, 0x0052CC, 0x003D99],
+            [0xFF0066, 0xCC0052, 0x99003D]
+        ];
+        var uniAngle = Math.floor(Math.random() * 360);
+        var uniTeam1 = uniColors[Math.floor(Math.random() * uniColors.length)];
+        var uniTeam2 = uniColors[Math.floor(Math.random() * uniColors.length)];
+        try { room.setTeamColors(1, uniAngle, 0xFFFFFF, uniTeam1); } catch(e) {}
+        try { room.setTeamColors(2, uniAngle, 0xFFFFFF, uniTeam2); } catch(e) {}
+        room.sendAnnouncement('👕 ' + player.name + ' cambió los uniformes aleatoriamente', null, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // ============================================
+    // ESTADOS DE JUGADORES: Frozen, Ghost
+    // ============================================
+    // !frozen #ID
+    if (message.startsWith('!frozen') && message !== '!frozenlist') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !frozen', player.id, 0xFF0000);
+            return false;
+        }
+        var fzParts = message.split(' ');
+        if (fzParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !frozen #ID\nEjemplo: !frozen #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var fzTargetId = parseInt(fzParts[1].replace('#', ''));
+        if (isNaN(fzTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var fzTarget = room.getPlayer(fzTargetId);
+        if (!fzTarget) { room.sendAnnouncement('⚠️ Jugador #' + fzTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var fzTargetAuth = getAuth(fzTarget);
+        if (!fzTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (CREATOR_AUTHS.indexOf(fzTargetAuth) !== -1) {
+            room.sendAnnouncement('⚠️ No puedes congelar a un creador', player.id, 0xFF6600);
+            return false;
+        }
+        botState.frozenPlayers = botState.frozenPlayers || {};
+        botState.frozenPlayers[fzTargetAuth] = { id: fzTargetId, name: fzTarget.name };
+        room.sendAnnouncement('🧊 ' + player.name + ' congeló a ' + fzTarget.name, null, 0x00DDFF, 'bold');
+        room.sendAnnouncement('🧊 Has sido congelado. No puedes moverte.', fzTargetId, 0x00DDFF, 'bold');
+        return false;
+    }
+
+    // !unfrozen #ID
+    if (message.startsWith('!unfrozen')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !unfrozen', player.id, 0xFF0000);
+            return false;
+        }
+        var ufzParts = message.split(' ');
+        if (ufzParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !unfrozen #ID\nEjemplo: !unfrozen #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var ufzTargetId = parseInt(ufzParts[1].replace('#', ''));
+        if (isNaN(ufzTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var ufzTarget = room.getPlayer(ufzTargetId);
+        if (!ufzTarget) { room.sendAnnouncement('⚠️ Jugador #' + ufzTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var ufzTargetAuth = getAuth(ufzTarget);
+        botState.frozenPlayers = botState.frozenPlayers || {};
+        if (!ufzTargetAuth || !botState.frozenPlayers[ufzTargetAuth]) {
+            room.sendAnnouncement('⚠️ ' + ufzTarget.name + ' no está congelado', player.id, 0xFF6600);
+            return false;
+        }
+        delete botState.frozenPlayers[ufzTargetAuth];
+        room.sendAnnouncement('🧊 ' + player.name + ' descongeló a ' + ufzTarget.name, null, 0x00FF00, 'bold');
+        room.sendAnnouncement('🧊 Has sido descongelado.', ufzTargetId, 0x00FF00, 'bold');
+        return false;
+    }
+
+    // !ghost #ID
+    if (message.startsWith('!ghost') && message !== '!ghostlist') {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !ghost', player.id, 0xFF0000);
+            return false;
+        }
+        var ghParts = message.split(' ');
+        if (ghParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !ghost #ID\nEjemplo: !ghost #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var ghTargetId = parseInt(ghParts[1].replace('#', ''));
+        if (isNaN(ghTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var ghTarget = room.getPlayer(ghTargetId);
+        if (!ghTarget) { room.sendAnnouncement('⚠️ Jugador #' + ghTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var ghTargetAuth = getAuth(ghTarget);
+        if (!ghTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (CREATOR_AUTHS.indexOf(ghTargetAuth) !== -1) {
+            room.sendAnnouncement('⚠️ No puedes hacer ghost a un creador', player.id, 0xFF6600);
+            return false;
+        }
+        botState.ghostPlayers = botState.ghostPlayers || {};
+        botState.ghostPlayers[ghTargetAuth] = { id: ghTargetId, name: ghTarget.name };
+        try { room.setPlayerTeam(ghTargetId, 0); } catch(e) {}
+        room.sendAnnouncement('👻 ' + player.name + ' activó modo fantasma en ' + ghTarget.name, null, 0xAAAAAA, 'bold');
+        room.sendAnnouncement('👻 Modo fantasma activado. Eres invisible en el juego.', ghTargetId, 0xAAAAAA, 'bold');
+        return false;
+    }
+
+    // !unghost #ID
+    if (message.startsWith('!unghost')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !unghost', player.id, 0xFF0000);
+            return false;
+        }
+        var ugParts = message.split(' ');
+        if (ugParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !unghost #ID\nEjemplo: !unghost #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var ugTargetId = parseInt(ugParts[1].replace('#', ''));
+        if (isNaN(ugTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var ugTarget = room.getPlayer(ugTargetId);
+        if (!ugTarget) { room.sendAnnouncement('⚠️ Jugador #' + ugTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var ugTargetAuth = getAuth(ugTarget);
+        botState.ghostPlayers = botState.ghostPlayers || {};
+        if (!ugTargetAuth || !botState.ghostPlayers[ugTargetAuth]) {
+            room.sendAnnouncement('⚠️ ' + ugTarget.name + ' no está en modo fantasma', player.id, 0xFF6600);
+            return false;
+        }
+        delete botState.ghostPlayers[ugTargetAuth];
+        room.sendAnnouncement('👻 ' + player.name + ' quitó el modo fantasma de ' + ugTarget.name, null, 0x00FF00, 'bold');
+        room.sendAnnouncement('👻 Modo fantasma desactivado.', ugTargetId, 0x00FF00, 'bold');
+        return false;
+    }
+
+    // ============================================
+    // ANUNCIOS Y MENSAJES
+    // ============================================
+    // !anuncio [mensaje]
+    if (message.startsWith('!anuncio')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !anuncio', player.id, 0xFF0000);
+            return false;
+        }
+        var anuncioMsg = message.split(' ').slice(1).join(' ').trim();
+        if (!anuncioMsg) {
+            room.sendAnnouncement('⚠️ Usa: !anuncio [mensaje]\nEjemplo: !anuncio Torneo a las 8pm', player.id, 0xFFFF00);
+            return false;
+        }
+        room.sendAnnouncement('📢 ANUNCIO de ' + player.name + ':\n' + anuncioMsg, null, 0xFFD700, 'bold', 2);
+        return false;
+    }
+
+    // ============================================
+    // ECONOMÍA Y STATS ADMIN
+    // ============================================
+    // !eco [auth o #ID]
+    if (message.startsWith('!eco')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !eco', player.id, 0xFF0000);
+            return false;
+        }
+        var ecoArg = message.split(' ').slice(1).join(' ').trim();
+        var ecoTarget = null;
+        var ecoTargetAuth = null;
+        if (ecoArg) {
+            var ecoTargetId = parseInt(ecoArg.replace('#', ''));
+            if (!isNaN(ecoTargetId)) {
+                ecoTarget = room.getPlayer(ecoTargetId);
+                if (ecoTarget) ecoTargetAuth = getAuth(ecoTarget);
+            }
+        }
+        if (!ecoTarget) {
+            ecoTarget = player;
+            ecoTargetAuth = playerAuth;
+        }
+        if (!ecoTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbGetStats === 'function') {
+            window.__dbGetStats(ecoTargetAuth).then(function(stats) {
+                if (!stats) { room.sendAnnouncement('⚠️ No hay datos para ' + ecoTarget.name, player.id, 0xFF6600); return; }
+                room.sendAnnouncement(
+                    '💰 Economía de ' + ecoTarget.name + ':\n' +
+                    '💵 Balance: $' + (stats.balance || 0).toLocaleString() + '\n' +
+                    '🏆 Victorias: ' + (stats.wins || 0) + '\n' +
+                    '🎮 Partidas: ' + (stats.gamesPlayed || 0) + '\n' +
+                    '🔥 Mejor racha: ' + (stats.bestStreak || 0),
+                    player.id, 0xFFD700
+                );
+            });
+        }
+        return false;
+    }
+
+    // !transferir #ID monto
+    if (message.startsWith('!transferir')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !transferir', player.id, 0xFF0000);
+            return false;
+        }
+        var trParts = message.split(' ');
+        if (trParts.length < 3) {
+            room.sendAnnouncement('⚠️ Usa: !transferir #ID monto\nEjemplo: !transferir #3 5000', player.id, 0xFFFF00);
+            return false;
+        }
+        var trTargetId = parseInt(trParts[1].replace('#', ''));
+        var trAmount = parseInt(trParts[2]);
+        if (isNaN(trTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        if (isNaN(trAmount) || trAmount <= 0) { room.sendAnnouncement('⚠️ Monto inválido', player.id, 0xFF6600); return false; }
+        var trTarget = room.getPlayer(trTargetId);
+        if (!trTarget) { room.sendAnnouncement('⚠️ Jugador #' + trTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var trTargetAuth = getAuth(trTarget);
+        if (!trTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbAddBalance === 'function') {
+            window.__dbAddBalance(trTargetAuth, trTarget.name, trAmount);
+        }
+        room.sendAnnouncement('💰 ' + player.name + ' transfirió $' + trAmount.toLocaleString() + ' a ' + trTarget.name, null, 0x00FF00, 'bold');
+        room.sendAnnouncement('💰 Recibiste $' + trAmount.toLocaleString(), trTargetId, 0x00FF00, 'bold');
+        return false;
+    }
+
+    // !streak #ID
+    if (message.startsWith('!streak')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !streak', player.id, 0xFF0000);
+            return false;
+        }
+        var skParts = message.split(' ');
+        if (skParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !streak #ID\nEjemplo: !streak #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var skTargetId = parseInt(skParts[1].replace('#', ''));
+        if (isNaN(skTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var skTarget = room.getPlayer(skTargetId);
+        if (!skTarget) { room.sendAnnouncement('⚠️ Jugador #' + skTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var skTargetAuth = getAuth(skTarget);
+        if (!skTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        var skStreak = botState.winStreaks[skTargetAuth] || 0;
+        room.sendAnnouncement('🔥 Racha de ' + skTarget.name + ': ' + skStreak + ' victoria(s) consecutiva(s)', player.id, 0xFF6600);
+        return false;
+    }
+
+    // !lookup #ID
+    if (message.startsWith('!lookup')) {
+        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !lookup', player.id, 0xFF0000);
+            return false;
+        }
+        var lkParts = message.split(' ');
+        if (lkParts.length < 2) {
+            room.sendAnnouncement('⚠️ Usa: !lookup #ID\nEjemplo: !lookup #3', player.id, 0xFFFF00);
+            return false;
+        }
+        var lkTargetId = parseInt(lkParts[1].replace('#', ''));
+        if (isNaN(lkTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        var lkTarget = room.getPlayer(lkTargetId);
+        if (!lkTarget) { room.sendAnnouncement('⚠️ Jugador #' + lkTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var lkTargetAuth = getAuth(lkTarget);
+        var lkInfo = '🔍 Info de ' + lkTarget.name + ':\n' +
+            '🆔 ID: ' + lkTarget.id + '\n' +
+            '🔑 Auth: ' + (lkTargetAuth || 'Desconocido') + '\n' +
+            '👥 Equipo: ' + (lkTarget.team === 0 ? 'Espectador' : lkTarget.team === 1 ? 'Rojo' : 'Azul') + '\n';
+        if (lkTargetAuth && typeof window.__dbGetStats === 'function') {
+            window.__dbGetStats(lkTargetAuth).then(function(stats) {
+                if (stats) {
+                    lkInfo += '💵 Balance: $' + (stats.balance || 0).toLocaleString() + '\n' +
+                        '🏆 Victorias: ' + (stats.wins || 0) + '\n' +
+                        '🎮 Partidas: ' + (stats.gamesPlayed || 0) + '\n' +
+                        '🔥 Mejor racha: ' + (stats.bestStreak || 0) + '\n' +
+                        '🌈 Gay count: ' + (stats.gayCount || 0);
+                }
+                var lkMuted = botState.spamMutes[lkTargetAuth] ? 'SÍ' : 'NO';
+                var lkBanned = (botState.tempBans[lkTargetAuth] && botState.tempBans[lkTargetAuth].until > Date.now()) ? 'SÍ' : 'NO';
+                var lkFrozen = (botState.frozenPlayers && botState.frozenPlayers[lkTargetAuth]) ? 'SÍ' : 'NO';
+                var lkGhost = (botState.ghostPlayers && botState.ghostPlayers[lkTargetAuth]) ? 'SÍ' : 'NO';
+                lkInfo += '\n🔇 Muteado: ' + lkMuted + ' | 🔨 Baneado: ' + lkBanned;
+                lkInfo += '\n🧊 Congelado: ' + lkFrozen + ' | 👻 Ghost: ' + lkGhost;
+                room.sendAnnouncement(lkInfo, player.id, 0x00BFFF);
+            });
+        } else {
+            room.sendAnnouncement(lkInfo, player.id, 0x00BFFF);
+        }
+        return false;
+    }
+
+    // ============================================
+    // CONFIGURACIÓN Y SISTEMA
+    // ============================================
+    // !recargarmapas (requiere reinicio del bot para recargar mapas del disco)
+    if (message === '!recargarmapas') {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !recargarmapas', player.id, 0xFF0000);
+            return false;
+        }
+        room.sendAnnouncement('⚠️ Los mapas se cargan al iniciar el bot. Usa !reiniciar para reiniciar la sala.', player.id, 0xFF6600);
+        return false;
+    }
+
+    // !antismurf [on/off] — Anti-multicuenta por conexión
+    if (message.startsWith('!antismurf')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !antismurf', player.id, 0xFF0000);
+            return false;
+        }
+        var asArg = message.split(' ')[1];
+        if (!asArg || (asArg !== 'on' && asArg !== 'off')) {
+            botState.antiSmurf = !botState.antiSmurf;
+        } else {
+            botState.antiSmurf = (asArg === 'on');
+        }
+        room.sendAnnouncement('🛡️ Anti-Smurf: ' + (botState.antiSmurf ? 'ACTIVADO — No se permiten 2 jugadores con la misma conexión' : 'DESACTIVADO'), null, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !whitelist [add/remove/list/on/off] [auth]
+    if (message.startsWith('!whitelist')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !whitelist', player.id, 0xFF0000);
+            return false;
+        }
+        botState.whitelist = botState.whitelist || { enabled: false, list: [] };
+        var wlParts = message.split(' ');
+        var wlCmd = wlParts[1];
+        if (!wlCmd) {
+            room.sendAnnouncement(
+                '⚠️ Usa: !whitelist [acción]\n' +
+                'Acciones: on, off, add [auth], remove [auth], list',
+                player.id, 0xFFFF00
+            );
+            return false;
+        }
+        if (wlCmd === 'on') {
+            botState.whitelist.enabled = true;
+            room.sendAnnouncement('🛡️ Whitelist ACTIVADA. Solo jugadores autorizados pueden entrar.', null, 0xFF0000, 'bold');
+        } else if (wlCmd === 'off') {
+            botState.whitelist.enabled = false;
+            room.sendAnnouncement('🛡️ Whitelist DESACTIVADA. Todos pueden entrar.', null, 0x00FF00, 'bold');
+        } else if (wlCmd === 'add') {
+            var wlAddAuth = wlParts[2];
+            if (!wlAddAuth) { room.sendAnnouncement('⚠️ Usa: !whitelist add [auth]', player.id, 0xFFFF00); return false; }
+            if (botState.whitelist.list.indexOf(wlAddAuth) !== -1) { room.sendAnnouncement('⚠️ Ya está en la whitelist', player.id, 0xFF6600); return false; }
+            botState.whitelist.list.push(wlAddAuth);
+            room.sendAnnouncement('✅ Auth agregado a la whitelist', player.id, 0x00FF00);
+        } else if (wlCmd === 'remove') {
+            var wlRemAuth = wlParts[2];
+            if (!wlRemAuth) { room.sendAnnouncement('⚠️ Usa: !whitelist remove [auth]', player.id, 0xFFFF00); return false; }
+            var wlIdx = botState.whitelist.list.indexOf(wlRemAuth);
+            if (wlIdx === -1) { room.sendAnnouncement('⚠️ No está en la whitelist', player.id, 0xFF6600); return false; }
+            botState.whitelist.list.splice(wlIdx, 1);
+            room.sendAnnouncement('✅ Auth removido de la whitelist', player.id, 0x00FF00);
+        } else if (wlCmd === 'list') {
+            if (botState.whitelist.list.length === 0) {
+                room.sendAnnouncement('📋 Whitelist vacía', player.id, 0xAAAAAA);
+            } else {
+                room.sendAnnouncement('📋 Whitelist (' + botState.whitelist.list.length + '):\n' + botState.whitelist.list.join('\n'), player.id, 0x00BFFF);
+            }
+        } else {
+            room.sendAnnouncement('⚠️ Acción desconocida. Usa: on, off, add, remove, list', player.id, 0xFFFF00);
+        }
+        return false;
+    }
+
+    // !refreshcache
+    if (message === '!refreshcache') {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !refreshcache', player.id, 0xFF0000);
+            return false;
+        }
+        botState.winsCache = {};
+        botState.clanTags = {};
+        room.sendAnnouncement('✅ Caché actualizada', player.id, 0x00FF00, 'bold');
+        return false;
+    }
+
+    // !cachestatus
+    if (message === '!cachestatus') {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !cachestatus', player.id, 0xFF0000);
+            return false;
+        }
+        var cacheWins = Object.keys(botState.winsCache).length;
+        var cacheClans = Object.keys(botState.clanTags).length;
+        var cacheAuth = Object.keys(botState.authMap).length;
+        var cacheBans = Object.keys(botState.tempBans).length;
+        var cacheMutes = Object.keys(botState.spamMutes).length;
+        room.sendAnnouncement(
+            '📊 Estado de caché:\n' +
+            '🏆 Wins cacheados: ' + cacheWins + '\n' +
+            '🛡️ Clan tags: ' + cacheClans + '\n' +
+            '🔑 Auth map: ' + cacheAuth + '\n' +
+            '🔨 Temp bans: ' + cacheBans + '\n' +
+            '🔇 Mutes: ' + cacheMutes,
+            player.id, 0x00BFFF
+        );
         return false;
     }
 
@@ -3902,6 +4996,30 @@ room.onPlayerChat = function(player, message) {
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             player.id, 0xAAAAAA
         );
+        
+        // Sección de admin (solo visible para admins)
+        if (playerAuth && (CREATOR_AUTHS.indexOf(playerAuth) !== -1 || MODERATOR_AUTHS.indexOf(playerAuth) !== -1)) {
+            var adminHelp = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                "🛡️ COMANDOS ADMIN:\n" +
+                "🔇 !mute #ID min | !unmute #ID | !mutelist | !unmuteid [auth]\n" +
+                "⚖️ !ban #ID min | !unban [auth] | !banlist | !clearbans\n" +
+                "👢 !kick #ID [razón]\n" +
+                "⚠️ !warn #ID [razón] | !unwarn #ID [n] | !warns #ID | !warnlist\n";
+            if (CREATOR_AUTHS.indexOf(playerAuth) !== -1) {
+                adminHelp += "👑 !setadmin #ID | !removeadmin #ID | !setmasteradmin #ID\n" +
+                    "👑 !removemasteradmin #ID | !admins\n" +
+                    "⭐ !setvip #ID | !delvip #ID | !vips\n";
+            }
+            adminHelp += "🎮 !rr | !3def | !setlimit [n] | !settime [min] | !unisrand\n" +
+                "🧊 !frozen #ID | !unfrozen #ID | !ghost #ID | !unghost #ID\n" +
+                "📢 !anuncio [msg] | 💰 !eco [#ID] | !transferir #ID monto\n" +
+                "🔍 !lookup #ID | !streak #ID\n";
+            if (CREATOR_AUTHS.indexOf(playerAuth) !== -1) {
+                adminHelp += "🛠️ !antismurf [on/off] | !whitelist [on/off/add/remove/list] | !refreshcache | !cachestatus\n";
+            }
+            adminHelp += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+            room.sendAnnouncement(adminHelp, player.id, 0x00BFFF, 'bold', 2);
+        }
         return false;
     }
 
@@ -4942,9 +6060,8 @@ room.onPlayerChat = function(player, message) {
             for (var _pAuth in botState.prestamos) {
                 if (_pAuth !== playerAuth && botState.connMap[_pAuth] === myConn) {
                     room.sendAnnouncement('⛔ Ya hay un préstamo activo desde tu conexión. No se permiten cuentas múltiples para pedir préstamos.', player.id, 0xFF0000, 'bold');
-                    return false;
-                }
-            }
+            return false;
+    }
         }
         if (botState.prestamos[playerAuth]) {
             var miPrest = botState.prestamos[playerAuth];
@@ -6012,6 +7129,19 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('🔧 !fix voto: ' + currentVotes + '/' + needed + ' (faltan ' + (needed - currentVotes) + ')', null, 0xFFFF00);
         }
         return false;
+    }
+
+    if (getVIPLevel({ auth: playerAuth }) >= 1) {
+        var msgLower = message.toLowerCase().trim();
+        var emoji = EMOJI_AVATARS[msgLower];
+        if (emoji) {
+            try { room.setPlayerAvatar(player.id, emoji); } catch(e) {}
+            if (_emojiAvatarTimers[player.id]) clearTimeout(_emojiAvatarTimers[player.id]);
+            _emojiAvatarTimers[player.id] = setTimeout(function() {
+                try { room.setPlayerAvatar(player.id, null); } catch(e) {}
+                delete _emojiAvatarTimers[player.id];
+            }, 3000);
+        }
     }
 
     return true;
