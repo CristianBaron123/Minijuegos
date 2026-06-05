@@ -345,6 +345,22 @@ function isMod(player) {
     return !!(auth && MODERATOR_AUTHS.indexOf(auth) !== -1);
 }
 
+var CUSTOM_ADMIN_AUTHS_GLOBAL = [
+    '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE',
+    'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4',
+    'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic',
+    'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I',
+    'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY'
+];
+
+function isCustomAdmin(auth) {
+    return auth && CUSTOM_ADMIN_AUTHS_GLOBAL.indexOf(auth) !== -1;
+}
+
+function isAnyAdmin(auth) {
+    return auth && (CREATOR_AUTHS.indexOf(auth) !== -1 || MODERATOR_AUTHS.indexOf(auth) !== -1 || isCustomAdmin(auth));
+}
+
 // Funcion global para que los modulos puedan filtrar jugadores AFK
 function isPlayerAfk(playerId) {
     var pAuth = botState.authMap[playerId] || null;
@@ -382,6 +398,9 @@ function getPlayerTag(player) {
     }
     if (auth === 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4') {
         return { label: protPrefix + '🍀[' + formatText('JUST TGW') + ']🍀' + clanSuffix, color: 0x228B22 };
+    }
+    if (auth === 'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY') {
+        return { label: protPrefix + '👑[' + formatText('PRINCESA') + ']👑' + clanSuffix, color: 0xFF69B4 };
     }
     if (auth) {
         var tag = botState.playerTags[auth];
@@ -939,9 +958,10 @@ room.onPlayerKicked = function(kickedPlayer, reason, ban, byPlayer) {
         if (byPlayer && byPlayer.id !== 0) {
             var byAuth = getAuth(byPlayer);
             var isCreator = byAuth && CREATOR_AUTHS.indexOf(byAuth) !== -1;
+            var isCustomAdm = isCustomAdmin(byAuth);
             // Temp admins NO pueden banear NI kickear
             var isTempAdmin = botState.tempAdmins.indexOf(byPlayer.id) !== -1;
-            if (isTempAdmin && !isCreator) {
+            if (isTempAdmin && !isCreator && !isCustomAdm) {
                 if (ban) {
                     safeClearBans();
                 }
@@ -952,9 +972,9 @@ room.onPlayerKicked = function(kickedPlayer, reason, ban, byPlayer) {
                 return;
             }
 
-            // permitir a creadores banear
+            // permitir a creadores y custom admins banear
             if (ban) {
-                if (!isCreator) {
+                if (!isCreator && !isCustomAdm) {
                     // revertir ban: limpiar bans, quitar admin
                     safeClearBans();
                     try { room.setPlayerAdmin(byPlayer.id, false); } catch(e){}
@@ -967,7 +987,7 @@ room.onPlayerKicked = function(kickedPlayer, reason, ban, byPlayer) {
             var now = Date.now();
             botState.lastKickBy = botState.lastKickBy || {};
             var last = botState.lastKickBy[byPlayer.id] || 0;
-            if (now - last < 120000 && !isCreator) {
+            if (now - last < 120000 && !isCreator && !isCustomAdm) {
                 // Violó cooldown: revocar admin temporal y avisar
                 try { room.setPlayerAdmin(byPlayer.id, false); } catch(e){}
                 room.sendAnnouncement('⛔ Has kickeado demasiado seguido. Tu admin ha sido revocado temporalmente.', byPlayer.id, 0xFF0000, 'bold');
@@ -2847,6 +2867,11 @@ room.onPlayerJoin = function(player) {
         room.setPlayerAdmin(player.id, true);
         room.sendAnnouncement('🍀 Bienvenido JUST TGW! Admin activado', player.id, 0x228B22, 'bold');
     }
+    // PRINCESA: dar admin automático
+    if (kingAuth === 'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY') {
+        room.setPlayerAdmin(player.id, true);
+        room.sendAnnouncement('👑 Bienvenido PRINCESA! Admin activado', player.id, 0xFF69B4, 'bold');
+    }
 
     room.sendAnnouncement(
         "👋 Bienvenido " + formatText(player.name) + "!\n" +
@@ -3140,18 +3165,10 @@ room.onPlayerAdminChange = function(changedPlayer, byPlayer) {
     // Si alguien recibió admin y NO es creador, quitárselo
     if (changedPlayer.admin) {
         var changedAuth = getAuth(changedPlayer);
-        if (!changedAuth || (CREATOR_AUTHS.indexOf(changedAuth) === -1 && MODERATOR_AUTHS.indexOf(changedAuth) === -1)) {
+        if (!changedAuth || (CREATOR_AUTHS.indexOf(changedAuth) === -1 && MODERATOR_AUTHS.indexOf(changedAuth) === -1 && !isCustomAdmin(changedAuth))) {
             // Permitir temp admins de Lucky (solo cosmético, ya están limitados)
             if (botState.tempAdmins.indexOf(changedPlayer.id) !== -1) return;
-            // Permitir KING
-            if (changedAuth === 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic') return;
-            // Permitir THE BEST
-            if (changedAuth === '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE') return;
-            // Permitir LEO
-            if (changedAuth === 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I') return;
-            // Permitir JUST TGW
-            if (changedAuth === 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4') return;
-            // No es creador ni temp admin ni KING → quitar admin
+            // No es creador/mod/custom → quitar admin
             try { room.setPlayerAdmin(changedPlayer.id, false); } catch(e){}
             room.sendAnnouncement(
                 "⛔ Solo los CREADORES pueden tener admin.",
@@ -3265,7 +3282,7 @@ room.onPlayerChat = function(player, message) {
 
     // Control de admins temporales - no pueden usar comandos de admin
     // EXCEPCION: Los CREADORES siempre pueden usar kick/ban/set aunque tengan admin temporal
-    if (botState.tempAdmins.indexOf(player.id) !== -1 && CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+    if (botState.tempAdmins.indexOf(player.id) !== -1 && CREATOR_AUTHS.indexOf(playerAuth) === -1 && !isCustomAdmin(playerAuth)) {
         if (message.startsWith('!kick') || message.startsWith('!ban') || message.startsWith('!set')) {
             room.sendAnnouncement(
                 "⛔ Los admins temporales NO pueden kickear, banear ni cambiar mapas",
@@ -3291,8 +3308,8 @@ room.onPlayerChat = function(player, message) {
     // Solo CREADORES pueden usar este comando
     // ============================================
     if (message.startsWith('!mute') && message !== '!mutelist' && !message.startsWith('!unmute')) {
-        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
-            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !mute', player.id, 0xFF0000);
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !mute', player.id, 0xFF0000);
             return false;
         }
         var muteParts = message.split(' ');
@@ -3334,9 +3351,8 @@ room.onPlayerChat = function(player, message) {
 
     // !ban #ID minutos - CREADORES: banear temporalmente a un jugador
     if (message.startsWith('!ban') && message !== '!banlist' && message !== '!bans' && !message.startsWith('!unban')) {
-        var _customAuths = ['1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE', 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4', 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic', 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I'];
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && _customAuths.indexOf(playerAuth) === -1)) {
-            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !ban', player.id, 0xFF0000);
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !ban', player.id, 0xFF0000);
             return false;
         }
         var banParts = message.split(' ');
@@ -3366,7 +3382,7 @@ room.onPlayerChat = function(player, message) {
     // COMANDO ADMIN: !kick #ID [razón]
     // ============================================
     if (message.startsWith('!kick')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !kick', player.id, 0xFF0000);
             return false;
         }
@@ -3395,7 +3411,7 @@ room.onPlayerChat = function(player, message) {
     // COMANDO ADMIN: !unmute #ID
     // ============================================
     if (message.startsWith('!unmute') && !message.startsWith('!unmuteid')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !unmute', player.id, 0xFF0000);
             return false;
         }
@@ -3425,7 +3441,7 @@ room.onPlayerChat = function(player, message) {
     // COMANDO ADMIN: !mutelist
     // ============================================
     if (message === '!mutelist') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !mutelist', player.id, 0xFF0000);
             return false;
         }
@@ -3478,7 +3494,7 @@ room.onPlayerChat = function(player, message) {
     // COMANDO ADMIN: !banlist / !bans
     // ============================================
     if (message === '!banlist' || message === '!bans') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !banlist', player.id, 0xFF0000);
             return false;
         }
@@ -3554,7 +3570,7 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // !warn #ID [razón]
     if (message.startsWith('!warn') && message !== '!warns' && message !== '!warnlist') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !warn', player.id, 0xFF0000);
             return false;
         }
@@ -3597,7 +3613,7 @@ room.onPlayerChat = function(player, message) {
 
     // !unwarn #ID [número]
     if (message.startsWith('!unwarn')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !unwarn', player.id, 0xFF0000);
             return false;
         }
@@ -3629,7 +3645,7 @@ room.onPlayerChat = function(player, message) {
         var warnsParts = message.split(' ');
         var warnsTargetId = warnsParts[1] ? parseInt(warnsParts[1].replace('#', '')) : NaN;
         if (isNaN(warnsTargetId)) {
-            if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+            if (!playerAuth || !isAnyAdmin(playerAuth)) {
                 room.sendAnnouncement('⚠️ Usa: !warns #ID', player.id, 0xFFFF00);
                 return false;
             }
@@ -3658,7 +3674,7 @@ room.onPlayerChat = function(player, message) {
 
     // !warnlist
     if (message === '!warnlist') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !warnlist', player.id, 0xFF0000);
             return false;
         }
@@ -3787,7 +3803,7 @@ room.onPlayerChat = function(player, message) {
 
     // !admins
     if (message === '!admins') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !admins', player.id, 0xFF0000);
             return false;
         }
@@ -3880,7 +3896,7 @@ room.onPlayerChat = function(player, message) {
 
     // !vips
     if (message === '!vips') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !vips', player.id, 0xFF0000);
             return false;
         }
@@ -3906,7 +3922,7 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // !rr - Reiniciar partido
     if (message === '!rr') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !rr', player.id, 0xFF0000);
             return false;
         }
@@ -3918,7 +3934,7 @@ room.onPlayerChat = function(player, message) {
 
     // !3def - Activar modo 3 defensas
     if (message === '!3def') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !3def', player.id, 0xFF0000);
             return false;
         }
@@ -3939,7 +3955,7 @@ room.onPlayerChat = function(player, message) {
 
     // !setlimit [número]
     if (message.startsWith('!setlimit')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !setlimit', player.id, 0xFF0000);
             return false;
         }
@@ -3955,7 +3971,7 @@ room.onPlayerChat = function(player, message) {
 
     // !settime [minutos]
     if (message.startsWith('!settime')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !settime', player.id, 0xFF0000);
             return false;
         }
@@ -3971,7 +3987,7 @@ room.onPlayerChat = function(player, message) {
 
     // !unisrand - Uniformes aleatorios
     if (message === '!unisrand') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !unisrand', player.id, 0xFF0000);
             return false;
         }
@@ -4001,7 +4017,7 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // !frozen #ID
     if (message.startsWith('!frozen') && message !== '!frozenlist') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !frozen', player.id, 0xFF0000);
             return false;
         }
@@ -4029,7 +4045,7 @@ room.onPlayerChat = function(player, message) {
 
     // !unfrozen #ID
     if (message.startsWith('!unfrozen')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !unfrozen', player.id, 0xFF0000);
             return false;
         }
@@ -4056,7 +4072,7 @@ room.onPlayerChat = function(player, message) {
 
     // !ghost #ID
     if (message.startsWith('!ghost') && message !== '!ghostlist') {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !ghost', player.id, 0xFF0000);
             return false;
         }
@@ -4085,7 +4101,7 @@ room.onPlayerChat = function(player, message) {
 
     // !unghost #ID
     if (message.startsWith('!unghost')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !unghost', player.id, 0xFF0000);
             return false;
         }
@@ -4115,7 +4131,7 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // !anuncio [mensaje]
     if (message.startsWith('!anuncio')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !anuncio', player.id, 0xFF0000);
             return false;
         }
@@ -4133,7 +4149,7 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // !eco [auth o #ID]
     if (message.startsWith('!eco')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !eco', player.id, 0xFF0000);
             return false;
         }
@@ -4197,7 +4213,7 @@ room.onPlayerChat = function(player, message) {
 
     // !streak #ID
     if (message.startsWith('!streak')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !streak', player.id, 0xFF0000);
             return false;
         }
@@ -4219,7 +4235,7 @@ room.onPlayerChat = function(player, message) {
 
     // !lookup #ID
     if (message.startsWith('!lookup')) {
-        if (!playerAuth || (CREATOR_AUTHS.indexOf(playerAuth) === -1 && MODERATOR_AUTHS.indexOf(playerAuth) === -1)) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !lookup', player.id, 0xFF0000);
             return false;
         }
@@ -4387,7 +4403,8 @@ room.onPlayerChat = function(player, message) {
             { auth: '1-6gDursmPncJIvqDu_88b-_N2hIeZdUQCsgkGmO2hE', label: 'THE BEST' },
             { auth: 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4', label: 'JUST TGW' },
             { auth: 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic', label: 'KING' },
-            { auth: 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I', label: 'LEO' }
+            { auth: 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I', label: 'LEO' },
+            { auth: 'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY', label: 'PRINCESA' }
         ];
         var isOwner = (rAuth === OWNER_AUTH);
         var isCreador = (CREATOR_AUTHS.indexOf(rAuth) !== -1);
@@ -7186,6 +7203,11 @@ room.onGameUnpause = function() {
 var _safetyStuckSince = null;
 setInterval(function() {
     if (!botState.gameActive) { _safetyStuckSince = null; return; }
+    // Grace period: no matar juegos que acaban de iniciar (fase de setup/instrucciones)
+    if (botState.minigameStartTime && (Date.now() - botState.minigameStartTime < 20000)) {
+        _safetyStuckSince = null;
+        return;
+    }
     // No interferir con juegos que ponen jugadores en espectador (es normal)
     if (LUCKY.isActive() || (LUCKY_HELL && LUCKY_HELL.isActive && LUCKY_HELL.isActive()) || (LUCKY_DIOS && LUCKY_DIOS.isActive && LUCKY_DIOS.isActive()) || (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) || (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive())) {
         _safetyStuckSince = null;
