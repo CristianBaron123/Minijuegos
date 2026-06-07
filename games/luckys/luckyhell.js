@@ -208,7 +208,7 @@ const LUCKY_HELL = (function() {
         if (!eff) { finishEffect(room); return; }
         switch(eff.type) {
             case 'pass_hell':
-                if (gameState.callbacks && gameState.callbacks.onLuckyPass && gameState.currentPlayer) gameState.callbacks.onLuckyPass(gameState.currentPlayer.id, target.id);
+                // NOTA: No se llama onLuckyPass en Lucky Hell para evitar ban por abuso recíproco (el pass es por caer en zona verde, no elección del ganador)
                 room.sendAnnouncement('🔀 '+(gameState.currentPlayer?gameState.currentPlayer.name:'Jugador')+' le pasa LUCKY HELL a '+target.name, null, 0x00FF00, 'bold', 2);
                 var prevPlayer = gameState.currentPlayer;
                 gameState.currentPlayer = target;
