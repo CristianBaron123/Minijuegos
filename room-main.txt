@@ -1830,14 +1830,17 @@ function loadLuckyMap(winner) {
         var winnerCheck = room.getPlayer(winner.id);
         if (!winnerCheck) {
             console.log('⚠️ Ganador ' + winner.name + ' ya no esta en la sala');
-            botState.gameActive = false;
+            // forceStopAllGames (no solo gameActive=false): si el módulo que
+            // terminó quedó isActive()===true, dejarlo así con gameActive=false
+            // traba la sala (el safety de 5min no dispara porque chequea gameActive).
+            forceStopAllGames();
             setTimeout(checkAndStart, 5000);
             return;
         }
         // Si el ganador esta en espectador (team 0), anular
         if (winnerCheck.team === 0) {
             console.log('⚠️ Ganador ' + winner.name + ' esta en espectador, anulando victoria');
-            botState.gameActive = false;
+            forceStopAllGames();
             setTimeout(checkAndStart, 5000);
             return;
         }
