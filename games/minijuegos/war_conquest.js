@@ -261,7 +261,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         if ((playerIds.length % 2) === 1 && gameState.spectatorPool.length > 0) {
             for (var si = 0; si < gameState.spectatorPool.length; si++) {
                 var sp = gameState.spectatorPool[si];
-                if (room.getPlayer(sp) && playerIds.length < maxPlayers) {
+                if (room.getPlayer(sp)) {
                     gameState.spectatorPool.splice(si, 1);
                     playerIds.push(sp);
                     if (gameState.players.indexOf(sp) === -1) gameState.players.push(sp);

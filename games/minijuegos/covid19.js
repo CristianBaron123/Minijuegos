@@ -22,7 +22,10 @@ const config = {
     minX: -300,
     maxX: 300,
     minY: -300,
-    maxY: 300
+    maxY: 300,
+    // Radio del jugador (disco estándar de HaxBall) usado para el umbral de
+    // colisión con las zonas rojas. Faltaba y daba NaN → nunca detectaba contacto.
+    playerRadius: 15
 };
 
 function start(room, onGameEnd) {

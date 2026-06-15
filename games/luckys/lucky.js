@@ -606,6 +606,9 @@ var LUCKY = (function() {
                     // Reiniciar detección con timeout completo
                     setTimeout(function() {
                         if (gameState.active) {
+                            // Limpiar el interval previo de start() antes de crear uno nuevo,
+                            // si no quedaba huérfano corriendo (doble detección de color).
+                            if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
                             gameState.checkInterval = setInterval(function() {
                                 detectColor(room);
                             }, 100);
@@ -746,6 +749,12 @@ var LUCKY = (function() {
     
     function stop(room, suppressCallback) {
         gameState.active = false;
+
+        // Cancelar cualquier selección en curso: limpia selectionTimeout/reminder,
+        // chatBlocked y selectionEffect. Sin esto, si stop() corría durante una
+        // selección (ej: globalTimeout de 60s), el chat quedaba bloqueado y los
+        // timers de selección disparaban sobre un Lucky ya terminado.
+        try { cancelSelection(); } catch(e){}
 
         if (gameState.checkInterval) {
             clearInterval(gameState.checkInterval);
