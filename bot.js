@@ -1,5 +1,10 @@
 // Bot de Haxball con sistema de minijuegos automático
-require('dotenv').config();
+// IMPORTANTE: cargar el .env por RUTA ABSOLUTA. Si se usa config() a secas,
+// dotenv busca el .env en el directorio de trabajo actual (process.cwd()), no
+// en la carpeta del bot. Si el proceso se lanza desde otro cwd (PM2, systemd,
+// reinicio de la VPS), el .env NO se carga, MONGO_URI queda undefined y db.js
+// caía a la base local → la sala "se reiniciaba" / cambiaba de base.
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');

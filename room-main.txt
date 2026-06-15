@@ -1098,6 +1098,11 @@ var minigameModules = [
 function startMinigame(gameEntry) {
     botState.gameActive = true;
     botState.minigameStartTime = Date.now();
+    // Resetear el handler de gol al central ANTES de arrancar. Varios juegos de
+    // goles sobrescriben room.onTeamGoal en su start() y no lo restauran en
+    // stop(); si el juego anterior dejó su handler pegado, contaminaba a este.
+    // Los juegos que necesitan su propio handler lo reasignan en su start().
+    try { room.onTeamGoal = gameGoalHandler; } catch(e){}
     var mod = gameEntry.module;
     if (typeof mod !== 'undefined' && mod.start) {
         // Timeout de seguridad: si el juego no termina en 5 minutos, forzar reinicio
@@ -2201,6 +2206,13 @@ function forceStopAllGames() {
         botState.chatBlocked = false;
     }
     botState.pendingBanVote = null;
+    // Limpiar features con estado/timer propio que un reinicio debe cortar:
+    // rifa (su setTimeout devolvía plata fantasma tras un reset), robo de lucky
+    // pendiente, y el bloqueo de chat de !theworld.
+    if (botState.rifaActive && botState.rifaActive.timeout) { try { clearTimeout(botState.rifaActive.timeout); } catch(e){} }
+    botState.rifaActive = null;
+    botState.robarLucky = null;
+    botState.theWorldActive = null;
     minigameModules.forEach(function(g) {
         try { if (g.module && g.module.isActive && g.module.isActive()) g.module.stop(room); } catch(e) { reportBug('forceStopAllGames.stop(' + g.name + ')', e); }
     });
@@ -2554,6 +2566,20 @@ function checkAndStart() {
         setTimeout(function() { room.sendAnnouncement("⏱️ 2...", null, 0xFFA500, "bold", 2); }, 1500);
         setTimeout(function() { room.sendAnnouncement("⏱️ 1...", null, 0xFF6600, "bold", 2); }, 2500);
 
+        // Liberar spectatorLocked "viejos": un jugador queda locked junto con su
+        // spectatorNext. El minijuego que debía saltarse ya pasó si su auth YA NO
+        // está en spectatorNext, así que se libera. Sin esto, el lock sobrevivía
+        // hasta el timer de 90s y el jugador quedaba de espectador varios juegos.
+        Object.keys(botState.spectatorLocked).forEach(function(a) {
+            if (!botState.spectatorNext[a]) {
+                delete botState.spectatorLocked[a];
+                if (botState.spectatorLockedTimers[a]) {
+                    clearTimeout(botState.spectatorLockedTimers[a]);
+                    delete botState.spectatorLockedTimers[a];
+                }
+            }
+        });
+
         // Aplicar spectactorNext SOLO para el próximo minijuego: mover a espectador ahora y limpiar la lista
         // Aplicar spectatorNext por auth: mover a espectador
         if (botState.spectatorNext && Object.keys(botState.spectatorNext).length > 0) {
@@ -2747,7 +2773,6 @@ room.onPlayerJoin = function(player) {
 
         // Dar admin automático a mods y owner
         var _isMod = (MODERATOR_AUTHS.indexOf(player.auth) !== -1);
-        console.log('[MOD-CHECK] ' + player.name + ' auth=' + player.auth + ' isMod=' + _isMod + ' modList=' + JSON.stringify(MODERATOR_AUTHS));
         if (player.auth === OWNER_AUTH || _isMod) {
             try { room.setPlayerAdmin(player.id, true); } catch(e) {}
             var isOwner = (player.auth === OWNER_AUTH);
@@ -2759,14 +2784,23 @@ room.onPlayerJoin = function(player) {
 
         // Cargar victorias de DB para el sistema de rangos + clan tag
         if (typeof window.__dbGetStats === 'function') {
-            window.__dbGetStats(player.auth).then(function(stats) {
+            (function(_auth) {
+            window.__dbGetStats(_auth).then(function(stats) {
                 if (stats && stats.wins) {
-                    botState.winsCache[player.auth] = stats.wins;
+                    botState.winsCache[_auth] = stats.wins;
                 }
                 if (stats && stats.clanTag) {
-                    botState.clanTags[player.auth] = stats.clanTag;
+                    botState.clanTags[_auth] = stats.clanTag;
+                } else if (typeof window.__dbGetClanByAuth === 'function') {
+                    // players.clanTag puede estar desincronizado (escritura perdida
+                    // o split-brain entre bases). La fuente de verdad es la
+                    // colección clans: si el jugador es miembro, usamos ese tag.
+                    window.__dbGetClanByAuth(_auth).then(function(clan) {
+                        if (clan && clan.tag) botState.clanTags[_auth] = clan.tag;
+                    }).catch(function() {});
                 }
             }).catch(function() {});
+            })(player.auth);
         }
     }
 
@@ -2963,6 +2997,10 @@ room.onPlayerLeave = function(player) {
         }
     } catch(e) { console.error('[ANTI-DODGE] error ' + (e && e.message ? e.message : String(e))); }
 
+    // Capturar el auth ANTES de borrarlo: más abajo se usa para limpiar
+    // frozen/ghost/inversiones. Si se leía botState.authMap[player.id] después
+    // del delete, era undefined y esa limpieza nunca corría (estado pegado).
+    var _leftAuth = botState.authMap[player.id];
     delete botState.authMap[player.id];
 
     // Notificar a los módulos activos sobre la salida del jugador
@@ -2985,20 +3023,18 @@ room.onPlayerLeave = function(player) {
     delete botState.afkLastActivity[player.id];
 
     // Limpiar frozen/ghost del jugador que sale
-    var leavePlayerAuth = botState.authMap[player.id];
-    if (leavePlayerAuth) {
-        if (botState.frozenPlayers && botState.frozenPlayers[leavePlayerAuth]) {
-            delete botState.frozenPlayers[leavePlayerAuth];
+    if (_leftAuth) {
+        if (botState.frozenPlayers && botState.frozenPlayers[_leftAuth]) {
+            delete botState.frozenPlayers[_leftAuth];
         }
-        if (botState.ghostPlayers && botState.ghostPlayers[leavePlayerAuth]) {
-            delete botState.ghostPlayers[leavePlayerAuth];
+        if (botState.ghostPlayers && botState.ghostPlayers[_leftAuth]) {
+            delete botState.ghostPlayers[_leftAuth];
         }
     }
 
     // Limpiar inversion activa del jugador que sale
-    var leaveAuth = botState.authMap[player.id];
-    if (leaveAuth && botState.inversiones[leaveAuth]) {
-        delete botState.inversiones[leaveAuth];
+    if (_leftAuth && botState.inversiones[_leftAuth]) {
+        delete botState.inversiones[_leftAuth];
     }
 
     var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
@@ -3126,12 +3162,20 @@ room.onPlayerLeave = function(player) {
             IMPOSTOR.stop(room);
         }
 
+        // Red de seguridad: la lista de arriba está hardcodeada y se desactualiza
+        // (juegos nuevos no se detienen). forceStopAllGames recorre TODOS los
+        // módulos vía minigameModules, restaura room.onTeamGoal=gameGoalHandler y
+        // limpia gameSafetyTimeout (que esta rama dejaba armado y mataba el
+        // próximo juego a los 5 min). Los stops de arriba ya dejaron inactivos a
+        // los módulos, así que forceStopAllGames no los re-detiene.
+        forceStopAllGames();
+
         botState.gameActive = false;
         if (botState.startTimeout) {
             clearTimeout(botState.startTimeout);
             botState.startTimeout = null;
         }
-        
+
         // Reiniciar búsqueda de minijuego cuando haya 2 jugadores
         room.sendAnnouncement(
             "⏳ Esperando más jugadores...",
@@ -4441,15 +4485,26 @@ room.onPlayerChat = function(player, message) {
         } else {
             console.log('⚠️ [REINICIAR] __discordWebhook no disponible');
         }
-        // Reinisiar sala
-        if (botState.gameActive) {
-            forceStopAllGames();
-            room.sendAnnouncement('🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')', null, 0x00BFFF, 'bold', 2);
-            setTimeout(function() { checkAndStart(); }, 3000);
-        } else {
-            room.sendAnnouncement('🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')', null, 0x00BFFF, 'bold', 2);
-            setTimeout(function() { checkAndStart(); }, 2000);
-        }
+        // Reiniciar sala — HARD RESET incondicional.
+        // Antes forceStopAllGames() solo corría si gameActive===true. Si la sala
+        // quedaba trabada con gameActive=false pero con un Lucky activo, una
+        // votación de ban pegada, o un módulo con isActive() colgado,
+        // checkAndStart() se bloqueaba para siempre y !reiniciar no hacía nada
+        // (había que apagar la sala). Ahora SIEMPRE forzamos el stop de todo y
+        // limpiamos los flags que bloquean el arranque antes de re-iniciar.
+        forceStopAllGames();
+        botState.gameActive = false;
+        botState.chatBlocked = false;
+        botState.gamePaused = false;
+        botState.banVoteActive = false;
+        // Liberar bloqueos de espectador para que un reset libere a todos
+        botState.spectatorNext = {};
+        Object.keys(botState.spectatorLockedTimers).forEach(function(a) { try { clearTimeout(botState.spectatorLockedTimers[a]); } catch(e){} });
+        botState.spectatorLocked = {};
+        botState.spectatorLockedTimers = {};
+        if (botState.startTimeout) { clearTimeout(botState.startTimeout); botState.startTimeout = null; }
+        room.sendAnnouncement('🔄 **Sala reiniciada por **' + player.name + ' (' + rolMsg + ')', null, 0x00BFFF, 'bold', 2);
+        setTimeout(function() { checkAndStart(); }, 3000);
         return false;
     }
 
@@ -7226,6 +7281,35 @@ setInterval(function() {
         }
     } else {
         _safetyStuckSince = null;
+    }
+}, 5000);
+
+// ============================================
+// WATCHDOG ANTI-TRABE: sala con gente pero sin juego arrancando
+// ============================================
+// El safety de arriba solo cubre gameActive=true sin jugadores en equipo.
+// Este cubre el otro trabe: 2+ jugadores presentes pero checkAndStart() quedó
+// bloqueado (Lucky/banVote/módulo con isActive() pegado) y nunca arranca un
+// juego. Si pasan 25s en ese estado, forzamos stop de todo y re-arrancamos.
+var _idleStuckSince = null;
+setInterval(function() {
+    // Si hay un juego activo, no es este caso (lo cubre el otro watchdog)
+    if (botState.gameActive) { _idleStuckSince = null; return; }
+    // Estados legítimos donde NO debe arrancar un minijuego todavía
+    if (botState.banVoteActive) { _idleStuckSince = null; return; }
+    if (LUCKY.isActive() || (LUCKY_HELL && LUCKY_HELL.isActive && LUCKY_HELL.isActive()) || (LUCKY_DIOS && LUCKY_DIOS.isActive && LUCKY_DIOS.isActive())) { _idleStuckSince = null; return; }
+    var pc = room.getPlayerList().filter(function(p) { return p.id !== 0; }).length;
+    if (pc < 2) { _idleStuckSince = null; return; }
+    // Hay 2+ jugadores, nada corriendo y nada legítimo bloqueando:
+    // debería haber arrancado un juego ya. Esperar 25s para no pisar
+    // transiciones normales entre juegos (que tardan 2-3s).
+    if (!_idleStuckSince) { _idleStuckSince = Date.now(); return; }
+    if (Date.now() - _idleStuckSince > 25000) {
+        console.log('⚠️ WATCHDOG: 2+ jugadores y ningún juego en 25s. Forzando arranque automático.');
+        room.sendAnnouncement('⚠️ Sala atascada detectada. Reiniciando automáticamente...', null, 0xFF6600, 'bold');
+        _idleStuckSince = null;
+        forceStopAllGames();
+        setTimeout(checkAndStart, 2000);
     }
 }, 5000);
 

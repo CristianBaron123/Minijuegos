@@ -3,13 +3,27 @@
 // ============================================
 const { MongoClient } = require('mongodb');
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
+// NO caer silenciosamente a localhost: eso causaba el split-brain entre Atlas y
+// una base local de la VPS (la sala "se reiniciaba" o cambiaba de base según
+// desde dónde se lanzó el proceso). Si MONGO_URI no está, dejamos null y NO
+// conectamos a ninguna base, salvo que se habilite local a propósito con
+// ALLOW_LOCAL_DB=true.
+const MONGO_URI = process.env.MONGO_URI
+    || (process.env.ALLOW_LOCAL_DB === 'true' ? 'mongodb://localhost:27017' : null);
 const DB_NAME = 'haxball_minijuegos';
 
 let db = null;
 let client = null;
 
 async function connect() {
+    if (!MONGO_URI) {
+        console.error('🚨🚨🚨 MONGO_URI NO está definido — el .env no se cargó.');
+        console.error('🚨 NO me conecto a ninguna base para evitar escribir en una DB equivocada (split-brain con la local).');
+        console.error('🚨 Verificá que el archivo .env esté en la carpeta del bot y tenga MONGO_URI.');
+        console.error('🚨 Si de verdad querés usar la base local de la VPS, arrancá con ALLOW_LOCAL_DB=true');
+        db = null;
+        return null;
+    }
     try {
         if (client) { try { await client.close(); } catch(e) {} }
         client = new MongoClient(MONGO_URI, {
@@ -21,7 +35,11 @@ async function connect() {
         });
         await client.connect();
         db = client.db(DB_NAME);
-        console.log('✅ MongoDB conectado a ' + DB_NAME);
+        // Mostrar host (sin credenciales) para distinguir Atlas de la base local
+        var _host = 'desconocido';
+        try { _host = MONGO_URI.replace(/^[^@]*@/, '').split(/[\/?]/)[0]; } catch(e) {}
+        var _esLocal = /localhost|127\.0\.0\.1/.test(MONGO_URI);
+        console.log('✅ MongoDB conectado a ' + DB_NAME + ' @ ' + _host + (_esLocal ? '  ⚠️ ¡BASE LOCAL!' : '  (Atlas)'));
         return db;
     } catch(e) {
         console.error('❌ Error conectando a MongoDB:', e.message);
