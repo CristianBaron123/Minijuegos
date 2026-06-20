@@ -1830,6 +1830,15 @@ var BUHO = ` + buhoModule + `;
             await page.exposeFunction('__dbGetAllAdmins', async () => {
                 return await db.getAllAdmins();
             });
+            await page.exposeFunction('__dbRegisterAccount', async () => {
+                return { error: 'No disponible en modo test' };
+            });
+            await page.exposeFunction('__dbLoginAccount', async () => {
+                return { error: 'No disponible en modo test' };
+            });
+            await page.exposeFunction('__dbGetAccountByAuth', async (auth) => {
+                return await db.getAccountByAuth(auth);
+            });
             console.log('🧪 Funciones expuestas en MODO TEST (escrituras desactivadas)');
         } else {
             await page.exposeFunction('__dbSaveWin', async (auth, name, minigame) => {
@@ -1954,6 +1963,15 @@ var BUHO = ` + buhoModule + `;
             });
             await page.exposeFunction('__dbGetAllAdmins', async () => {
                 return await db.getAllAdmins();
+            });
+            await page.exposeFunction('__dbRegisterAccount', async (username, password, auth) => {
+                return await db.registerAccount(username, password, auth);
+            });
+            await page.exposeFunction('__dbLoginAccount', async (username, password, auth) => {
+                return await db.loginAccount(username, password, auth);
+            });
+            await page.exposeFunction('__dbGetAccountByAuth', async (auth) => {
+                return await db.getAccountByAuth(auth);
             });
             console.log('✅ Funciones de DB, Discord y Replays expuestas al navegador');
         }

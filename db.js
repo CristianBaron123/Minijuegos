@@ -2,6 +2,7 @@
 // MÓDULO DE BASE DE DATOS - MongoDB
 // ============================================
 const { MongoClient } = require('mongodb');
+const crypto = require('crypto');
 
 // NO caer silenciosamente a localhost: eso causaba el split-brain entre Atlas y
 // una base local de la VPS (la sala "se reiniciaba" o cambiaba de base según
@@ -14,6 +15,148 @@ const DB_NAME = 'haxball_minijuegos';
 
 let db = null;
 let client = null;
+
+// ============================================
+// SISTEMA DE CUENTAS (registro/login)
+// ============================================
+// Las stats viven en la colección 'players' por AUTH de HaxBall. Una cuenta
+// puede vincular varios auths (distintos navegadores/PCs). Para que las stats
+// "sigan" a la cuenta, mantenemos en memoria un mapa auth -> authCanonico
+// (el auth con el que se registró la cuenta). Las funciones de stats traducen
+// el auth recibido a su canónico ANTES de leer/escribir.
+// IMPORTANTE: esto NO afecta seguridad (bans/mods/anti-multijoin siguen usando
+// el auth real en room-main.txt). Solo unifica el almacenamiento de stats.
+let authToCanonical = new Map();
+
+function canon(auth) {
+    if (!auth) return auth;
+    return authToCanonical.get(auth) || auth;
+}
+
+async function loadAccountLinks() {
+    authToCanonical = new Map();
+    if (!db) return;
+    try {
+        var accounts = await db.collection('accounts').find({}).project({ mainAuth: 1, linkedAuths: 1 }).toArray();
+        for (var i = 0; i < accounts.length; i++) {
+            var a = accounts[i];
+            if (!a.mainAuth) continue;
+            authToCanonical.set(a.mainAuth, a.mainAuth);
+            if (Array.isArray(a.linkedAuths)) {
+                for (var j = 0; j < a.linkedAuths.length; j++) {
+                    authToCanonical.set(a.linkedAuths[j], a.mainAuth);
+                }
+            }
+        }
+        console.log('🔐 Cuentas cargadas: ' + accounts.length + ' (' + authToCanonical.size + ' auths vinculados)');
+    } catch(e) {
+        console.error('❌ loadAccountLinks error:', e.message);
+    }
+}
+
+function hashPassword(password, salt) {
+    salt = salt || crypto.randomBytes(16).toString('hex');
+    var hash = crypto.scryptSync(String(password), salt, 64).toString('hex');
+    return { salt: salt, hash: hash };
+}
+
+function verifyPassword(password, salt, hash) {
+    try {
+        var calc = crypto.scryptSync(String(password), salt, 64).toString('hex');
+        // Comparación en tiempo constante
+        var a = Buffer.from(calc, 'hex');
+        var b = Buffer.from(hash, 'hex');
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch(e) { return false; }
+}
+
+// Registrar una cuenta nueva ligada al auth actual
+async function registerAccount(username, password, auth) {
+    await ensureConnected();
+    if (!db) return { error: 'Base de datos no disponible' };
+    if (!auth) return { error: 'No se pudo verificar tu identidad' };
+    try {
+        username = String(username || '').trim();
+        if (username.length < 3 || username.length > 16 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+            return { error: 'Usuario: 3-16 caracteres, solo letras/números/_' };
+        }
+        if (!password || String(password).length < 4) {
+            return { error: 'La contraseña debe tener al menos 4 caracteres' };
+        }
+        var unameLower = username.toLowerCase();
+        // ¿Usuario ya tomado?
+        var exists = await db.collection('accounts').findOne({ username: unameLower });
+        if (exists) return { error: 'Ese usuario ya existe' };
+        // ¿Este auth ya está en una cuenta?
+        var already = await db.collection('accounts').findOne({ $or: [ { mainAuth: auth }, { linkedAuths: auth } ] });
+        if (already) return { error: 'Tu cuenta de HaxBall ya está registrada como "' + already.displayName + '". Usá !login' };
+        var pw = hashPassword(password);
+        await db.collection('accounts').insertOne({
+            username: unameLower,
+            displayName: username,
+            salt: pw.salt,
+            hash: pw.hash,
+            mainAuth: auth,
+            linkedAuths: [],
+            createdAt: new Date(),
+            lastLogin: new Date()
+        });
+        authToCanonical.set(auth, auth);
+        return { success: true, username: username };
+    } catch(e) {
+        console.error('❌ registerAccount error:', e.message);
+        return { error: 'Error interno al registrar' };
+    }
+}
+
+// Iniciar sesión: vincula el auth actual a la cuenta para que las stats lo sigan
+async function loginAccount(username, password, auth) {
+    await ensureConnected();
+    if (!db) return { error: 'Base de datos no disponible' };
+    if (!auth) return { error: 'No se pudo verificar tu identidad' };
+    try {
+        var unameLower = String(username || '').trim().toLowerCase();
+        var acc = await db.collection('accounts').findOne({ username: unameLower });
+        if (!acc) return { error: 'Usuario no encontrado' };
+        if (!verifyPassword(password, acc.salt, acc.hash)) return { error: 'Contraseña incorrecta' };
+        // Si este auth ya está en OTRA cuenta, no permitir
+        var other = await db.collection('accounts').findOne({ $or: [ { mainAuth: auth }, { linkedAuths: auth } ] });
+        if (other && other.username !== unameLower) {
+            return { error: 'Tu cuenta de HaxBall ya está vinculada a "' + other.displayName + '"' };
+        }
+        // Vincular el auth si no es el principal ni está ya en linkedAuths
+        if (acc.mainAuth !== auth && (!acc.linkedAuths || acc.linkedAuths.indexOf(auth) === -1)) {
+            await db.collection('accounts').updateOne(
+                { username: unameLower },
+                { $addToSet: { linkedAuths: auth }, $set: { lastLogin: new Date() } }
+            );
+        } else {
+            await db.collection('accounts').updateOne({ username: unameLower }, { $set: { lastLogin: new Date() } });
+        }
+        authToCanonical.set(auth, acc.mainAuth);
+        return { success: true, username: acc.displayName };
+    } catch(e) {
+        console.error('❌ loginAccount error:', e.message);
+        return { error: 'Error interno al iniciar sesión' };
+    }
+}
+
+// Obtener la cuenta vinculada a un auth (o null)
+async function getAccountByAuth(auth) {
+    await ensureConnected();
+    if (!db || !auth) return null;
+    try {
+        var acc = await db.collection('accounts').findOne(
+            { $or: [ { mainAuth: auth }, { linkedAuths: auth } ] },
+            { projection: { username: 1, displayName: 1, mainAuth: 1, linkedAuths: 1, createdAt: 1 } }
+        );
+        if (acc && acc._id) acc._id = acc._id.toString();
+        return acc;
+    } catch(e) {
+        console.error('❌ getAccountByAuth error:', e.message);
+        return null;
+    }
+}
 
 async function connect() {
     if (!MONGO_URI) {
@@ -40,6 +183,7 @@ async function connect() {
         try { _host = MONGO_URI.replace(/^[^@]*@/, '').split(/[\/?]/)[0]; } catch(e) {}
         var _esLocal = /localhost|127\.0\.0\.1/.test(MONGO_URI);
         console.log('✅ MongoDB conectado a ' + DB_NAME + ' @ ' + _host + (_esLocal ? '  ⚠️ ¡BASE LOCAL!' : '  (Atlas)'));
+        await loadAccountLinks();
         return db;
     } catch(e) {
         console.error('❌ Error conectando a MongoDB:', e.message);
@@ -62,6 +206,7 @@ async function ensureConnected() {
 async function saveWin(auth, name, minigame) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         var update = {
             $set: { name: name, lastSeen: new Date() },
@@ -83,6 +228,7 @@ async function saveWin(auth, name, minigame) {
 async function saveGamePlayed(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth: auth },
@@ -100,6 +246,7 @@ async function saveGamePlayed(auth, name) {
 async function addKickCount(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth: auth },
@@ -117,6 +264,7 @@ async function addKickCount(auth, name) {
 async function addBanCount(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth: auth },
@@ -134,6 +282,7 @@ async function addBanCount(auth, name) {
 async function addGayCount(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth: auth },
@@ -151,6 +300,7 @@ async function addGayCount(auth, name) {
 async function saveBestStreak(auth, streak) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth: auth },
@@ -168,6 +318,7 @@ async function saveBestStreak(auth, streak) {
 async function getStats(auth) {
     await ensureConnected();
     if (!db || !auth) return null;
+    auth = canon(auth);
     try {
         var doc = await db.collection('players').findOne({ auth: auth });
         if (doc && doc._id) {
@@ -218,6 +369,7 @@ async function getPlayerRank(auth, field) {
 async function addBalance(auth, name, amount) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth: auth },
@@ -678,6 +830,7 @@ async function createBackup() {
 async function saveFutsalGoal(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth },
@@ -690,6 +843,7 @@ async function saveFutsalGoal(auth, name) {
 async function saveFutsalAssist(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth },
@@ -702,6 +856,7 @@ async function saveFutsalAssist(auth, name) {
 async function saveFutsalWin(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth },
@@ -714,6 +869,7 @@ async function saveFutsalWin(auth, name) {
 async function saveFutsalLoss(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth },
@@ -726,6 +882,7 @@ async function saveFutsalLoss(auth, name) {
 async function saveFutsalGame(auth, name) {
     await ensureConnected();
     if (!db || !auth) return;
+    auth = canon(auth);
     try {
         await db.collection('players').updateOne(
             { auth },
@@ -738,6 +895,7 @@ async function saveFutsalGame(auth, name) {
 async function getFutsalStats(auth) {
     await ensureConnected();
     if (!db || !auth) return null;
+    auth = canon(auth);
     try {
         var doc = await db.collection('players').findOne({ auth });
         if (doc && doc._id) doc._id = doc._id.toString();
@@ -879,4 +1037,4 @@ async function close() {
     }
 }
 
-module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins };
+module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth };
