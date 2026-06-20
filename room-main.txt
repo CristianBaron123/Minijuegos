@@ -88,6 +88,8 @@ var botState = {
     gameActive: false,
     startTimeout: null,
     loggedAccounts: {},  // { playerId: displayName } - sesiones de cuenta iniciadas
+    blackjack: {},  // { playerId: { bet, player:[], dealer:[], auth, name } } - manos activas
+    loteria: { tickets: [], pot: 0 },  // lotería acumulada (sortea al llegar a N tickets)
     tempAdmins: [],  // Admins temporales
     bannedPlayers: [],  // Jugadores baneados temporalmente
     spectatorNext: {},  // { auth: true } - Jugadores que deben estar en espectador el siguiente minijuego
@@ -634,6 +636,27 @@ function shopBuy(playerAuth, playerName, playerId, cost, commandName, cooldownMs
         if (finalCooldown > 0) botState.shopCooldowns[playerAuth][commandName] = now;
         callback();
     }).catch(function() { room.sendAnnouncement('❌ Error al verificar saldo.', playerId, 0xFF0000); });
+}
+
+// ============================================
+// Helpers BLACKJACK (baraja infinita, simple)
+// ============================================
+function bjDrawCard() {
+    var r = Math.floor(Math.random() * 13) + 1; // 1=As .. 11=J,12=Q,13=K
+    var labels = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    var value = (r === 1) ? 11 : (r >= 10 ? 10 : r);
+    return { label: labels[r], value: value, isAce: (r === 1) };
+}
+function bjTotal(cards) {
+    var total = 0, aces = 0;
+    for (var i = 0; i < cards.length; i++) { total += cards[i].value; if (cards[i].isAce) aces++; }
+    while (total > 21 && aces > 0) { total -= 10; aces--; }
+    return total;
+}
+function bjHandStr(cards) {
+    var s = [];
+    for (var i = 0; i < cards.length; i++) s.push(cards[i].label);
+    return s.join(' ') + ' (' + bjTotal(cards) + ')';
 }
 
 // Recompensas del sistema monetario
@@ -2927,6 +2950,8 @@ room.onPlayerLeave = function(player) {
     delete botState.afkLastActivity[player.id];
     // Limpiar estado de sesión de cuenta (player.id se reutiliza)
     delete botState.loggedAccounts[player.id];
+    // Limpiar mano de blackjack en curso (la apuesta ya fue cobrada)
+    delete botState.blackjack[player.id];
 
     // Limpiar frozen/ghost del jugador que sale
     if (_leftAuth) {
@@ -5003,7 +5028,76 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
-    
+    // ============================================
+    // STATS — personales (!wins !games !goals !asist !cs !rank)
+    // ============================================
+    if (message === "!wins" || message === "!games" || message === "!goals" || message === "!asist" || message === "!cs" || message === "!rank") {
+        if (typeof window.__dbGetStats !== 'function' || !playerAuth) { room.sendAnnouncement('⚠️ Estadísticas no disponibles.', player.id, 0xFF6600); return false; }
+        (function(pid, pauth, cmd, pname) {
+            window.__dbGetStats(pauth).then(function(s) {
+                s = s || {};
+                if (cmd === '!wins') room.sendAnnouncement('🏆 ' + pname + ': ' + (s.wins || 0) + ' victorias', pid, 0xFFD700, 'bold');
+                else if (cmd === '!games') room.sendAnnouncement('🎮 ' + pname + ': ' + (s.gamesPlayed || 0) + ' partidas jugadas', pid, 0x00BFFF, 'bold');
+                else if (cmd === '!goals') room.sendAnnouncement('⚽ ' + pname + ': ' + (s.fGoals || 0) + ' goles (futsal)', pid, 0x00BFFF, 'bold');
+                else if (cmd === '!asist') room.sendAnnouncement('🅰️ ' + pname + ': ' + (s.fAssists || 0) + ' asistencias (futsal)', pid, 0x00BFFF, 'bold');
+                else if (cmd === '!cs') room.sendAnnouncement('🥅 ' + pname + ' (futsal): ' + (s.fGoals || 0) + 'G / ' + (s.fAssists || 0) + 'A / ' + (s.fWins || 0) + 'V / ' + (s.fLosses || 0) + 'D / ' + (s.fGames || 0) + 'PJ', pid, 0x00BFFF, 'bold');
+                else if (cmd === '!rank') {
+                    if (typeof window.__dbGetPlayerRank === 'function') {
+                        window.__dbGetPlayerRank(pauth, 'wins').then(function(r) {
+                            room.sendAnnouncement('📍 ' + pname + ': posición #' + (r || '?') + ' por victorias (' + (s.wins || 0) + ')', pid, 0xFFD700, 'bold');
+                        }).catch(function() { room.sendAnnouncement('📍 ' + pname + ': ' + (s.wins || 0) + ' victorias', pid, 0xFFD700, 'bold'); });
+                    } else room.sendAnnouncement('📍 ' + pname + ': ' + (s.wins || 0) + ' victorias', pid, 0xFFD700, 'bold');
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al cargar stats.', pid, 0xFF0000); });
+        })(player.id, playerAuth, message, player.name);
+        return false;
+    }
+
+    // ============================================
+    // STATS — tops por campo (!toprachas !topactivo + extras)
+    // ============================================
+    if (message === "!toprachas" || message === "!topactivo" || message === "!topgoles" || message === "!topasist") {
+        var _topField, _topTitle, _topUnit;
+        if (message === "!toprachas") { _topField = 'bestStreak'; _topTitle = '🔥 TOP RACHAS'; _topUnit = 'racha'; }
+        else if (message === "!topactivo") { _topField = 'gamesPlayed'; _topTitle = '🎮 TOP ACTIVOS'; _topUnit = 'partidas'; }
+        else if (message === "!topgoles") { _topField = 'fGoals'; _topTitle = '⚽ TOP GOLEADORES'; _topUnit = 'goles'; }
+        else { _topField = 'fAssists'; _topTitle = '🅰️ TOP ASISTIDORES'; _topUnit = 'asist'; }
+        if (typeof window.__dbGetTopPlayers !== 'function') { room.sendAnnouncement('⚠️ No disponible.', player.id, 0xFF6600); return false; }
+        (function(pid, field, title, unit) {
+            window.__dbGetTopPlayers(field, 5).then(function(top) {
+                if (top && top.length > 0) {
+                    var msg = title + ":\n";
+                    for (var i = 0; i < top.length; i++) msg += (i + 1) + ". " + top[i].name + " - " + (top[i][field] || 0) + " " + unit + "\n";
+                    room.sendAnnouncement(msg, pid, 0xFFD700, 'bold');
+                } else room.sendAnnouncement('📊 Sin datos aún.', pid, 0xFFFF00);
+            }).catch(function() { room.sendAnnouncement('❌ Error al cargar top.', pid, 0xFF0000); });
+        })(player.id, _topField, _topTitle, _topUnit);
+        return false;
+    }
+
+    // ============================================
+    // ECONOMY tops (!topricos !topgastadores !toplosses !topogs)
+    // spent y gambleLosses se llenan con las apuestas/tienda.
+    // ============================================
+    if (message === "!topricos" || message === "!topgastadores" || message === "!toplosses" || message === "!topogs") {
+        var _etField, _etTitle, _etMoney = false, _etUnit = '';
+        if (message === "!topricos") { _etField = 'balance'; _etTitle = '💰 TOP RICOS'; _etMoney = true; }
+        else if (message === "!topgastadores") { _etField = 'spent'; _etTitle = '💸 TOP GASTADORES'; _etMoney = true; }
+        else if (message === "!toplosses") { _etField = 'gambleLosses'; _etTitle = '📉 TOP PERDEDORES (apuestas)'; _etMoney = true; }
+        else { _etField = 'gamesPlayed'; _etTitle = '👴 TOP OGs (veteranos)'; _etUnit = ' partidas'; }
+        if (typeof window.__dbGetTopPlayers !== 'function') { room.sendAnnouncement('⚠️ No disponible.', player.id, 0xFF6600); return false; }
+        (function(pid, field, title, money, unit) {
+            window.__dbGetTopPlayers(field, 10).then(function(top) {
+                if (top && top.length > 0) {
+                    var msg = title + ":\n";
+                    for (var i = 0; i < top.length; i++) { var v = top[i][field] || 0; msg += (i + 1) + ". " + top[i].name + " - " + (money ? formatMoney(v) : (v + unit)) + "\n"; }
+                    room.sendAnnouncement(msg, pid, 0xFFD700, 'bold');
+                } else room.sendAnnouncement('📊 Sin datos aún.', pid, 0xFFFF00);
+            }).catch(function() { room.sendAnnouncement('❌ Error.', pid, 0xFF0000); });
+        })(player.id, _etField, _etTitle, _etMoney, _etUnit);
+        return false;
+    }
+
     // Comando !afk - proteger de ser movido a equipos (solo espectadores)
     if (message === "!afk") {
         room.sendAnnouncement('⚠️ El comando !afk fue desactivado.', player.id, 0xFF6600);
@@ -5952,6 +6046,107 @@ room.onPlayerChat = function(player, message) {
     // Helper: verificar si apuestas estan bloqueadas (durante explicacion/pausa)
     var _apuestasBloqueadas = false;
     if (botState.gamePaused) _apuestasBloqueadas = true;
+
+    // ============================================
+    // ECONOMY juegos: !apostar/!bet, !blackjack (+!hit/!stand), !loteria/!verloteria
+    // ============================================
+    if (message.startsWith('!apostar') || message.startsWith('!bet')) {
+        var apParts = message.trim().split(/\s+/);
+        var apMonto = parseInt((apParts[1] || '').replace(/\./g, ''));
+        if (isNaN(apMonto) || apMonto <= 0) { room.sendAnnouncement('⚠️ Usa: !apostar <monto>  (cara o cruz, ~48% de duplicar)', player.id, 0xFFFF00); return false; }
+        if (apMonto > 1000000) { room.sendAnnouncement('⚠️ Máximo 1.000.000 por apuesta', player.id, 0xFF6600); return false; }
+        (function(pid, pauth, pname, monto) {
+            shopBuy(pauth, pname, pid, monto, '!apostar', 8000, function() {
+                try { window.__dbIncStat(pauth, pname, 'spent', monto); } catch(e){}
+                if (Math.random() < 0.48) {
+                    try { window.__dbAddBalance(pauth, pname, monto * 2); } catch(e){}
+                    room.sendAnnouncement('🎲 ' + pname + ' apostó ' + formatMoney(monto) + ' y GANÓ ' + formatMoney(monto) + '! 🎉', null, 0x00FF00, 'bold');
+                } else {
+                    try { window.__dbIncStat(pauth, pname, 'gambleLosses', monto); } catch(e){}
+                    room.sendAnnouncement('🎲 ' + pname + ' apostó ' + formatMoney(monto) + ' y perdió 💸', null, 0xFF6600);
+                }
+            });
+        })(player.id, playerAuth, player.name, apMonto);
+        return false;
+    }
+    if (message.startsWith('!blackjack') || message.startsWith('!bj ') || message === '!bj') {
+        if (botState.blackjack[player.id]) { room.sendAnnouncement('⚠️ Ya tenés una mano en curso. Usá !hit o !stand.', player.id, 0xFF6600); return false; }
+        var bjParts = message.trim().split(/\s+/);
+        var bjBet = parseInt((bjParts[1] || '').replace(/\./g, ''));
+        if (isNaN(bjBet) || bjBet <= 0) { room.sendAnnouncement('⚠️ Usa: !blackjack <monto>', player.id, 0xFFFF00); return false; }
+        if (bjBet > 1000000) { room.sendAnnouncement('⚠️ Máximo 1.000.000', player.id, 0xFF6600); return false; }
+        (function(pid, pauth, pname, bet) {
+            shopBuy(pauth, pname, pid, bet, '!blackjack', 5000, function() {
+                try { window.__dbIncStat(pauth, pname, 'spent', bet); } catch(e){}
+                var g = { bet: bet, player: [bjDrawCard(), bjDrawCard()], dealer: [bjDrawCard(), bjDrawCard()], auth: pauth, name: pname };
+                botState.blackjack[pid] = g;
+                if (bjTotal(g.player) === 21) {
+                    var prize = Math.floor(bet * 2.5);
+                    try { window.__dbAddBalance(pauth, pname, prize); } catch(e){}
+                    delete botState.blackjack[pid];
+                    room.sendAnnouncement('🃏 BLACKJACK! ' + bjHandStr(g.player) + ' — Ganás ' + formatMoney(prize) + '! 🎉', pid, 0x00FF00, 'bold');
+                } else {
+                    room.sendAnnouncement('🃏 Tu mano: ' + bjHandStr(g.player) + '\n🤵 Dealer muestra: ' + g.dealer[0].label + '\nEscribe !hit (pedir) o !stand (plantarte)', pid, 0x00BFFF, 'bold');
+                }
+            });
+        })(player.id, playerAuth, player.name, bjBet);
+        return false;
+    }
+    if (message === '!hit' || message === '!pedir') {
+        var hg = botState.blackjack[player.id];
+        if (!hg) { room.sendAnnouncement('⚠️ No tenés una mano. Empezá con !blackjack <monto>', player.id, 0xFF6600); return false; }
+        hg.player.push(bjDrawCard());
+        var ht = bjTotal(hg.player);
+        if (ht > 21) {
+            try { window.__dbIncStat(hg.auth, hg.name, 'gambleLosses', hg.bet); } catch(e){}
+            delete botState.blackjack[player.id];
+            room.sendAnnouncement('🃏 ' + bjHandStr(hg.player) + ' — ¡TE PASASTE! Perdiste ' + formatMoney(hg.bet) + ' 💸', player.id, 0xFF6600, 'bold');
+        } else {
+            room.sendAnnouncement('🃏 Tu mano: ' + bjHandStr(hg.player) + '\n!hit o !stand', player.id, 0x00BFFF);
+        }
+        return false;
+    }
+    if (message === '!stand' || message === '!plantarse' || message === '!plantar') {
+        var sg = botState.blackjack[player.id];
+        if (!sg) { room.sendAnnouncement('⚠️ No tenés una mano de blackjack.', player.id, 0xFF6600); return false; }
+        while (bjTotal(sg.dealer) < 17) sg.dealer.push(bjDrawCard());
+        var pTot = bjTotal(sg.player), dTot = bjTotal(sg.dealer);
+        var won = (dTot > 21 || pTot > dTot), push = (pTot === dTot && !won);
+        var payout = won ? sg.bet * 2 : (push ? sg.bet : 0);
+        if (payout > 0) { try { window.__dbAddBalance(sg.auth, sg.name, payout); } catch(e){} }
+        if (!won && !push) { try { window.__dbIncStat(sg.auth, sg.name, 'gambleLosses', sg.bet); } catch(e){} }
+        delete botState.blackjack[player.id];
+        var outcome = won ? ('GANASTE ' + formatMoney(sg.bet) + '! 🎉') : (push ? 'EMPATE (te devuelvo la apuesta)' : 'perdiste ' + formatMoney(sg.bet) + ' 💸');
+        room.sendAnnouncement('🃏 Tú: ' + bjHandStr(sg.player) + ' | 🤵 Dealer: ' + bjHandStr(sg.dealer) + '\n' + outcome, player.id, won ? 0x00FF00 : (push ? 0xFFFF00 : 0xFF6600), 'bold');
+        return false;
+    }
+    if (message === '!loteria') {
+        var LOT_PRICE = 2000, LOT_DRAW = 10;
+        (function(pid, pauth, pname) {
+            shopBuy(pauth, pname, pid, LOT_PRICE, '!loteria', 3000, function() {
+                try { window.__dbIncStat(pauth, pname, 'spent', LOT_PRICE); } catch(e){}
+                botState.loteria.tickets.push({ auth: pauth, name: pname, id: pid });
+                botState.loteria.pot += LOT_PRICE;
+                var distinct = {}; for (var i = 0; i < botState.loteria.tickets.length; i++) distinct[botState.loteria.tickets[i].auth] = true;
+                room.sendAnnouncement('🎟️ ' + pname + ' compró un ticket! Pozo: ' + formatMoney(botState.loteria.pot) + ' | Tickets: ' + botState.loteria.tickets.length + '/' + LOT_DRAW, null, 0xFFD700, 'bold');
+                if (botState.loteria.tickets.length >= LOT_DRAW && Object.keys(distinct).length >= 2) {
+                    var win = botState.loteria.tickets[Math.floor(Math.random() * botState.loteria.tickets.length)];
+                    var pot = botState.loteria.pot;
+                    try { window.__dbAddBalance(win.auth, win.name, pot); } catch(e){}
+                    room.sendAnnouncement('🎉 SORTEO DE LOTERÍA! Ganador: ' + win.name + ' se lleva ' + formatMoney(pot) + '! 🎟️', null, 0x00FF00, 'bold', 2);
+                    botState.loteria = { tickets: [], pot: 0 };
+                }
+            });
+        })(player.id, playerAuth, player.name);
+        return false;
+    }
+    if (message === '!verloteria') {
+        var lt = botState.loteria;
+        if (!lt.tickets.length) { room.sendAnnouncement('🎟️ No hay lotería activa. Comprá un ticket con !loteria (2.000)', player.id, 0xFFFF00); return false; }
+        var mine = 0; for (var i = 0; i < lt.tickets.length; i++) if (lt.tickets[i].auth === playerAuth) mine++;
+        room.sendAnnouncement('🎟️ LOTERÍA — Pozo: ' + formatMoney(lt.pot) + '\nTickets: ' + lt.tickets.length + '/10 | Los tuyos: ' + mine + '\nSortea al llegar a 10 tickets (2+ jugadores).', player.id, 0xFFD700, 'bold');
+        return false;
+    }
 
     // !ruleta [monto] [rojo/negro/0] - Ruleta de casino (cooldown 30s)
     if (message.startsWith('!ruleta') && !message.startsWith('!ruletarusa')) {

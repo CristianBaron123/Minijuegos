@@ -1845,6 +1845,7 @@ var BUHO = ` + buhoModule + `;
             await page.exposeFunction('__dbDeleteAccount', async () => {
                 return { error: 'No disponible en modo test' };
             });
+            await page.exposeFunction('__dbIncStat', async () => { /* no-op en test */ });
             console.log('🧪 Funciones expuestas en MODO TEST (escrituras desactivadas)');
         } else {
             await page.exposeFunction('__dbSaveWin', async (auth, name, minigame) => {
@@ -1984,6 +1985,9 @@ var BUHO = ` + buhoModule + `;
             });
             await page.exposeFunction('__dbDeleteAccount', async (auth) => {
                 return await db.deleteAccount(auth);
+            });
+            await page.exposeFunction('__dbIncStat', async (auth, name, field, amount) => {
+                await db.incStat(auth, name, field, amount);
             });
             console.log('✅ Funciones de DB, Discord y Replays expuestas al navegador');
         }
