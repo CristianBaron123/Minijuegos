@@ -3531,7 +3531,7 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // COMANDO ADMIN: !mutelist
     // ============================================
-    if (message === '!mutelist') {
+    if (message === '!mutelist' || message === '!mutes') {
         if (!playerAuth || !isAnyAdmin(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los admins pueden usar !mutelist', player.id, 0xFF0000);
             return false;
@@ -4715,7 +4715,7 @@ room.onPlayerChat = function(player, message) {
     }
 
     // Comando !pasar - transferir dinero a otro jugador (cooldown 60s)
-    if (message.startsWith("!pasar")) {
+    if (message.startsWith("!pasar") || message.startsWith("!dar")) {
         var parts = message.split(" ");
         // Si solo escribió !pasar, mostrar instrucciones (privado)
         if (parts.length < 3) {
@@ -5098,6 +5098,35 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
+    // ============================================
+    // UTILITARIOS: !casino !bot !ping !viphelp !sugerencia
+    // ============================================
+    if (message === '!casino') {
+        room.sendAnnouncement('🎰 CASINO:\n  !apostar <monto> — cara o cruz (~48%)\n  !blackjack <monto> — 21 (luego !hit / !stand)\n  !ruleta <monto> [rojo/negro/0]\n  !slots <monto> — 777 = x50\n  !dados <monto> — 7+ = x2\n  !crash <monto> — multiplicador\n  !loteria — ticket acumulado (!verloteria)', player.id, 0xFF69B4, 'bold');
+        return false;
+    }
+    if (message === '!bot') {
+        room.sendAnnouncement('🤖 Minijuegos_Isagi v' + BOT_VERSION + '\n+60 minijuegos, economía, clanes, cuentas y casino.\nEscribe !ayuda para ver los comandos.', player.id, 0x00BFFF, 'bold');
+        return false;
+    }
+    if (message === '!ping') {
+        room.sendAnnouncement('🏓 pong', player.id, 0x00FF00);
+        return false;
+    }
+    if (message === '!viphelp') {
+        room.sendAnnouncement('💎 VIP — beneficios:\n  • Cooldowns reducidos en casino/tienda\n  • Protección gratis en algunos minijuegos\nTu nivel VIP actual: ' + getVIPLevel({ auth: playerAuth }) + '\n(Ver cómo subir en !tienda)', player.id, 0xFFD700, 'bold');
+        return false;
+    }
+    if (message.startsWith('!sugerencia') || message.startsWith('!sugerir')) {
+        var sgText = message.replace(/^!sugerencia\s*/i, '').replace(/^!sugerir\s*/i, '').trim();
+        if (!sgText) { room.sendAnnouncement('📝 Usa: !sugerencia <tu idea>', player.id, 0xFFFF00); return false; }
+        if (typeof window.__discordWebhook === 'function') {
+            try { window.__discordWebhook('reportes', '💡 **Sugerencia** de ' + player.name + ':\n' + sgText); } catch(e){}
+        }
+        room.sendAnnouncement('✅ ¡Gracias! Tu sugerencia fue enviada.', player.id, 0x00FF00, 'bold');
+        return false;
+    }
+
     // Comando !afk - proteger de ser movido a equipos (solo espectadores)
     if (message === "!afk") {
         room.sendAnnouncement('⚠️ El comando !afk fue desactivado.', player.id, 0xFF6600);
@@ -5224,6 +5253,15 @@ room.onPlayerChat = function(player, message) {
             adminHelp += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
             room.sendAnnouncement(adminHelp, player.id, 0x00BFFF, 'bold', 2);
         }
+        room.sendAnnouncement(
+            "👤 CUENTAS:\n" +
+            "  !registrar <usuario> <clave> | !login <usuario> <clave>\n" +
+            "  !cuenta | !logout | !eliminarcuenta CONFIRMAR\n" +
+            "📊 STATS: !stats/!me | !balance | !wins | !games | !goals | !asist | !rank\n" +
+            "  !top | !toprachas | !topactivo | !topricos | !toplosses\n" +
+            "🎰 CASINO: !apostar <m> | !blackjack <m> (!hit/!stand) | !loteria | !verloteria",
+            player.id, 0x00FF99, 'bold', 2
+        );
         return false;
     }
 
