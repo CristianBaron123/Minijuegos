@@ -87,6 +87,7 @@ var _emojiAvatarTimers = {};
 var botState = {
     gameActive: false,
     startTimeout: null,
+    loggedAccounts: {},  // { playerId: displayName } - sesiones de cuenta iniciadas
     tempAdmins: [],  // Admins temporales
     bannedPlayers: [],  // Jugadores baneados temporalmente
     spectatorNext: {},  // { auth: true } - Jugadores que deben estar en espectador el siguiente minijuego
@@ -2924,6 +2925,8 @@ room.onPlayerLeave = function(player) {
 
     // Limpiar actividad AFK del jugador que sale
     delete botState.afkLastActivity[player.id];
+    // Limpiar estado de sesión de cuenta (player.id se reutiliza)
+    delete botState.loggedAccounts[player.id];
 
     // Limpiar frozen/ghost del jugador que sale
     if (_leftAuth) {
@@ -3182,6 +3185,85 @@ room.onPlayerChat = function(player, message) {
 
     // Resolver auth (no disponible en onPlayerChat, usar authMap)
     var playerAuth = getAuth(player);
+
+    // ============================================
+    // SISTEMA DE CUENTAS (registro/login)
+    // Se intercepta ANTES del log a Discord y se hace return false SIEMPRE para
+    // que la contraseña NO aparezca en el chat público ni en el log de Discord.
+    // ============================================
+    var _accCmd = message.trim().toLowerCase();
+    if (_accCmd.indexOf('!registrar') === 0 || _accCmd.indexOf('!register') === 0) {
+        var rParts = message.trim().split(/\s+/);
+        if (rParts.length < 3) {
+            room.sendAnnouncement('📝 Uso: !registrar <usuario> <contraseña>  (no se muestra en el chat)', player.id, 0xFFFF00, 'bold');
+            return false;
+        }
+        var rUser = rParts[1];
+        var rPass = rParts.slice(2).join(' ');
+        if (typeof window.__dbRegisterAccount !== 'function') {
+            room.sendAnnouncement('⚠️ Sistema de cuentas no disponible ahora.', player.id, 0xFF6600);
+            return false;
+        }
+        (function(pid, pauth) {
+            window.__dbRegisterAccount(rUser, rPass, pauth).then(function(res) {
+                if (res && res.success) {
+                    botState.loggedAccounts[pid] = res.username;
+                    room.sendAnnouncement('✅ Cuenta "' + res.username + '" creada y vinculada. Tus stats quedan guardadas.\n🔑 Desde otra PC/navegador entrá con: !login ' + res.username + ' <contraseña>', pid, 0x00FF00, 'bold');
+                } else {
+                    room.sendAnnouncement('❌ ' + ((res && res.error) || 'No se pudo registrar'), pid, 0xFF0000);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al registrar.', pid, 0xFF0000); });
+        })(player.id, playerAuth);
+        return false;
+    }
+    if (_accCmd.indexOf('!login') === 0 || _accCmd.indexOf('!loguear') === 0) {
+        var lParts = message.trim().split(/\s+/);
+        if (lParts.length < 3) {
+            room.sendAnnouncement('📝 Uso: !login <usuario> <contraseña>  (no se muestra en el chat)', player.id, 0xFFFF00, 'bold');
+            return false;
+        }
+        var lUser = lParts[1];
+        var lPass = lParts.slice(2).join(' ');
+        if (typeof window.__dbLoginAccount !== 'function') {
+            room.sendAnnouncement('⚠️ Sistema de cuentas no disponible ahora.', player.id, 0xFF6600);
+            return false;
+        }
+        (function(pid, pauth) {
+            window.__dbLoginAccount(lUser, lPass, pauth).then(function(res) {
+                if (res && res.success) {
+                    botState.loggedAccounts[pid] = res.username;
+                    room.sendAnnouncement('✅ Sesión iniciada como "' + res.username + '". Tus stats te siguen en esta cuenta.', pid, 0x00FF00, 'bold');
+                    // Refrescar caches locales (wins/clan) con las stats de la cuenta
+                    if (typeof window.__dbGetStats === 'function') {
+                        window.__dbGetStats(pauth).then(function(stats) {
+                            if (stats && stats.wins) botState.winsCache[pauth] = stats.wins;
+                            if (stats && stats.clanTag) botState.clanTags[pauth] = stats.clanTag;
+                        }).catch(function(){});
+                    }
+                } else {
+                    room.sendAnnouncement('❌ ' + ((res && res.error) || 'No se pudo iniciar sesión'), pid, 0xFF0000);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al iniciar sesión.', pid, 0xFF0000); });
+        })(player.id, playerAuth);
+        return false;
+    }
+    if (_accCmd === '!cuenta' || _accCmd === '!micuenta' || _accCmd === '!account') {
+        if (typeof window.__dbGetAccountByAuth !== 'function') {
+            room.sendAnnouncement('⚠️ Sistema de cuentas no disponible ahora.', player.id, 0xFF6600);
+            return false;
+        }
+        (function(pid, pauth) {
+            window.__dbGetAccountByAuth(pauth).then(function(acc) {
+                if (acc) {
+                    var nLinks = (acc.linkedAuths ? acc.linkedAuths.length : 0) + 1;
+                    room.sendAnnouncement('👤 Cuenta: ' + acc.displayName + '\n🔗 Dispositivos vinculados: ' + nLinks + '\n💾 Tus stats se guardan en esta cuenta.', pid, 0x00BFFF, 'bold');
+                } else {
+                    room.sendAnnouncement('ℹ️ No tenés cuenta registrada.\n📝 Creá una con: !registrar <usuario> <contraseña>', pid, 0xFFFF00);
+                }
+            }).catch(function(){});
+        })(player.id, playerAuth);
+        return false;
+    }
 
     // Log de chat a Discord (solo jugadores, no bot) - con buffer para evitar 429
     if (player.id !== 0) {
