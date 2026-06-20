@@ -681,10 +681,8 @@ var mapRingSurvival = ##MAP_RING_SURVIVAL##;
 var mapBonkArena = ##MAP_BONK_ARENA##;
 var mapBonkBeru = ##MAP_BONK_BERU##;
 var mapBanVote = ##MAP_BAN_VOTE##;
-var mapImpostor = ##MAP_IMPOSTOR##;
 
 // Parsear mapas
-mapImpostor = JSON.parse(mapImpostor);
 mapBanVote = JSON.parse(mapBanVote);
 mapLuck = JSON.parse(mapLuck);
 mapLuckDios = JSON.parse(mapLuckDios);
@@ -861,14 +859,6 @@ if (typeof BONK_ARENA !== 'undefined' && BONK_ARENA.setMapData) {
 if (typeof BONK_BERU !== 'undefined' && BONK_BERU.setMapData) {
     BONK_BERU.setMapData(mapBonkBeru);
 }
-// Inyectar mapa en IMPOSTOR (si existe)
-if (typeof IMPOSTOR !== 'undefined' && IMPOSTOR.setMapData) {
-    IMPOSTOR.setMapData(mapImpostor);
-}
-if (typeof PISTOLERO !== 'undefined' && PISTOLERO.setMapData) {
-    PISTOLERO.setMapData(mapImpostor);
-}
-
 // ============================================
 // SISTEMA DE ANUNCIOS AUTOMÁTICOS
 // ============================================
@@ -1059,8 +1049,6 @@ var minigameModules = [
     { name: 'RUN_REBOUND', module: RUN_REBOUND, displayName: 'RUN REBOUND' },
     { name: 'MEADOWLANDS', module: MEADOWLANDS, displayName: 'MEADOWLANDS SURVIVAL' },
     { name: 'WIND', module: WIND, displayName: 'WIND' },
-    { name: 'IMPOSTOR', module: IMPOSTOR, displayName: 'IMPOSTOR' },
-    { name: 'PISTOLERO', module: PISTOLERO, displayName: 'PISTOLERO' },
     { name: 'BONK_MOVABLE', module: BONK_MOVABLE, displayName: 'BONK MOVABLE' },
     { name: 'ENDURE_BOMBS', module: ENDURE_BOMBS, displayName: 'ENDURE BOMBS' },
     { name: 'MUSICAL_FIT', module: MUSICAL_FIT, displayName: 'MUSICAL FIT' },
@@ -1400,88 +1388,6 @@ function startSURVIVOR_VOL17() {
 
 function startWIND() {
     startMinigame(minigameModules.find(function(g) { return g.name === 'WIND'; }));
-}
-
-function startIMPOSTOR() {
-    botState.gameActive = true;
-    botState.minigameStartTime = Date.now();
-    if (botState.gameSafetyTimeout) clearTimeout(botState.gameSafetyTimeout);
-    botState.gameSafetyTimeout = setTimeout(function() {
-        if (botState.gameActive) {
-            reportBug('startIMPOSTOR.safetyTimeout', 'IMPOSTOR no termino en 5 minutos');
-            forceStopAllGames();
-            setTimeout(checkAndStart, 3000);
-        }
-    }, 300000);
-
-    var savedTempAdmins = botState.tempAdmins.slice();
-    for (var ta = 0; ta < savedTempAdmins.length; ta++) {
-        var taId = savedTempAdmins[ta];
-        try { room.setPlayerAdmin(taId, false); } catch(e) {}
-        room.sendAnnouncement('\u26A0\uFE0F Tu admin ha sido removido temporalmente durante IMPOSTOR. Se te devolver\u00E1 al terminar.', taId, 0xFFFF00, 'bold');
-    }
-
-    if (typeof IMPOSTOR !== 'undefined' && IMPOSTOR.start) {
-        try {
-            IMPOSTOR.start(room, function(result) {
-                if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
-                for (var ra = 0; ra < savedTempAdmins.length; ra++) {
-                    var raId = savedTempAdmins[ra];
-                    var raPlayer = room.getPlayer(raId);
-                    if (raPlayer && botState.tempAdmins.indexOf(raId) !== -1) {
-                        try { room.setPlayerAdmin(raId, true); } catch(e) {}
-                        room.sendAnnouncement('\uD83D\uDC51 Tu admin temporal ha sido restaurado.', raId, 0xFFD700, 'bold');
-                    }
-                }
-
-                try {
-                    if (result && result.type === 'inocentes_win') {
-                        for (var i = 0; i < result.inocenteIds.length; i++) {
-                            var pAuth = botState.authMap[result.inocenteIds[i]];
-                            if (pAuth && typeof window.__dbAddBalance === 'function') {
-                                try { window.__dbAddBalance(pAuth, result.inocenteNames[i], 2000); } catch(e) {}
-                            }
-                        }
-                    } else if (result && result.type === 'impostor_win') {
-                        var impPrize = (result.impostorIds && result.impostorIds.length === 2) ? 5000 : 10000;
-                        if (result.impostorIds) {
-                            for (var ii = 0; ii < result.impostorIds.length; ii++) {
-                                var impAuth = botState.authMap[result.impostorIds[ii]];
-                                var impName = result.impostorNames ? result.impostorNames[ii] : 'Impostor';
-                                if (impAuth && typeof window.__dbAddBalance === 'function') {
-                                    try { window.__dbAddBalance(impAuth, impName, impPrize); } catch(e) {}
-                                }
-                            }
-                        }
-                    } else if (result && result.type === 'bufon_win') {
-                        var bufonAuth = botState.authMap[result.bufonId];
-                        if (bufonAuth && typeof window.__dbAddBalance === 'function') {
-                            try { window.__dbAddBalance(bufonAuth, result.bufonName, 10000); } catch(e) {}
-                        }
-                    }
-                } catch(e) { reportBug('IMPOSTOR.premios', e); }
-
-                botState.gameActive = false;
-                setTimeout(checkAndStart, 5000);
-            });
-        } catch(e) {
-            reportBug('startIMPOSTOR', e);
-            if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
-            botState.gameActive = false;
-            setTimeout(checkAndStart, 5000);
-        }
-    } else {
-        for (var rb = 0; rb < savedTempAdmins.length; rb++) {
-            var rbPlayer = room.getPlayer(savedTempAdmins[rb]);
-            if (rbPlayer) { try { room.setPlayerAdmin(savedTempAdmins[rb], true); } catch(e) {} }
-        }
-        botState.gameActive = false;
-        setTimeout(checkAndStart, 5000);
-    }
-}
-
-function startPISTOLERO() {
-    startMinigame(minigameModules.find(function(g) { return g.name === 'PISTOLERO'; }));
 }
 
 function startBONK_MOVABLE() {
@@ -2167,8 +2073,6 @@ function excludeAFKFromGame() {
     // Verificar módulos activos (doble check)
     var anyActive = false;
     try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) anyActive = true; } catch(e){}
-    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) anyActive = true; } catch(e){}
-    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) anyActive = true; } catch(e){}
     try { if (GOT && GOT.isActive && GOT.isActive()) anyActive = true; } catch(e){}
     try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) anyActive = true; } catch(e){}
     try { if (PINBALL_ROULETTE && PINBALL_ROULETTE.isActive && PINBALL_ROULETTE.isActive()) anyActive = true; } catch(e){}
@@ -2439,8 +2343,6 @@ function checkAndStart() {
                 if (game.name === 'RING_SURVIVAL' && playerCount > 20) return false;
                 if (game.name === 'COPS_ROBBERS' && playerCount < 4) return false;
                 if (game.name === 'WWECROSS' && playerCount > 12) return false;
-                if (game.name === 'IMPOSTOR' && playerCount < 4) return false;
-                if (game.name === 'PISTOLERO' && playerCount < 4) return false;
                 if (game.name === 'BUHO' && playerCount > 16) return false;
                 if (game.name === 'BUHO' && playerCount < 3) return false;
                 return true;
@@ -2493,8 +2395,6 @@ function checkAndStart() {
             if (gameName === 'RING_SURVIVAL' && playerCount > 20) continue;
             if (gameName === 'COPS_ROBBERS' && playerCount < 4) continue;
             if (gameName === 'WWECROSS' && playerCount > 12) continue;
-            if (gameName === 'IMPOSTOR' && playerCount < 4) continue;
-            if (gameName === 'PISTOLERO' && playerCount < 4) continue;
             selectedGame = gameObj;
             selectedIndex = i;
             break;
@@ -3160,9 +3060,6 @@ room.onPlayerLeave = function(player) {
         }
         if (WIND && WIND.isActive && WIND.isActive()) {
             WIND.stop(room);
-        }
-        if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) {
-            IMPOSTOR.stop(room);
         }
 
         // Red de seguridad: la lista de arriba está hardcodeada y se desactualiza
@@ -5614,7 +5511,7 @@ room.onPlayerChat = function(player, message) {
                 '\n🔧━━━ ESCOGER MINIJUEGO (2/2) ━━━🔧\n\n' +
                 ecol3.join(' | ') + '\n\n' +
                 '💡 Escribe: !escoger [nombre]\n' +
-                '📝 Ejemplo: !escoger pistolero',
+                '📝 Ejemplo: !escoger survival',
                 player.id, 0xFFD700, 'bold'
             );
             return false;
@@ -5914,11 +5811,9 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
-    // Helper: verificar si apuestas estan bloqueadas (explicacion o noche de Impostor/Pistolero)
+    // Helper: verificar si apuestas estan bloqueadas (durante explicacion/pausa)
     var _apuestasBloqueadas = false;
     if (botState.gamePaused) _apuestasBloqueadas = true;
-    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) _apuestasBloqueadas = true; } catch(e){}
-    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) _apuestasBloqueadas = true; } catch(e){}
 
     // !ruleta [monto] [rojo/negro/0] - Ruleta de casino (cooldown 30s)
     if (message.startsWith('!ruleta') && !message.startsWith('!ruletarusa')) {
@@ -5991,8 +5886,6 @@ room.onPlayerChat = function(player, message) {
         // Bloquear en juegos donde cambiarse arruina la jugabilidad
         try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Zombie Run', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Policias y Ladrones', player.id, 0xFF6600); return false; } } catch(e){}
-        try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Impostor', player.id, 0xFF6600); return false; } } catch(e){}
-        try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (SURVIVAL && SURVIVAL.isActive && SURVIVAL.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Survival', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (WEBSURVIVAL && WEBSURVIVAL.isActive && WEBSURVIVAL.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Web Survival', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !cambio en Number Chairs', player.id, 0xFF6600); return false; } } catch(e){}
@@ -6715,8 +6608,6 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ Solo puedes usar !invertir durante un minijuego activo', player.id, 0xFF6600);
             return false;
         }
-        try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Impostor', player.id, 0xFF6600); return false; } } catch(e){}
-        try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Zombie Run', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Policias y Ladrones', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (SPACE_CASE && SPACE_CASE.isActive && SPACE_CASE.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !invertir en Space Case', player.id, 0xFF6600); return false; } } catch(e){}
@@ -6754,8 +6645,6 @@ room.onPlayerChat = function(player, message) {
             return false;
         }
         // No permitir en juegos de rol/supervivencia
-        try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Impostor', player.id, 0xFF6600); return false; } } catch(e){}
-        try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (ZOMBIE_RUN && ZOMBIE_RUN.isActive && ZOMBIE_RUN.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Zombie Run', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (COPS_ROBBERS && COPS_ROBBERS.isActive && COPS_ROBBERS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Policias y Ladrones', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (SPACE_CASE && SPACE_CASE.isActive && SPACE_CASE.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !theworld en Space Case', player.id, 0xFF6600); return false; } } catch(e){}
@@ -6809,8 +6698,6 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⚠️ Solo puedes usar !bitesthedust durante un minijuego activo', player.id, 0xFF6600);
             return false;
         }
-        try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !bitesthedust en Impostor', player.id, 0xFF6600); return false; } } catch(e){}
-        try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !bitesthedust en Pistolero', player.id, 0xFF6600); return false; } } catch(e){}
         try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) { room.sendAnnouncement('⚠️ No puedes usar !bitesthedust en Number Chairs', player.id, 0xFF6600); return false; } } catch(e){}
         // Bloquear en juegos de gol (torneo por rondas)
         var _btdGoalGames = [
@@ -6950,10 +6837,8 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('🚀 CRASH iniciado por ' + player.name + ' (' + formatMoney(crashMonto) + ')!\nEscribe !crash para retirar!', null, 0x00BFFF, 'bold', 2);
             botState.crashActive.interval = setInterval(function() {
                 if (!botState.crashActive) return;
-                // Pausar durante explicaciones y durante noche de Impostor/Pistolero
+                // Pausar durante explicaciones
                 if (botState.gamePaused) return;
-                try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) return; } catch(e){}
-                try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) return; } catch(e){}
                 botState.crashActive.multiplier += 0.15 + Math.random() * 0.25;
                 botState.crashActive.multiplier = parseFloat(botState.crashActive.multiplier.toFixed(2));
                 if (botState.crashActive.multiplier >= botState.crashActive.crashPoint) {
@@ -7267,7 +7152,7 @@ setInterval(function() {
         return;
     }
     // No interferir con juegos que ponen jugadores en espectador (es normal)
-    if (LUCKY.isActive() || (LUCKY_HELL && LUCKY_HELL.isActive && LUCKY_HELL.isActive()) || (LUCKY_DIOS && LUCKY_DIOS.isActive && LUCKY_DIOS.isActive()) || (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) || (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive())) {
+    if (LUCKY.isActive() || (LUCKY_HELL && LUCKY_HELL.isActive && LUCKY_HELL.isActive()) || (LUCKY_DIOS && LUCKY_DIOS.isActive && LUCKY_DIOS.isActive())) {
         _safetyStuckSince = null;
         return;
     }
@@ -7339,10 +7224,8 @@ setInterval(function() {
     if (!botState.gameActive) return;
 
     // No kickear AFK en juegos basados en chat (no requieren movimiento)
-    // Trivia, impostor, pistolero, GOT, number chairs, pinball, zombie run
+    // Trivia, GOT, number chairs, pinball, zombie run
     var skipAFK = false;
-    try { if (IMPOSTOR && IMPOSTOR.isActive && IMPOSTOR.isActive()) skipAFK = true; } catch(e){}
-    try { if (PISTOLERO && PISTOLERO.isActive && PISTOLERO.isActive()) skipAFK = true; } catch(e){}
     try { if (TRIVIA && TRIVIA.isActive && TRIVIA.isActive()) skipAFK = true; } catch(e){}
     try { if (GOT && GOT.isActive && GOT.isActive()) skipAFK = true; } catch(e){}
     try { if (NUMBERCHAIRS && NUMBERCHAIRS.isActive && NUMBERCHAIRS.isActive()) skipAFK = true; } catch(e){}
