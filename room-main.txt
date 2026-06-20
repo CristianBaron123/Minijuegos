@@ -3264,6 +3264,46 @@ room.onPlayerChat = function(player, message) {
         })(player.id, playerAuth);
         return false;
     }
+    if (_accCmd === '!logout' || _accCmd === '!cerrarsesion') {
+        if (typeof window.__dbLogoutAccount !== 'function') {
+            room.sendAnnouncement('⚠️ Sistema de cuentas no disponible ahora.', player.id, 0xFF6600);
+            return false;
+        }
+        (function(pid, pauth) {
+            window.__dbLogoutAccount(pauth).then(function(res) {
+                if (res && res.success) {
+                    delete botState.loggedAccounts[pid];
+                    room.sendAnnouncement('✅ Sesión cerrada. Este dispositivo ya no usa la cuenta "' + res.username + '".', pid, 0x00FF00, 'bold');
+                } else {
+                    room.sendAnnouncement('❌ ' + ((res && res.error) || 'No se pudo cerrar sesión'), pid, 0xFF0000);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al cerrar sesión.', pid, 0xFF0000); });
+        })(player.id, playerAuth);
+        return false;
+    }
+    if (_accCmd.indexOf('!eliminarcuenta') === 0 || _accCmd.indexOf('!borrarcuenta') === 0) {
+        // Acción destructiva: requiere confirmación explícita
+        var ecParts = message.trim().split(/\s+/);
+        if (ecParts.length < 2 || ecParts[1].toUpperCase() !== 'CONFIRMAR') {
+            room.sendAnnouncement('⚠️ Esto elimina tu cuenta (no tus stats, pero perdés el login y los dispositivos vinculados).\nSi estás seguro: !eliminarcuenta CONFIRMAR', player.id, 0xFF6600, 'bold');
+            return false;
+        }
+        if (typeof window.__dbDeleteAccount !== 'function') {
+            room.sendAnnouncement('⚠️ Sistema de cuentas no disponible ahora.', player.id, 0xFF6600);
+            return false;
+        }
+        (function(pid, pauth) {
+            window.__dbDeleteAccount(pauth).then(function(res) {
+                if (res && res.success) {
+                    delete botState.loggedAccounts[pid];
+                    room.sendAnnouncement('🗑️ Cuenta "' + res.username + '" eliminada. Tus stats siguen guardadas en esta cuenta de HaxBall.', pid, 0x00FF00, 'bold');
+                } else {
+                    room.sendAnnouncement('❌ ' + ((res && res.error) || 'No se pudo eliminar'), pid, 0xFF0000);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al eliminar la cuenta.', pid, 0xFF0000); });
+        })(player.id, playerAuth);
+        return false;
+    }
 
     // Log de chat a Discord (solo jugadores, no bot) - con buffer para evitar 429
     if (player.id !== 0) {
@@ -4865,7 +4905,23 @@ room.onPlayerChat = function(player, message) {
     }
 
     // Comando !stats - ver estadísticas del jugador
-    if (message === "!stats") {
+    if (message === "!balance" || message === "!bal" || message === "!dinero" || message === "!money") {
+        if (typeof window.__dbGetStats === 'function' && playerAuth) {
+            (function(pid) {
+                window.__dbGetStats(playerAuth).then(function(stats) {
+                    var bal = (stats && stats.balance) || 0;
+                    room.sendAnnouncement('💰 Tu saldo: ' + formatMoney(bal), pid, 0xFFD700, 'bold');
+                }).catch(function() {
+                    room.sendAnnouncement('❌ Error al cargar el saldo.', pid, 0xFF0000);
+                });
+            })(player.id);
+        } else {
+            room.sendAnnouncement('⚠️ Economía no disponible.', player.id, 0xFF6600);
+        }
+        return false;
+    }
+
+    if (message === "!stats" || message === "!me" || message === "!mostrarstats") {
         if (typeof window.__dbGetStats === 'function' && playerAuth) {
             window.__dbGetStats(playerAuth).then(function(stats) {
                 if (stats) {
@@ -6845,7 +6901,7 @@ room.onPlayerChat = function(player, message) {
     }
 
     // !diario - Recompensa diaria por conectarse (racha 7 dias)
-    if (message === '!diario') {
+    if (message === '!diario' || message === '!daily') {
         var diarioNow = Date.now();
         if (!botState.dailyRewards[playerAuth]) {
             botState.dailyRewards[playerAuth] = { lastClaim: 0, streak: 0 };
