@@ -158,6 +158,53 @@ async function getAccountByAuth(auth) {
     }
 }
 
+// Cerrar sesión: desvincula el auth actual de su cuenta (las stats vuelven a ese auth).
+// No se permite desde el auth PRINCIPAL (es el ancla de la cuenta).
+async function logoutAuth(auth) {
+    await ensureConnected();
+    if (!db) return { error: 'Base de datos no disponible' };
+    if (!auth) return { error: 'No se pudo verificar tu identidad' };
+    try {
+        var acc = await db.collection('accounts').findOne({ $or: [ { mainAuth: auth }, { linkedAuths: auth } ] });
+        if (!acc) return { error: 'No tenés ninguna sesión iniciada en este dispositivo' };
+        if (acc.mainAuth === auth) {
+            return { error: 'Este es el dispositivo principal de "' + acc.displayName + '". No se cierra sesión acá.' };
+        }
+        await db.collection('accounts').updateOne({ username: acc.username }, { $pull: { linkedAuths: auth } });
+        authToCanonical.delete(auth);
+        return { success: true, username: acc.displayName };
+    } catch(e) {
+        console.error('❌ logoutAuth error:', e.message);
+        return { error: 'Error interno' };
+    }
+}
+
+// Eliminar la cuenta por completo. Solo el dueño (auth principal) puede hacerlo.
+// Las stats (colección players) NO se borran; solo se elimina el login/vinculación.
+async function deleteAccount(auth) {
+    await ensureConnected();
+    if (!db) return { error: 'Base de datos no disponible' };
+    if (!auth) return { error: 'No se pudo verificar tu identidad' };
+    try {
+        var acc = await db.collection('accounts').findOne({ mainAuth: auth });
+        if (!acc) {
+            var linked = await db.collection('accounts').findOne({ linkedAuths: auth });
+            if (linked) return { error: 'Solo el dueño puede eliminar la cuenta (entrá desde el dispositivo donde la registraste)' };
+            return { error: 'No tenés una cuenta registrada' };
+        }
+        await db.collection('accounts').deleteOne({ _id: acc._id });
+        // Quitar todos los auths de esa cuenta del mapa en memoria
+        authToCanonical.delete(acc.mainAuth);
+        if (Array.isArray(acc.linkedAuths)) {
+            for (var i = 0; i < acc.linkedAuths.length; i++) authToCanonical.delete(acc.linkedAuths[i]);
+        }
+        return { success: true, username: acc.displayName };
+    } catch(e) {
+        console.error('❌ deleteAccount error:', e.message);
+        return { error: 'Error interno' };
+    }
+}
+
 async function connect() {
     if (!MONGO_URI) {
         console.error('🚨🚨🚨 MONGO_URI NO está definido — el .env no se cargó.');
@@ -1037,4 +1084,4 @@ async function close() {
     }
 }
 
-module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth };
+module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth, logoutAuth, deleteAccount };
