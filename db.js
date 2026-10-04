@@ -11,7 +11,13 @@ const crypto = require('crypto');
 // ALLOW_LOCAL_DB=true.
 const MONGO_URI = process.env.MONGO_URI
     || (process.env.ALLOW_LOCAL_DB === 'true' ? 'mongodb://localhost:27017' : null);
-const DB_NAME = 'haxball_minijuegos';
+// En TEST_MODE se usa una base APARTE: los clanes/cuentas de prueba no tocan la real.
+const DB_NAME = process.env.MONGO_DB_NAME
+    || (process.env.TEST_MODE === 'true' ? 'haxball_test' : 'haxball_minijuegos');
+// Credenciales opcionales por separado (usuario de BD con permisos limitados).
+// Si están, tienen prioridad sobre las que vengan dentro de MONGO_URI.
+const MONGO_USER = process.env.MONGO_USER || null;
+const MONGO_PASSWORD = process.env.MONGO_PASSWORD || null;
 
 let db = null;
 let client = null;
@@ -266,7 +272,8 @@ async function connect() {
             connectTimeoutMS: 10000,
             socketTimeoutMS: 0,
             heartbeatFrequencyMS: 10000,
-            retryWrites: true
+            retryWrites: true,
+            ...(MONGO_USER && MONGO_PASSWORD ? { auth: { username: MONGO_USER, password: MONGO_PASSWORD } } : {})
         });
         await client.connect();
         db = client.db(DB_NAME);

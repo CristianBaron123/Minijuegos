@@ -16,7 +16,15 @@ const db = require('./db');
 const BOT_VERSION = '2.1.2';
 
 // Token de Haxball (puede venir de variable de entorno o hardcoded)
-const HAXBALL_TOKEN = process.env.HAXBALL_TOKEN || "thr1.AAAAAGl_okIBMBkfgD5Nuw._Rjq_nJJiH4";
+// Secretos: vienen de variables de entorno (HAXBALL_TOKEN, DISCORD_WEBHOOK_<TIPO> en mayúsculas)
+// o de secrets.json (gitignored). NUNCA hardcodear acá: el repo se versiona.
+let _secretsFile = {};
+try { _secretsFile = JSON.parse(fs.readFileSync(path.join(__dirname, 'secrets.json'), 'utf8')); } catch (e) {}
+const HAXBALL_TOKEN = process.env.HAXBALL_TOKEN || _secretsFile.HAXBALL_TOKEN;
+if (!HAXBALL_TOKEN) {
+    console.error('🚨 Falta HAXBALL_TOKEN (variable de entorno o secrets.json). Abortando.');
+    process.exit(1);
+}
 
 // ============================================
 // CONFIGURACIÓN DE OWNER (DUEÑO DE LA SALA)
@@ -35,16 +43,11 @@ const MODERATOR_AUTHS = [
 // ============================================
 // WEBHOOKS DE DISCORD
 // ============================================
-const DISCORD_WEBHOOKS = {
-    calladmin: "https://discord.com/api/webhooks/1474239767452582111/4yh70-ixJH5MxtRc5r0oCVSFqL8IyMQw1BnNd94_VlnC_2OKFiPLSn7ttI0nwR8lMrO_",
-    reportes: "https://discord.com/api/webhooks/1474240910459011143/MYAaiXpGD-S9yjPe_JEF7VcZxa_7SAlLHDTukt0aB6kOvdaHh9LxvWww0DoYd0RSke97",
-    tokens: "https://discord.com/api/webhooks/1474240022461943862/-ETrQZuogk-52LRh_f6j1TvstlPqnt-Uf4NfVH4GUoNrz7XpfdyUM0lAjSF97PZHLa2m",
-    chatlog: "https://discord.com/api/webhooks/1475216935850475560/tzzFhOdHCgUwBZoy0vE_Vde9BErDbCB0OmX_jbEvj24_dmeEtdemz16TtoGWYwx2taKu",
-    replays: "https://discord.com/api/webhooks/1475321739591549091/OdpkhWdvgD-psJISt5r0YjE51W2wuwV7uAo_ab6RigjmwNAeStN09eii3_fKNat-qdmn",
-    stats: "https://discord.com/api/webhooks/1477693022148886540/ojM5ATpO2A6F_sny-AknN-KKuJTLaDwmQ1H_e0l-R9ocb48zzuZC38ryiDlDa68FKwR8",
-    bugs: "https://discord.com/api/webhooks/1474240910459011143/MYAaiXpGD-S9yjPe_JEF7VcZxa_7SAlLHDTukt0aB6kOvdaHh9LxvWww0DoYd0RSke97",
-    mods: "https://discord.com/api/webhooks/1499791798850293843/7oztxm8zvrw2vNp5fERgqhJAGakSKURvPLLitNWZaKojbLYXLfy6RntLTrTwLdhnsZDc"
-};
+const DISCORD_WEBHOOKS = {};
+['calladmin', 'reportes', 'tokens', 'chatlog', 'replays', 'stats', 'bugs', 'mods'].forEach(function (k) {
+    DISCORD_WEBHOOKS[k] = process.env['DISCORD_WEBHOOK_' + k.toUpperCase()]
+        || (_secretsFile.DISCORD_WEBHOOKS && _secretsFile.DISCORD_WEBHOOKS[k]) || '';
+});
 
 const TEST_MODE = process.env.TEST_MODE === 'true';
 
@@ -1852,24 +1855,19 @@ var BUHO = ` + buhoModule + `;
             await page.exposeFunction('__dbGetAllAdmins', async () => {
                 return await db.getAllAdmins();
             });
-            await page.exposeFunction('__dbRegisterAccount', async () => {
-                return { error: 'No disponible en modo test' };
-            });
-            await page.exposeFunction('__dbLoginAccount', async () => {
-                return { error: 'No disponible en modo test' };
-            });
+            // Base de test aparte (haxball_test): las cuentas funcionan
+            await page.exposeFunction('__dbRegisterAccount', async (username, password, auth) => db.registerAccount(username, password, auth));
+            // Base de test aparte (haxball_test): las cuentas funcionan
+            await page.exposeFunction('__dbLoginAccount', async (username, password, auth) => db.loginAccount(username, password, auth));
             await page.exposeFunction('__dbGetAccountByAuth', async (auth) => {
                 return await db.getAccountByAuth(auth);
             });
-            await page.exposeFunction('__dbLogoutAccount', async () => {
-                return { error: 'No disponible en modo test' };
-            });
-            await page.exposeFunction('__dbDeleteAccount', async () => {
-                return { error: 'No disponible en modo test' };
-            });
-            await page.exposeFunction('__dbResetAccountPassword', async () => {
-                return { error: 'No disponible en modo test' };
-            });
+            // Base de test aparte (haxball_test): las cuentas funcionan
+            await page.exposeFunction('__dbLogoutAccount', async (auth) => db.logoutAuth(auth));
+            // Base de test aparte (haxball_test): las cuentas funcionan
+            await page.exposeFunction('__dbDeleteAccount', async (auth) => db.deleteAccount(auth));
+            // Base de test aparte (haxball_test): las cuentas funcionan
+            await page.exposeFunction('__dbResetAccountPassword', async (username, newPassword) => db.resetAccountPassword(username, newPassword));
             await page.exposeFunction('__dbIncStat', async () => { /* no-op en test */ });
             console.log('🧪 Funciones expuestas en MODO TEST (escrituras desactivadas)');
         } else {
