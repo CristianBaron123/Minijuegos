@@ -80,8 +80,8 @@ async function registerAccount(username, password, auth) {
         if (username.length < 3 || username.length > 16 || !/^[a-zA-Z0-9_]+$/.test(username)) {
             return { error: 'Usuario: 3-16 caracteres, solo letras/números/_' };
         }
-        if (!password || String(password).length < 4) {
-            return { error: 'La contraseña debe tener al menos 4 caracteres' };
+        if (!password || String(password).length < 6) {
+            return { error: 'La contraseña debe tener al menos 6 caracteres' };
         }
         var unameLower = username.toLowerCase();
         // ¿Usuario ya tomado?
@@ -109,16 +109,41 @@ async function registerAccount(username, password, auth) {
     }
 }
 
+// Anti fuerza bruta: tras MAX_LOGIN_FAILS fallos seguidos, el auth queda bloqueado un rato
+const MAX_LOGIN_FAILS = 5;
+const LOGIN_LOCK_MS = 5 * 60 * 1000;
+const loginFails = new Map(); // auth -> { count, lockedUntil }
+
+function loginLockRemaining(auth) {
+    var f = loginFails.get(auth);
+    if (!f || !f.lockedUntil) return 0;
+    var left = f.lockedUntil - Date.now();
+    if (left <= 0) { loginFails.delete(auth); return 0; }
+    return left;
+}
+
+function registerLoginFail(auth) {
+    var f = loginFails.get(auth) || { count: 0, lockedUntil: 0 };
+    f.count++;
+    if (f.count >= MAX_LOGIN_FAILS) { f.lockedUntil = Date.now() + LOGIN_LOCK_MS; f.count = 0; }
+    loginFails.set(auth, f);
+}
+
 // Iniciar sesión: vincula el auth actual a la cuenta para que las stats lo sigan
 async function loginAccount(username, password, auth) {
     await ensureConnected();
     if (!db) return { error: 'Base de datos no disponible' };
     if (!auth) return { error: 'No se pudo verificar tu identidad' };
+    var lockLeft = loginLockRemaining(auth);
+    if (lockLeft > 0) {
+        return { error: 'Demasiados intentos fallidos. Probá de nuevo en ' + Math.ceil(lockLeft / 60000) + ' min' };
+    }
     try {
         var unameLower = String(username || '').trim().toLowerCase();
         var acc = await db.collection('accounts').findOne({ username: unameLower });
-        if (!acc) return { error: 'Usuario no encontrado' };
-        if (!verifyPassword(password, acc.salt, acc.hash)) return { error: 'Contraseña incorrecta' };
+        if (!acc) { registerLoginFail(auth); return { error: 'Usuario o contraseña incorrectos' }; }
+        if (!verifyPassword(password, acc.salt, acc.hash)) { registerLoginFail(auth); return { error: 'Usuario o contraseña incorrectos' }; }
+        loginFails.delete(auth);
         // Si este auth ya está en OTRA cuenta, no permitir
         var other = await db.collection('accounts').findOne({ $or: [ { mainAuth: auth }, { linkedAuths: auth } ] });
         if (other && other.username !== unameLower) {
@@ -138,6 +163,26 @@ async function loginAccount(username, password, auth) {
     } catch(e) {
         console.error('❌ loginAccount error:', e.message);
         return { error: 'Error interno al iniciar sesión' };
+    }
+}
+
+// Reset de contraseña por un creador (olvidó la clave). No toca vínculos ni stats.
+async function resetAccountPassword(username, newPassword) {
+    await ensureConnected();
+    if (!db) return { error: 'Base de datos no disponible' };
+    try {
+        var unameLower = String(username || '').trim().toLowerCase();
+        if (!newPassword || String(newPassword).length < 6) {
+            return { error: 'La contraseña debe tener al menos 6 caracteres' };
+        }
+        var acc = await db.collection('accounts').findOne({ username: unameLower });
+        if (!acc) return { error: 'Usuario no encontrado' };
+        var pw = hashPassword(newPassword);
+        await db.collection('accounts').updateOne({ _id: acc._id }, { $set: { salt: pw.salt, hash: pw.hash } });
+        return { success: true, username: acc.displayName };
+    } catch(e) {
+        console.error('❌ resetAccountPassword error:', e.message);
+        return { error: 'Error interno' };
     }
 }
 
@@ -1098,4 +1143,4 @@ async function close() {
     }
 }
 
-module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth, logoutAuth, deleteAccount, incStat };
+module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth, logoutAuth, deleteAccount, resetAccountPassword, incStat };

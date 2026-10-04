@@ -26,7 +26,7 @@ try {
 } catch(e) {
     console.log('No se encontro sala-config.json, usando defaults');
     salaConfigs = [
-        { id: 'minijuegos', name: 'Minijuegos_Isagi v1.9', script: 'bot.js', maxPlayers: 30 }
+        { id: 'minijuegos', name: '[TLD] Mini Games v1.9', script: 'bot.js', maxPlayers: 30 }
     ];
 }
 

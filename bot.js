@@ -1001,8 +1001,8 @@ const getBotScript = () => {
     // Modo test: sala privada con contraseña
     if (TEST_MODE) {
         mainCode = mainCode.replace(
-            'roomName: "\uD83C\uDFAE\uD83C\uDFAE\uD83C\uDFAE| Minigames_Isagi|| Minijue    gos + lucky \uD83C\uDFAE"',
-            'roomName: "\uD83E\uDDEA TEST | Minijuegos"'
+            /roomName: "[^"\n]*",/,
+            'roomName: "\\uD83E\\uDDEA TEST | [TLD] Mini Games",'
         );
         mainCode = mainCode.replace('public: true,', 'public: false,\n    password: "1234",');
     }
@@ -1710,6 +1710,28 @@ var BUHO = ` + buhoModule + `;
     }
     await new Promise(resolve => setTimeout(resolve, 3000));
 
+    // Anti-VPN: conn de HaxBall es la IP en hex ASCII. Se consulta ip-api.com (proxy/hosting)
+    const vpnCache = new Map();
+    try {
+        await page.exposeFunction('__checkVPN', async (conn) => {
+            try {
+                const ip = Buffer.from(String(conn), 'hex').toString('ascii');
+                if (!/^[0-9a-fA-F.:]+$/.test(ip)) return false;
+                if (vpnCache.has(ip)) return vpnCache.get(ip);
+                const resp = await fetch('http://ip-api.com/json/' + ip + '?fields=status,proxy,hosting');
+                if (!resp.ok) return false;
+                const data = await resp.json();
+                const isVpn = data.status === 'success' && (data.proxy === true || data.hosting === true);
+                vpnCache.set(ip, isVpn);
+                return isVpn;
+            } catch (e) {
+                return false;
+            }
+        });
+    } catch (e) {
+        console.error('❌ Error exponiendo __checkVPN:', e.message);
+    }
+
     // Exponer funciones de DB al contexto del navegador
     try {
         if (TEST_MODE) {
@@ -1843,6 +1865,9 @@ var BUHO = ` + buhoModule + `;
                 return { error: 'No disponible en modo test' };
             });
             await page.exposeFunction('__dbDeleteAccount', async () => {
+                return { error: 'No disponible en modo test' };
+            });
+            await page.exposeFunction('__dbResetAccountPassword', async () => {
                 return { error: 'No disponible en modo test' };
             });
             await page.exposeFunction('__dbIncStat', async () => { /* no-op en test */ });
@@ -1985,6 +2010,9 @@ var BUHO = ` + buhoModule + `;
             });
             await page.exposeFunction('__dbDeleteAccount', async (auth) => {
                 return await db.deleteAccount(auth);
+            });
+            await page.exposeFunction('__dbResetAccountPassword', async (username, newPassword) => {
+                return await db.resetAccountPassword(username, newPassword);
             });
             await page.exposeFunction('__dbIncStat', async (auth, name, field, amount) => {
                 await db.incStat(auth, name, field, amount);

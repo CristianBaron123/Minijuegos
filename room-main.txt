@@ -1,7 +1,7 @@
 var BOT_VERSION = "##BOT_VERSION##";
 
 var roomConfig = {
-    roomName: "\uD83C\uDFAE\uD83C\uDFAE\uD83C\uDFAE| Minijuegos_Isagi v" + BOT_VERSION + " \uD83C\uDFAE",
+    roomName: "\uD83D\uDD39 \uD83D\uDC7E  [TLD] Mini Games\uD83D\uDC7E beta",
     maxPlayers: 30,
     public: true,
     token: "##TOKEN##",
@@ -177,6 +177,7 @@ var botState = {
     frozenPlayers: {},
     ghostPlayers: {},
     antiSmurf: false,
+    antiVpn: false,
     whitelist: { enabled: false, list: [] }
 };
 
@@ -2698,6 +2699,33 @@ room.onPlayerJoin = function(player) {
             }
         }
 
+        // Aviso de cuentas: invita a registrarse a quien no tiene cuenta vinculada
+        if (typeof window.__dbGetAccountByAuth === 'function') {
+            (function(_ap) {
+                window.__dbGetAccountByAuth(_ap.auth).then(function(acc) {
+                    if (acc) {
+                        botState.loggedAccounts[_ap.id] = acc.displayName;
+                        room.sendAnnouncement('👤 Sesión activa: ' + acc.displayName + ' — tus stats se guardan en tu cuenta.', _ap.id, 0x00FF00);
+                    } else {
+                        room.sendAnnouncement('📝 No tenés cuenta. Registrate para no perder tus stats: !registrar <usuario> <contraseña>\n🔑 ¿Ya tenés cuenta en otro dispositivo? !login <usuario> <contraseña>', _ap.id, 0xFFFF00, 'bold');
+                    }
+                }).catch(function() {});
+            })(player);
+        }
+
+        // Anti-VPN: consulta la IP (conn viene en hex) y kickea si es proxy/VPN/hosting
+        if (botState.antiVpn && player.conn && typeof window.__checkVPN === 'function'
+            && player.auth !== OWNER_AUTH && CREATOR_AUTHS.indexOf(player.auth) === -1 && MODERATOR_AUTHS.indexOf(player.auth) === -1) {
+            (function(_vp) {
+                window.__checkVPN(_vp.conn).then(function(isVpn) {
+                    if (isVpn) {
+                        try { room.kickPlayer(_vp.id, '🚫 No se permiten VPN/proxy en esta sala.', false); } catch(e) {}
+                        console.log('🚫 Anti-VPN: ' + _vp.name + ' kickeado');
+                    }
+                }).catch(function() {});
+            })(player);
+        }
+
         // Dar admin automático a mods y owner
         var _isMod = (MODERATOR_AUTHS.indexOf(player.auth) !== -1);
         if (player.auth === OWNER_AUTH || _isMod) {
@@ -3270,6 +3298,32 @@ room.onPlayerChat = function(player, message) {
                 }
             }).catch(function() { room.sendAnnouncement('❌ Error al iniciar sesión.', pid, 0xFF0000); });
         })(player.id, playerAuth);
+        return false;
+    }
+    // !resetpass <usuario> <nueva> — solo CREADORES (el usuario olvidó su contraseña)
+    if (_accCmd.indexOf('!resetpass') === 0) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !resetpass', player.id, 0xFF0000);
+            return false;
+        }
+        var rpParts = message.trim().split(/\s+/);
+        if (rpParts.length < 3) {
+            room.sendAnnouncement('📝 Uso: !resetpass <usuario> <nueva contraseña>', player.id, 0xFFFF00, 'bold');
+            return false;
+        }
+        if (typeof window.__dbResetAccountPassword !== 'function') {
+            room.sendAnnouncement('⚠️ Sistema de cuentas no disponible ahora.', player.id, 0xFF6600);
+            return false;
+        }
+        (function(pid) {
+            window.__dbResetAccountPassword(rpParts[1], rpParts.slice(2).join(' ')).then(function(res) {
+                if (res && res.success) {
+                    room.sendAnnouncement('✅ Contraseña de "' + res.username + '" reseteada. Avisale que entre con !login.', pid, 0x00FF00, 'bold');
+                } else {
+                    room.sendAnnouncement('❌ ' + ((res && res.error) || 'No se pudo resetear'), pid, 0xFF0000);
+                }
+            }).catch(function() { room.sendAnnouncement('❌ Error al resetear.', pid, 0xFF0000); });
+        })(player.id);
         return false;
     }
     if (_accCmd === '!cuenta' || _accCmd === '!micuenta' || _accCmd === '!account') {
@@ -4302,6 +4356,32 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
+    // !givemoney #ID monto (admins; monto negativo = quitar)
+    if (message.startsWith('!givemoney')) {
+        if (!playerAuth || !isAnyAdmin(playerAuth)) {
+            room.sendAnnouncement('⛔ Solo los admins pueden usar !givemoney', player.id, 0xFF0000);
+            return false;
+        }
+        var gmParts = message.split(' ');
+        if (gmParts.length < 3) {
+            room.sendAnnouncement('⚠️ Usa: !givemoney #ID monto\nEjemplo: !givemoney #3 5000', player.id, 0xFFFF00);
+            return false;
+        }
+        var gmTargetId = parseInt(gmParts[1].replace('#', ''));
+        var gmAmount = parseInt(gmParts[2]);
+        if (isNaN(gmTargetId)) { room.sendAnnouncement('⚠️ ID inválido', player.id, 0xFF6600); return false; }
+        if (isNaN(gmAmount) || gmAmount === 0) { room.sendAnnouncement('⚠️ Monto inválido', player.id, 0xFF6600); return false; }
+        var gmTarget = room.getPlayer(gmTargetId);
+        if (!gmTarget) { room.sendAnnouncement('⚠️ Jugador #' + gmTargetId + ' no encontrado', player.id, 0xFF6600); return false; }
+        var gmTargetAuth = getAuth(gmTarget);
+        if (!gmTargetAuth) { room.sendAnnouncement('⚠️ No se pudo verificar al jugador', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbAddBalance === 'function') {
+            window.__dbAddBalance(gmTargetAuth, gmTarget.name, gmAmount);
+        }
+        room.sendAnnouncement('💰 ' + player.name + (gmAmount > 0 ? ' le dio $' : ' le quitó $') + Math.abs(gmAmount).toLocaleString() + ' a ' + gmTarget.name, null, 0x00FF00, 'bold');
+        return false;
+    }
+
     // !streak #ID
     if (message.startsWith('!streak')) {
         if (!playerAuth || !isAnyAdmin(playerAuth)) {
@@ -4393,6 +4473,19 @@ room.onPlayerChat = function(player, message) {
             botState.antiSmurf = (asArg === 'on');
         }
         room.sendAnnouncement('🛡️ Anti-Smurf: ' + (botState.antiSmurf ? 'ACTIVADO — No se permiten 2 jugadores con la misma conexión' : 'DESACTIVADO'), null, 0x00BFFF, 'bold');
+        return false;
+    }
+
+    // !antivpn [on/off]
+    if (message.startsWith('!antivpn')) {
+        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+            room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !antivpn', player.id, 0xFF0000);
+            return false;
+        }
+        var avArg = message.split(' ')[1];
+        if (avArg === 'on' || avArg === 'off') botState.antiVpn = (avArg === 'on');
+        else botState.antiVpn = !botState.antiVpn;
+        room.sendAnnouncement('🛡️ Anti-VPN: ' + (botState.antiVpn ? 'ACTIVADO — se kickean VPN/proxy al entrar' : 'DESACTIVADO'), null, 0x00BFFF, 'bold');
         return false;
     }
 
@@ -5106,7 +5199,7 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
     if (message === '!bot') {
-        room.sendAnnouncement('🤖 Minijuegos_Isagi v' + BOT_VERSION + '\n+60 minijuegos, economía, clanes, cuentas y casino.\nEscribe !ayuda para ver los comandos.', player.id, 0x00BFFF, 'bold');
+        room.sendAnnouncement('🤖 [TLD] Mini Games v' + BOT_VERSION + '\n+60 minijuegos, economía, clanes, cuentas y casino.\nEscribe !ayuda para ver los comandos.', player.id, 0x00BFFF, 'bold');
         return false;
     }
     if (message === '!ping') {
@@ -5245,10 +5338,10 @@ room.onPlayerChat = function(player, message) {
             }
             adminHelp += "🎮 !rr | !3def | !setlimit [n] | !settime [min] | !unisrand\n" +
                 "🧊 !frozen #ID | !unfrozen #ID | !ghost #ID | !unghost #ID\n" +
-                "📢 !anuncio [msg] | 💰 !eco [#ID] | !transferir #ID monto\n" +
+                "📢 !anuncio [msg] | 💰 !eco [#ID] | !givemoney #ID monto | !transferir #ID monto\n" +
                 "🔍 !lookup #ID | !streak #ID\n";
             if (CREATOR_AUTHS.indexOf(playerAuth) !== -1) {
-                adminHelp += "🛠️ !antismurf [on/off] | !whitelist [on/off/add/remove/list] | !refreshcache | !cachestatus\n";
+                adminHelp += "🛠️ !antismurf [on/off] | !antivpn [on/off] | !resetpass <usuario> <nueva> | !whitelist [on/off/add/remove/list] | !refreshcache | !cachestatus\n";
             }
             adminHelp += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
             room.sendAnnouncement(adminHelp, player.id, 0x00BFFF, 'bold', 2);
@@ -5266,7 +5359,7 @@ room.onPlayerChat = function(player, message) {
     }
 
     if (message === "!version") {
-        room.sendAnnouncement("📦 Minijuegos_Isagi v" + BOT_VERSION, player.id, 0x00BFFF);
+        room.sendAnnouncement("📦 [TLD] Mini Games v" + BOT_VERSION, player.id, 0x00BFFF);
         return false;
     }
 

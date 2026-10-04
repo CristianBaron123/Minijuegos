@@ -1,7 +1,7 @@
 [
     {
         "id": "minijuegos",
-        "name": "Minijuegos_Isagi v1.9",
+        "name": "[TLD] Mini Games v1.9",
         "script": "bot.js",
         "maxPlayers": 30
     },
@@ -9,12 +9,6 @@
         "id": "real-futsal",
         "name": "Real Futsal",
         "script": "futsal/bot.js",
-        "maxPlayers": 30
-    },
-    {
-        "id": "squidgames",
-        "name": "Squid Games Event",
-        "script": "squidgames/script/bot.js",
         "maxPlayers": 30
     }
 ]
