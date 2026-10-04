@@ -2115,7 +2115,7 @@ var BUHO = ` + buhoModule + `;
             if (answer === '1') {
                 msg = '🔄 ¡ATENCIÓN! La sala se REINICIARÁ en unos segundos para aplicar actualizaciones.\\n⏳ Vuelve a entrar en 1-2 minutos!';
             } else if (answer === '2') {
-                msg = '🌙 ¡ATENCIÓN! La sala se CIERRA por hoy.\\n👋 ¡Nos vemos otro día! Únete al Discord: discord.gg/YvFHkSZUvE';
+                msg = '🌙 ¡ATENCIÓN! La sala se CIERRA por hoy.\\n👋 ¡Nos vemos otro día! Únete al Discord: discord.gg/T45MzERZWA';
             } else {
                 console.log('⚠️ Opción no válida. Cerrando sin aviso...');
                 await db.close();

@@ -276,7 +276,7 @@ function stopReplay() {
 }
 
 // Invite de Discord (usado por comando !discord)
-var DISCORD_INVITE = "https://discord.gg/YvFHkSZUvE";
+var DISCORD_INVITE = "https://discord.gg/T45MzERZWA";
 
 // ============================================
 // SISTEMA DE BANS PERMANENTES
@@ -901,7 +901,7 @@ function startAutoAnnouncements() {
         room.sendAnnouncement(
             "━━━━━━━━━━━━━━━━━━━━━━━━\n" +
             "💬 ÚNETE A NUESTRO DISCORD\n" +
-            "🔗 https://discord.gg/YvFHkSZUvE\n" +
+            "🔗 https://discord.gg/T45MzERZWA\n" +
             "━━━━━━━━━━━━━━━━━━━━━━━━",
             null,
             0x5865F2,
@@ -924,7 +924,7 @@ function startPendingAnnouncementWatcher() {
             room.sendAnnouncement(
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n" +
                 "💬 ÚNETE A NUESTRO DISCORD\n" +
-                "🔗 https://discord.gg/YvFHkSZUvE\n" +
+                "🔗 https://discord.gg/T45MzERZWA\n" +
                 "━━━━━━━━━━━━━━━━━━━━━━━━",
                 null,
                 0x5865F2,
@@ -3308,8 +3308,8 @@ room.onPlayerChat = function(player, message) {
         var linkRegex = /https?:\/\/[^\s]+|www\.[^\s]+|discord\.gg\/[^\s]+|bit\.ly\/[^\s]+|t\.me\/[^\s]+/i;
         if (linkRegex.test(message)) {
             // Permitir solo el link del Discord de la sala
-            if (message.indexOf('discord.gg/YvFHkSZUvE') === -1) {
-                room.sendAnnouncement('⛔ No se permiten links. Solo puedes compartir el Discord: discord.gg/YvFHkSZUvE', player.id, 0xFF0000, 'bold');
+            if (message.indexOf('discord.gg/T45MzERZWA') === -1) {
+                room.sendAnnouncement('⛔ No se permiten links. Solo puedes compartir el Discord: discord.gg/T45MzERZWA', player.id, 0xFF0000, 'bold');
                 return false;
             }
         }
