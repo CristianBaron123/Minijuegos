@@ -209,6 +209,23 @@ function sendFormatted(room, msg, target, color, style, duration) {
     room.sendAnnouncement(formatText(msg), target, color, style, duration);
 }
 
+// Igual que formatText pero respeta lo que el jugador tiene que poder escribir:
+// comandos (!algo), #ID, [opcional], <obligatorio>, montos y números.
+function formatKeep(text) {
+    return String(text).split(/(![\wáéíóúñ]+|#ID|\[[^\]]*\]|<[^>]*>|\$[\d.,k]+|\d[\d.,]*)/i).map(function(part, i) {
+        return i % 2 ? part : formatText(part);
+    }).join('');
+}
+
+// Sección de ayuda: título en versalitas y una línea por comando con viñeta
+function helpSection(pid, emoji, title, lines, color) {
+    room.sendAnnouncement(
+        emoji + ' ' + formatText(title) + '\n' +
+        lines.map(function(l) { return ' ▸ ' + formatKeep(l); }).join('\n'),
+        pid, color, 'bold'
+    );
+}
+
 // Cargar matrimonios de la DB al iniciar
 try {
     window.__dbLoadMarriages().then(function(m) {
@@ -2542,7 +2559,7 @@ function checkAndStart() {
 // SISTEMA DE ESPERA PARA JUGADOR SOLO
 // ============================================
 var soloMessages = [
-    "💡 Sabías que puedes ver tu rango con !stats?",
+    "💡 ¿Sabías que puedes ver tu rango con !stats?",
     "💡 Usa !discord para unirte a la comunidad!",
     "💡 El ganador de cada minijuego gana $50.000!",
     "💡 Si llevas racha de victorias, ganas bonus extra!",
@@ -2592,7 +2609,7 @@ function startSoloEntertainment() {
                 null, rank.color, "bold"
             );
         } else {
-            var msg = soloMessages[_soloMsgIndex % soloMessages.length];
+            var msg = formatKeep(soloMessages[_soloMsgIndex % soloMessages.length]);
             room.sendAnnouncement(msg, null, 0xFFFF00);
         }
         _soloMsgIndex++;
@@ -5012,18 +5029,15 @@ room.onPlayerChat = function(player, message) {
     }
 
     // ============================================
-    // STATS — personales (!wins !games !goals !asist !cs !rank)
+    // STATS — personales (!wins !games !rank)
     // ============================================
-    if (message === "!wins" || message === "!games" || message === "!goals" || message === "!asist" || message === "!cs" || message === "!rank") {
+    if (message === "!wins" || message === "!games" || message === "!rank") {
         if (typeof window.__dbGetStats !== 'function' || !playerAuth) { room.sendAnnouncement('⚠️ Estadísticas no disponibles.', player.id, 0xFF6600); return false; }
         (function(pid, pauth, cmd, pname) {
             window.__dbGetStats(pauth).then(function(s) {
                 s = s || {};
                 if (cmd === '!wins') room.sendAnnouncement('🏆 ' + pname + ': ' + (s.wins || 0) + ' victorias', pid, 0xFFD700, 'bold');
                 else if (cmd === '!games') room.sendAnnouncement('🎮 ' + pname + ': ' + (s.gamesPlayed || 0) + ' partidas jugadas', pid, 0x00BFFF, 'bold');
-                else if (cmd === '!goals') room.sendAnnouncement('⚽ ' + pname + ': ' + (s.fGoals || 0) + ' goles (futsal)', pid, 0x00BFFF, 'bold');
-                else if (cmd === '!asist') room.sendAnnouncement('🅰️ ' + pname + ': ' + (s.fAssists || 0) + ' asistencias (futsal)', pid, 0x00BFFF, 'bold');
-                else if (cmd === '!cs') room.sendAnnouncement('🥅 ' + pname + ' (futsal): ' + (s.fGoals || 0) + 'G / ' + (s.fAssists || 0) + 'A / ' + (s.fWins || 0) + 'V / ' + (s.fLosses || 0) + 'D / ' + (s.fGames || 0) + 'PJ', pid, 0x00BFFF, 'bold');
                 else if (cmd === '!rank') {
                     if (typeof window.__dbGetPlayerRank === 'function') {
                         window.__dbGetPlayerRank(pauth, 'wins').then(function(r) {
@@ -5039,12 +5053,10 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // STATS — tops por campo (!toprachas !topactivo + extras)
     // ============================================
-    if (message === "!toprachas" || message === "!topactivo" || message === "!topgoles" || message === "!topasist") {
+    if (message === "!toprachas" || message === "!topactivo") {
         var _topField, _topTitle, _topUnit;
         if (message === "!toprachas") { _topField = 'bestStreak'; _topTitle = '🔥 TOP RACHAS'; _topUnit = 'racha'; }
         else if (message === "!topactivo") { _topField = 'gamesPlayed'; _topTitle = '🎮 TOP ACTIVOS'; _topUnit = 'partidas'; }
-        else if (message === "!topgoles") { _topField = 'fGoals'; _topTitle = '⚽ TOP GOLEADORES'; _topUnit = 'goles'; }
-        else { _topField = 'fAssists'; _topTitle = '🅰️ TOP ASISTIDORES'; _topUnit = 'asist'; }
         if (typeof window.__dbGetTopPlayers !== 'function') { room.sendAnnouncement('⚠️ No disponible.', player.id, 0xFF6600); return false; }
         (function(pid, field, title, unit) {
             window.__dbGetTopPlayers(field, 5).then(function(top) {
@@ -5118,101 +5130,68 @@ room.onPlayerChat = function(player, message) {
 
     if (message === "!ayuda" || message === "!help") {
         room.sendAnnouncement(
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-            "           📋 COMANDOS DISPONIBLES 📋\n" +
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            "╔══════════════════════════╗\n" +
+            "      " + formatText("COMANDOS DE LA SALA") + "\n" +
+            "╚══════════════════════════╝",
             player.id, 0x00FF00, 'bold', 2
         );
-        
-        room.sendAnnouncement(
-            "💰 ECONOMÍA:\n" +
-            "  !saldo / !dinero - Ver tu dinero\n" +
-            "  !trabajar / !work - Ganar dinero (CD: 10min)\n" +
-            "  !pasar #ID MONTO - Transferir dinero\n" +
-            "  !diario - Recompensa diaria (racha 7 días)\n" +
-            "  !tienda / !shop - Ver la tienda\n" +
-            "  !inversion MONTO - Invertir (madura en 5 juegos)",
-            player.id, 0x00BFFF
-        );
-        
-        room.sendAnnouncement(
-            "🎰 CASINO:\n" +
-            "  !ruleta MONTO [rojo/negro/0] - Ruleta de colores\n" +
-            "  !rifa MONTO - Adivina número 1-10\n" +
-            "  !crash MONTO - Multiplicador creciente\n" +
-            "  !dados MONTO - 7+ = x2 | Doble = x3 | Doble 6 = x5\n" +
-            "  !slots MONTO - 777 = x50 | Triple = x10 | Doble = x3",
-            player.id, 0xFF69B4
-        );
-        
-        room.sendAnnouncement(
-            "🏆 RANKINGS:\n" +
-            "  !top - Top 5 general\n" +
-            "  !toprich - Top 5 más ricos\n" +
-            "  !topracha - Top 5 mejores rachas\n" +
-            "  !topgeis - Top 5 más geis\n" +
-            "  !topkick - Top 5 más kickeados\n" +
-            "  !topban - Top 5 más baneados\n" +
-            "  !topclanes / !topclan - Ranking de clanes\n" +
-            "  !toptitan - Top medidas",
-            player.id, 0xFFD700
-        );
-        
-        room.sendAnnouncement(
-            "💍 SOCIAL:\n" +
-            "  !casarse #ID - Proponer matrimonio ($25k, +10% bonus)\n" +
-            "  !divorcio - Separarse\n" +
-            "  !pareja - Ver tu pareja\n" +
-            "  !clan - Sistema de clanes (!clan ayuda)\n" +
-            "  !titan - Medir tu titan\n" +
-            "  !anon MENSAJE - Mensaje anónimo",
-            player.id, 0xFF69B4
-        );
-        
-        room.sendAnnouncement(
-            "🎮 MINIJUEGOS (durante partida):\n" +
-            "  !cambio #ID - Cambiar posición (primeros 20s)\n" +
-            "  !equipo [1/2] - Cambiar de equipo\n" +
-            "  !invertir #ID - Invertir controles 10s\n" +
-            "  !theworld - Pausar minijuego\n" +
-            "  !bitesthedust - Eliminar jugador",
-            player.id, 0x00FF00
-        );
-        
-        room.sendAnnouncement(
-            "💳 PRÉSTAMOS:\n" +
-            "  !prestamo MONTO - Pedir préstamo\n" +
-            "  !prestar #ID MONTO - Prestar a alguien\n" +
-            "  !deuda - Ver deudas\n" +
-            "  !mideudap2p - Ver deudas P2P\n" +
-            "  !misdeudores - Ver quién te debe\n" +
-            "  !pagar [MONTO/todo] - Pagar préstamo\n" +
-            "  !pagarp2p [MONTO/todo] - Pagar P2P\n" +
-            "  !prestamista - Ver prestamistas",
-            player.id, 0xFFFF00
-        );
-        
-        room.sendAnnouncement(
-            "📢 REPORTES Y AYUDA:\n" +
-            "  !calladmin [razón] - Llamar admin\n" +
-            "  !report #ID [razón] - Reportar jugador\n" +
-            "  !bug [descripción] - Reportar bug\n" +
-            "  !fix - Votar para reiniciar si hay bug",
-            player.id, 0xFF6600
-        );
-        
-        room.sendAnnouncement(
-            "ℹ️ OTROS:\n" +
-            "  !stats - Ver estadísticas\n" +
-            "  !miauth - Ver tu token\n" +
-            "  !discord - Link de Discord\n" +
-            "  !version - Versión del bot\n" +
-            "  !proteccion - Protección contra bans\n" +
-            "  !impuesto - Cobrar impuestos (admin+)\n" +
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            player.id, 0xAAAAAA
-        );
-        
+        helpSection(player.id, '💰', 'ECONOMÍA', [
+            '!saldo / !dinero - Ver tu dinero',
+            '!trabajar / !work - Ganar dinero (CD: 10min)',
+            '!pasar #ID MONTO - Transferir dinero',
+            '!diario - Recompensa diaria (racha 7 días)',
+            '!tienda / !shop - Ver la tienda',
+            '!inversion MONTO - Invertir (madura en 5 juegos)'
+        ], 0x00BFFF);
+        helpSection(player.id, '🎰', 'CASINO', [
+            '!ruleta MONTO [rojo/negro/0] - Ruleta de colores',
+            '!rifa MONTO - Adivina número 1-10',
+            '!crash MONTO - Multiplicador creciente',
+            '!dados MONTO - 7+ = x2 | Doble = x3 | Doble 6 = x5',
+            '!slots MONTO - 777 = x50 | Triple = x10 | Doble = x3',
+            '!apostar MONTO | !blackjack MONTO (!hit/!stand) | !loteria | !verloteria'
+        ], 0xFF69B4);
+        helpSection(player.id, '🏆', 'RANKINGS', [
+            '!top - Top 5 general | !toprich - Más ricos',
+            '!toprachas - Mejores rachas | !topactivo - Más activos',
+            '!topgeis | !topkick | !topban | !toptitan',
+            '!topclanes - Ranking de clanes'
+        ], 0xFFD700);
+        helpSection(player.id, '💍', 'SOCIAL', [
+            '!casarse #ID - Proponer matrimonio ($25k, +10% bonus)',
+            '!divorcio - Separarse | !pareja - Ver tu pareja',
+            '!clan - Sistema de clanes (!clan ayuda)',
+            '!titan - Medir tu titan | !anon MENSAJE - Mensaje anónimo'
+        ], 0xFF69B4);
+        helpSection(player.id, '🎮', 'MINIJUEGOS (durante partida)', [
+            '!cambio #ID - Cambiar posición (primeros 20s)',
+            '!equipo [1/2] - Cambiar de equipo',
+            '!invertir #ID - Invertir controles 10s',
+            '!theworld - Pausar minijuego',
+            '!bitesthedust - Eliminar jugador'
+        ], 0x00FF00);
+        helpSection(player.id, '💳', 'PRÉSTAMOS', [
+            '!prestamo MONTO - Pedir préstamo | !prestar #ID MONTO - Prestar',
+            '!deuda | !mideudap2p | !misdeudores | !prestamista',
+            '!pagar [MONTO/todo] | !pagarp2p [MONTO/todo]'
+        ], 0xFFFF00);
+        helpSection(player.id, '📢', 'REPORTES Y AYUDA', [
+            '!calladmin [razón] - Llamar admin',
+            '!report #ID [razón] - Reportar jugador',
+            '!bug [descripción] - Reportar bug',
+            '!fix - Votar para reiniciar si hay bug'
+        ], 0xFF6600);
+        helpSection(player.id, '👤', 'CUENTAS Y STATS', [
+            '!registrar <usuario> <clave> | !login <usuario> <clave>',
+            '!cuenta | !logout | !eliminarcuenta CONFIRMAR',
+            '!stats / !me | !balance | !wins | !games | !rank'
+        ], 0x00FF99);
+        helpSection(player.id, 'ℹ️', 'OTROS', [
+            '!miauth - Ver tu token | !discord - Link de Discord',
+            '!version - Versión del bot | !proteccion - Protección contra bans',
+            '!impuesto - Cobrar impuestos (admin+)'
+        ], 0xAAAAAA);
+
         // Sección de admin (solo visible para admins)
         if (playerAuth && (CREATOR_AUTHS.indexOf(playerAuth) !== -1 || MODERATOR_AUTHS.indexOf(playerAuth) !== -1)) {
             var adminHelp = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
@@ -5233,18 +5212,9 @@ room.onPlayerChat = function(player, message) {
             if (CREATOR_AUTHS.indexOf(playerAuth) !== -1) {
                 adminHelp += "🛠️ !antismurf [on/off] | !antivpn [on/off] | !resetpass <usuario> <nueva> | !whitelist [on/off/add/remove/list] | !refreshcache | !cachestatus\n";
             }
-            adminHelp += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
-            room.sendAnnouncement(adminHelp, player.id, 0x00BFFF, 'bold', 2);
+            adminHelp += "╚══════════════════════════╝";
+            room.sendAnnouncement(formatKeep(adminHelp), player.id, 0x00BFFF, 'bold', 2);
         }
-        room.sendAnnouncement(
-            "👤 CUENTAS:\n" +
-            "  !registrar <usuario> <clave> | !login <usuario> <clave>\n" +
-            "  !cuenta | !logout | !eliminarcuenta CONFIRMAR\n" +
-            "📊 STATS: !stats/!me | !balance | !wins | !games | !goals | !asist | !rank\n" +
-            "  !top | !toprachas | !topactivo | !topricos | !toplosses\n" +
-            "🎰 CASINO: !apostar <m> | !blackjack <m> (!hit/!stand) | !loteria | !verloteria",
-            player.id, 0x00FF99, 'bold', 2
-        );
         return false;
     }
 
