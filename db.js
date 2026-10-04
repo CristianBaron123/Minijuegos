@@ -3,6 +3,16 @@
 // ============================================
 const { MongoClient } = require('mongodb');
 const crypto = require('crypto');
+const dns = require('dns');
+
+// Atlas (mongodb+srv://) resuelve el cluster con una consulta DNS SRV. Algunos routers/ISP/VPN
+// la rechazan ("querySrv ECONNREFUSED"). Si pasa, se fuerzan DNS públicos solo para este proceso.
+// MONGO_DNS=1.1.1.1,8.8.8.8 los personaliza; MONGO_DNS=off no toca nada.
+if (/^mongodb\+srv:/.test(process.env.MONGO_URI || '') && process.env.MONGO_DNS !== 'off') {
+    try {
+        dns.setServers((process.env.MONGO_DNS || '8.8.8.8,1.1.1.1').split(',').map(function(s) { return s.trim(); }).filter(Boolean));
+    } catch(e) { console.error('⚠️ No se pudieron fijar DNS para MongoDB:', e.message); }
+}
 
 // NO caer silenciosamente a localhost: eso causaba el split-brain entre Atlas y
 // una base local de la VPS (la sala "se reiniciaba" o cambiaba de base según
