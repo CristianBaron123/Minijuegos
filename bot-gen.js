@@ -358,9 +358,6 @@ const mapNamajunasRaceData = (function(){try{return fs.readFileSync.apply(fs,arg
 const mapNamajunasRace2Path = path.join(__dirname, 'Mapas', 'Namajunas Race 2 [ʜᴀxᴍᴏᴅs.ᴄᴏᴍ].hbs');
 const mapNamajunasRace2Data = (function(){try{return fs.readFileSync.apply(fs,arguments)}catch(e){return JSON.stringify({})}})(mapNamajunasRace2Path, 'utf8');
 
-// Map: Impostor (chair.hbs)
-const mapImpostorPath = path.join(__dirname, 'Mapas', 'chair.hbs');
-const mapImpostorData = (function(){try{return fs.readFileSync.apply(fs,arguments)}catch(e){return JSON.stringify({})}})(mapImpostorPath, 'utf8');
 
 // Map: FCT 1
 const mapFCT1Path = path.join(__dirname, 'Mapas', 'FCT 1 - Falafels Collision Team 1.hbs');
@@ -647,10 +644,6 @@ const survivorVol17ModuleCode = (function(){try{return fs.readFileSync.apply(fs,
 const windModulePath = path.join(__dirname, 'games', 'minijuegos', 'wind.js');
 const windModuleCode = (function(){try{return fs.readFileSync.apply(fs,arguments)}catch(e){return JSON.stringify({})}})(windModulePath, 'utf8');
 
-const impostorModulePath = path.join(__dirname, 'games', 'minijuegos', 'impostor.js');
-const impostorModuleCode = (function(){try{return fs.readFileSync.apply(fs,arguments)}catch(e){return JSON.stringify({})}})(impostorModulePath, 'utf8');
-const pistoleroModulePath = path.join(__dirname, 'games', 'minijuegos', 'pistolero.js');
-const pistoleroModuleCode = (function(){try{return fs.readFileSync.apply(fs,arguments)}catch(e){return JSON.stringify({})}})(pistoleroModulePath, 'utf8');
 
 const bonkMovableModulePath = path.join(__dirname, 'games', 'minijuegos', 'bonk_movable.js');
 const bonkMovableModuleCode = (function(){try{return fs.readFileSync.apply(fs,arguments)}catch(e){return JSON.stringify({})}})(bonkMovableModulePath, 'utf8');
@@ -884,8 +877,6 @@ const getBotScript = () => {
         const meadowlandsModule = transformModuleForBrowser(meadowlandsModuleCode, mapMeadowlandsData);
         const survivorVol17Module = transformModuleForBrowser(survivorVol17ModuleCode, mapSurvivorVol17Data);
         const windModule = transformModuleForBrowser(windModuleCode, mapWindData);
-        const impostorModule = transformModuleForBrowser(impostorModuleCode, mapImpostorData);
-        const pistoleroModule = transformModuleForBrowser(pistoleroModuleCode, mapImpostorData);
         const bonkMovableModule = transformModuleForBrowser(bonkMovableModuleCode, mapBonkMovableData);
         const endureBombsModule = transformModuleForBrowser(endureBombsModuleCode, mapEndureBombsData);
         const musicalFitModule = transformModuleForBrowser(musicalFitModuleCode, mapMusicalFitData);
@@ -970,7 +961,6 @@ const getBotScript = () => {
     mainCode = mainCode.replace(/##MAP_BONK_ARENA##/g, JSON.stringify(JSON.stringify(mapBonkArenaData)));
     mainCode = mainCode.replace(/##MAP_BONK_BERU##/g, JSON.stringify(JSON.stringify(mapBonkBeruData)));
     mainCode = mainCode.replace(/##MAP_BAN_VOTE##/g, JSON.stringify(JSON.stringify(mapBanVoteData)));
-    mainCode = mainCode.replace(/##MAP_IMPOSTOR##/g, JSON.stringify(JSON.stringify(mapImpostorData)));
 
     // Modo test: sala privada con contraseña
     if (TEST_MODE) {
@@ -1297,16 +1287,6 @@ var SURVIVOR_VOL17 = ` + survivorVol17Module + `;
 // MÓDULO: WIND
 // ============================================
 var WIND = ` + windModule + `;
-
-// ============================================
-// MÓDULO: IMPOSTOR
-// ============================================
-var IMPOSTOR = ` + impostorModule + `;
-
-// ============================================
-// MÓDULO: PISTOLERO
-// ============================================
-var PISTOLERO = ` + pistoleroModule + `;
 
 // ============================================
 // MÓDULO: BONK MOVABLE
