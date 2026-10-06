@@ -255,6 +255,32 @@ var VIP_AURAS = {
 };
 var VIP_GOAL_ANIMS = { 1: ['🔥', 'FUEGO'], 2: ['💰', 'DINERO'], 3: ['⭐', 'ESTRELLAS'] };
 
+// Límite diario de ganancias (solo dinero "pasivo": victorias, participación y !trabajar;
+// el casino y !diario no cuentan). Se reinicia a medianoche y con cada reinicio del bot.
+var DAILY_CAP = 40000;
+var DAILY_CAP_VIP = 120000;
+botState.dailyEarned = {};
+
+function dailyCapFor(auth) {
+    return isVipAuth(auth) ? DAILY_CAP_VIP : DAILY_CAP;
+}
+
+function dailyEntry(auth) {
+    var day = new Date().toDateString();
+    var e = botState.dailyEarned[auth];
+    if (!e || e.day !== day) e = botState.dailyEarned[auth] = { day: day, amount: 0 };
+    return e;
+}
+
+// Devuelve cuánto de "amount" se puede pagar sin pasar el límite y lo descuenta del cupo
+function capDaily(auth, amount) {
+    if (!auth || amount <= 0) return amount;
+    var e = dailyEntry(auth);
+    var allowed = Math.max(0, Math.min(amount, dailyCapFor(auth) - e.amount));
+    e.amount += allowed;
+    return allowed;
+}
+
 function isWeekend() {
     var day = new Date().getDay();
     return day === 0 || day === 6;
@@ -385,7 +411,8 @@ function handleVipPerk(player, auth, message) {
             var mult = xpMultiplier(auth);
             say('✨ Nivel ' + lv + ' · ' + xp.toLocaleString() + ' XP\n' +
                 '📈 Próximo nivel (' + (lv + 1) + ') en ' + (xpForLevel(lv + 1) - xp).toLocaleString() + ' XP\n' +
-                '⚡ Multiplicador: x' + mult + (isVipAuth(auth) ? ' (VIP' + (isWeekend() ? ' · fin de semana' : '') + ')' : ' — con !vip llegás a x' + VIP_XP_MULT), 0x00FFAA);
+                '⚡ Multiplicador: x' + mult + (isVipAuth(auth) ? ' (VIP' + (isWeekend() ? ' · fin de semana' : '') + ')' : ' — con !vip llegás a x' + VIP_XP_MULT) + '\n' +
+                '💵 Ganancias de hoy: $' + dailyEntry(auth).amount.toLocaleString() + ' / $' + dailyCapFor(auth).toLocaleString(), 0x00FFAA);
         });
         return true;
     }
@@ -2156,7 +2183,13 @@ function loadLuckyMap(winner) {
         totalReward = Math.floor(totalReward * VIP_BONUS);
         vipMulti = ' (+30% VIP)';
     }
-    if (winnerAuth && typeof window.__dbAddBalance === 'function') {
+    var _winCapped = false;
+    if (winnerAuth) {
+        var _winPaid = capDaily(winnerAuth, totalReward);
+        _winCapped = _winPaid < totalReward;
+        totalReward = _winPaid;
+    }
+    if (winnerAuth && totalReward > 0 && typeof window.__dbAddBalance === 'function') {
         try { window.__dbAddBalance(winnerAuth, winner.name, totalReward); } catch(e) {}
     }
     if (winnerAuth) giveXP(winnerAuth, winner.name, winner.id, XP_WIN);
@@ -2169,6 +2202,7 @@ function loadLuckyMap(winner) {
         rewardMsg += " (💍+10%)";
     }
     if (vipMulti) rewardMsg += vipMulti;
+    if (_winCapped) rewardMsg += ' (🛑 límite diario alcanzado)';
     if (streakBonus > 0) {
         rewardMsg += " (+" + formatMoney(streakBonus) + " bonus racha x" + streak + ")";
     }
@@ -2754,8 +2788,9 @@ function checkAndStart() {
                     try { window.__dbSaveGamePlayed(pAuth, p.name); } catch(e) {}
                 }
                 // Recompensa por participar
-                if (typeof window.__dbAddBalance === 'function') {
-                    try { window.__dbAddBalance(pAuth, p.name, moneyConfig.participationReward); } catch(e) {}
+                var _partPaid = capDaily(pAuth, moneyConfig.participationReward);
+                if (_partPaid > 0 && typeof window.__dbAddBalance === 'function') {
+                    try { window.__dbAddBalance(pAuth, p.name, _partPaid); } catch(e) {}
                 }
                 giveXP(pAuth, p.name, p.id, XP_PLAY);
             }
@@ -4960,6 +4995,12 @@ room.onPlayerChat = function(player, message) {
         if (botState.activeEvent) {
             if (botState.activeEvent.type === 'double_money') { ganancia = ganancia * 2; eventoMulti = ' (⚡x2 EVENTO!)'; }
             if (botState.activeEvent.type === 'triple_money') { ganancia = ganancia * 3; eventoMulti = ' (⚡x3 EVENTO!)'; }
+        }
+        ganancia = capDaily(playerAuth, ganancia);
+        if (ganancia <= 0) {
+            botState.trabajarCooldowns[playerAuth] = last;
+            room.sendAnnouncement('🛑 Llegaste al límite diario de ganancias ($' + dailyCapFor(playerAuth).toLocaleString() + '). Volvé mañana' + (isVipAuth(playerAuth) ? '.' : ' o hacete VIP (!vip) para un límite mayor.'), player.id, 0xFF6600, 'bold');
+            return false;
         }
         var trabajos = [
             "🔧 reparaste tuberías",
