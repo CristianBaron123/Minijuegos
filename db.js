@@ -1154,10 +1154,23 @@ async function incStat(auth, name, field, amount) {
     } catch(e) { console.error('❌ DB incStat error:', e.message); }
 }
 
+// Guarda un campo arbitrario del jugador (preferencias VIP, etc.)
+async function setPlayerField(auth, name, field, value) {
+    await ensureConnected();
+    if (!db || !auth || !field) return;
+    auth = canon(auth);
+    try {
+        var set = { lastSeen: new Date() };
+        set[field] = value;
+        if (name) set.name = name;
+        await db.collection('players').updateOne({ auth: auth }, { $set: set }, { upsert: true });
+    } catch(e) { console.error('❌ DB setPlayerField error:', e.message); }
+}
+
 async function close() {
     if (client) {
         try { await client.close(); } catch(e) {}
     }
 }
 
-module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth, logoutAuth, deleteAccount, resetAccountPassword, incStat };
+module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth, logoutAuth, deleteAccount, resetAccountPassword, incStat, setPlayerField };

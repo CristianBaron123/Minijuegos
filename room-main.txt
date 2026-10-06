@@ -231,6 +231,275 @@ function helpSection(pid, emoji, title, lines, color) {
     );
 }
 
+// ============================================
+// BENEFICIOS VIP: personalización, efectos y XP
+// ============================================
+botState.vipPrefs = {};      // { auth: { color, style, badges, prefix, entry, tone, goalAnim, aura } }
+botState.xpCache = {};       // { auth: xp }
+botState.vipLastAnnounce = {};
+botState.lastKick = null;
+botState.vipLastScore = { red: 0, blue: 0 };
+botState.auraIdx = 0;
+
+var XP_WIN = 100;
+var XP_PLAY = 20;
+var VIP_XP_MULT = 2.5;
+var VIP_XP_MULT_WEEKEND = 5.0;
+var VIP_ANNOUNCE_COOLDOWN = 60000;
+var VIP_AURAS = {
+    1: ['🟥', '🟧', '🟨', '🟩', '🟦', '🟪'],   // arcoíris
+    2: ['❤️', '🧡', '💛', '💚', '💙', '💜'],     // corazones
+    3: ['✨', '💫', '🌟'],                        // partículas
+    4: ['🔥', '💥'],                              // fuego
+    5: ['⭐', '🌟', '💫']                         // estrellas
+};
+var VIP_GOAL_ANIMS = { 1: ['🔥', 'FUEGO'], 2: ['💰', 'DINERO'], 3: ['⭐', 'ESTRELLAS'] };
+
+function isWeekend() {
+    var day = new Date().getDay();
+    return day === 0 || day === 6;
+}
+
+function isVipAuth(auth) {
+    return !!auth && VIP_AUTHS.indexOf(auth) !== -1;
+}
+
+function getVipPrefs(auth) {
+    return botState.vipPrefs[auth] || {};
+}
+
+function xpMultiplier(auth) {
+    if (!isVipAuth(auth)) return 1;
+    return isWeekend() ? VIP_XP_MULT_WEEKEND : VIP_XP_MULT;
+}
+
+function xpLevel(xp) {
+    return Math.floor(Math.sqrt((xp || 0) / 100)) + 1;
+}
+
+function xpForLevel(level) {
+    return (level - 1) * (level - 1) * 100;
+}
+
+// Texto libre del jugador: sin links, sin saltos de línea y con largo máximo
+function cleanUserText(text, maxLen) {
+    var t = String(text || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    if (/https?:|www\.|discord|\.gg\/|\.com\b|@everyone|@here/i.test(t)) return null;
+    return Array.from(t).slice(0, maxLen).join('');
+}
+
+function loadVipPrefs(auth, done) {
+    if (!auth || typeof window.__dbGetStats !== 'function') { if (done) done(); return; }
+    // Si ya están en memoria no se vuelve a leer de la base (evita pisar cambios recién hechos)
+    if (botState.vipPrefs[auth] !== undefined) { if (done) done(); return; }
+    window.__dbGetStats(auth).then(function(st) {
+        botState.vipPrefs[auth] = (st && st.vipPrefs) || {};
+        botState.xpCache[auth] = (st && st.xp) || 0;
+        if (done) done();
+    }).catch(function() { if (done) done(); });
+}
+
+function saveVipPrefs(auth, name) {
+    if (typeof window.__dbSetField === 'function') {
+        try { window.__dbSetField(auth, name, 'vipPrefs', botState.vipPrefs[auth] || {}); } catch(e) {}
+    }
+}
+
+function giveXP(auth, name, playerId, base) {
+    if (!auth || typeof window.__dbIncStat !== 'function') return;
+    var mult = xpMultiplier(auth);
+    var amount = Math.round(base * mult);
+    var before = botState.xpCache[auth] || 0;
+    var after = before + amount;
+    botState.xpCache[auth] = after;
+    try { window.__dbIncStat(auth, name, 'xp', amount); } catch(e) {}
+    var lvBefore = xpLevel(before), lvAfter = xpLevel(after);
+    if (lvAfter > lvBefore) {
+        room.sendAnnouncement('🆙 ' + name + ' subió al nivel ' + lvAfter + '!', null, 0x00FFAA, 'bold');
+    }
+    if (mult > 1 && playerId != null) {
+        room.sendAnnouncement('✨ +' + amount + ' XP (x' + mult + ' VIP' + (isWeekend() ? ' · fin de semana' : '') + ')', playerId, 0xFFD700);
+    }
+}
+
+// Cambia el avatar un rato y lo restaura
+function flashAvatar(playerId, emoji, ms) {
+    try { room.setPlayerAvatar(playerId, emoji); } catch(e) {}
+    setTimeout(function() { try { room.setPlayerAvatar(playerId, null); } catch(e) {} }, ms);
+}
+
+room.onPlayerBallKick = function(player) {
+    botState.lastKick = { id: player.id, t: Date.now() };
+};
+
+// Detecta goles por cambio del marcador y aplica la animación VIP del goleador
+function vipGoalWatcher() {
+    var sc = null;
+    try { sc = room.getScores(); } catch(e) {}
+    if (!sc) { botState.vipLastScore = { red: 0, blue: 0 }; return; }
+    var last = botState.vipLastScore;
+    var scoringTeam = 0;
+    if (sc.red > last.red) scoringTeam = 1;
+    else if (sc.blue > last.blue) scoringTeam = 2;
+    botState.vipLastScore = { red: sc.red, blue: sc.blue };
+    if (!scoringTeam || !botState.lastKick || Date.now() - botState.lastKick.t > 10000) return;
+    var scorer = room.getPlayer(botState.lastKick.id);
+    if (!scorer || scorer.team !== scoringTeam) return;
+    var a = getAuth(scorer);
+    var anim = a && isVipAuth(a) ? VIP_GOAL_ANIMS[getVipPrefs(a).goalAnim] : null;
+    if (!anim) return;
+    flashAvatar(scorer.id, anim[0], 3000);
+    room.sendAnnouncement(anim[0] + ' ' + formatText(scorer.name) + ' anotó con estilo ' + anim[1] + ' ' + anim[0], null, 0xFFD700, 'bold');
+}
+
+// Auras: ciclan el avatar. Se pausan mientras hay un minijuego activo para no pisar sus avatares.
+setInterval(function() {
+    if (botState.gameActive) return;
+    botState.auraIdx++;
+    room.getPlayerList().forEach(function(p) {
+        if (p.id === 0) return;
+        var a = getAuth(p);
+        if (!a || !isVipAuth(a)) return;
+        var frames = VIP_AURAS[getVipPrefs(a).aura];
+        if (!frames) return;
+        try { room.setPlayerAvatar(p.id, frames[botState.auraIdx % frames.length]); } catch(e) {}
+    });
+}, 700);
+
+// Comandos de beneficios VIP + !xp. Devuelve true si el mensaje era uno de estos comandos.
+var VIP_PERK_RE = /^!(vcolor|vstyle|badges|prefijo|setentry|entradatono|animaciongol|animacion|announce|vreset|vquitar|xp|nivel)(\s|$)/i;
+
+function handleVipPerk(player, auth, message) {
+    var parts = message.trim().split(/\s+/);
+    var cmd = parts[0].toLowerCase().substring(1);
+    var arg = message.trim().substring(parts[0].length).trim();
+    var pid = player.id;
+
+    function say(msg, color) { room.sendAnnouncement(msg, pid, color || 0xFFD700, 'bold'); }
+
+    if (cmd === 'xp' || cmd === 'nivel') {
+        loadVipPrefs(auth, function() {
+            var xp = botState.xpCache[auth] || 0;
+            var lv = xpLevel(xp);
+            var mult = xpMultiplier(auth);
+            say('✨ Nivel ' + lv + ' · ' + xp.toLocaleString() + ' XP\n' +
+                '📈 Próximo nivel (' + (lv + 1) + ') en ' + (xpForLevel(lv + 1) - xp).toLocaleString() + ' XP\n' +
+                '⚡ Multiplicador: x' + mult + (isVipAuth(auth) ? ' (VIP' + (isWeekend() ? ' · fin de semana' : '') + ')' : ' — con !vip llegás a x' + VIP_XP_MULT), 0x00FFAA);
+        });
+        return true;
+    }
+
+    if (cmd === 'vquitar') {
+        if (!auth || !isAnyAdmin(auth)) { say('⛔ Solo los admins pueden usar !vquitar', 0xFF0000); return true; }
+        var tid = parseInt((parts[1] || '').replace('#', ''));
+        var tp = isNaN(tid) ? null : room.getPlayer(tid);
+        var ta = tp ? getAuth(tp) : null;
+        if (!ta) { say('⚠️ Usa: !vquitar #ID', 0xFFFF00); return true; }
+        botState.vipPrefs[ta] = {};
+        saveVipPrefs(ta, tp.name);
+        say('✅ Personalización VIP de ' + tp.name + ' reiniciada.', 0x00FF00);
+        return true;
+    }
+
+    if (!auth || !isVipAuth(auth)) {
+        say('💎 Ese comando es solo para VIP. Mirá los beneficios con !vip', 0xFF6600);
+        return true;
+    }
+
+    var apply = function(fn) {
+        loadVipPrefs(auth, function() {
+            var prefs = botState.vipPrefs[auth] || {};
+            botState.vipPrefs[auth] = prefs;
+            fn(prefs);
+            saveVipPrefs(auth, player.name);
+        });
+    };
+
+    if (cmd === 'vreset') {
+        botState.vipPrefs[auth] = {};
+        saveVipPrefs(auth, player.name);
+        try { room.setPlayerAvatar(pid, null); } catch(e) {}
+        say('✅ Personalización reiniciada.', 0x00FF00);
+        return true;
+    }
+    if (cmd === 'vcolor') {
+        var hex = arg.replace('#', '');
+        if (arg.toLowerCase() === 'off') { apply(function(p) { delete p.color; say('✅ Color de chat restablecido.', 0x00FF00); }); return true; }
+        if (!/^[0-9a-fA-F]{6}$/.test(hex)) { say('⚠️ Usa: !vcolor <HEX>\nEjemplo: !vcolor FF5500 (o !vcolor off)', 0xFFFF00); return true; }
+        apply(function(p) { p.color = parseInt(hex, 16); say('🎨 Color de chat cambiado a #' + hex.toUpperCase(), p.color); });
+        return true;
+    }
+    if (cmd === 'vstyle') {
+        var st = arg.toLowerCase();
+        if (['bold', 'italic', 'small', 'normal'].indexOf(st) === -1) { say('⚠️ Usa: !vstyle <bold|italic|small|normal>', 0xFFFF00); return true; }
+        apply(function(p) { p.style = st; say('✍️ Estilo de fuente: ' + st, 0x00FF00); });
+        return true;
+    }
+    if (cmd === 'badges') {
+        var emojis = Array.from(arg).filter(function(ch) { return /\p{Extended_Pictographic}/u.test(ch); }).slice(0, 3);
+        apply(function(p) {
+            if (!emojis.length) { delete p.badges; say('✅ Insignias quitadas. Usa: !badges 👑💎🔥 para poner hasta 3.', 0x00FF00); }
+            else { p.badges = emojis.join(''); say('🏅 Insignias: ' + p.badges, 0x00FF00); }
+        });
+        return true;
+    }
+    if (cmd === 'prefijo') {
+        var pf = cleanUserText(arg, 8);
+        if (pf === null || /[\[\]]/.test(pf || '')) { say('⚠️ Prefijo no válido (sin links ni corchetes).', 0xFF6600); return true; }
+        apply(function(p) {
+            if (!pf) { delete p.prefix; say('✅ Prefijo restablecido a [VIP].', 0x00FF00); }
+            else { p.prefix = pf; say('🏷️ Prefijo: [' + pf + ']', 0x00FF00); }
+        });
+        return true;
+    }
+    if (cmd === 'setentry') {
+        var en = cleanUserText(arg, 60);
+        if (en === null) { say('⚠️ El mensaje no puede tener links ni menciones.', 0xFF6600); return true; }
+        apply(function(p) {
+            if (!en) { delete p.entry; say('✅ Mensaje de entrada quitado.', 0x00FF00); }
+            else { p.entry = en; say('👋 Mensaje de entrada guardado: ' + en, 0x00FF00); }
+        });
+        return true;
+    }
+    if (cmd === 'entradatono') {
+        var tn = parseInt(arg);
+        if (isNaN(tn) || tn < 0 || tn > 2) { say('⚠️ Usa: !entradatono <0-2>  (0 = silencio, 1 = chat, 2 = notificación)', 0xFFFF00); return true; }
+        apply(function(p) { p.tone = tn; say('🔔 Tono de entrada: ' + tn, 0x00FF00); });
+        return true;
+    }
+    if (cmd === 'animaciongol') {
+        var ga = parseInt(arg);
+        if (isNaN(ga) || ga < 0 || ga > 3) { say('⚠️ Usa: !animaciongol <1-3>  (1 fuego 🔥, 2 dinero 💰, 3 estrellas ⭐, 0 = apagar)', 0xFFFF00); return true; }
+        apply(function(p) { if (ga === 0) delete p.goalAnim; else p.goalAnim = ga; say(ga ? '🎆 Animación de gol activada.' : '✅ Animación de gol apagada.', 0x00FF00); });
+        return true;
+    }
+    if (cmd === 'animacion') {
+        var an = parseInt(arg);
+        if (isNaN(an) || an < 0 || an > 5) { say('⚠️ Usa: !animacion <1-5>  (1 arcoíris, 2 corazones, 3 partículas, 4 fuego, 5 estrellas, 0 = apagar)', 0xFFFF00); return true; }
+        apply(function(p) {
+            if (an === 0) { delete p.aura; try { room.setPlayerAvatar(pid, null); } catch(e) {} say('✅ Aura apagada.', 0x00FF00); }
+            else { p.aura = an; say('🌈 Aura activada (se pausa durante los minijuegos).', 0x00FF00); }
+        });
+        return true;
+    }
+    if (cmd === 'announce') {
+        var msg = cleanUserText(arg, 120);
+        if (msg === null) { say('⚠️ El anuncio no puede tener links ni menciones.', 0xFF6600); return true; }
+        if (!msg) { say('⚠️ Usa: !announce <mensaje>', 0xFFFF00); return true; }
+        var nowA = Date.now();
+        var lastA = botState.vipLastAnnounce[auth] || 0;
+        if (nowA - lastA < VIP_ANNOUNCE_COOLDOWN) {
+            say('⏳ Esperá ' + Math.ceil((VIP_ANNOUNCE_COOLDOWN - (nowA - lastA)) / 1000) + 's para otro anuncio.', 0xFF6600);
+            return true;
+        }
+        botState.vipLastAnnounce[auth] = nowA;
+        room.sendAnnouncement('📢 ANUNCIO VIP de ' + player.name + ':\n' + msg, null, 0xFFD700, 'bold', 2);
+        return true;
+    }
+    return true;
+}
+
 // Cargar matrimonios de la DB al iniciar
 try {
     window.__dbLoadMarriages().then(function(m) {
@@ -408,9 +677,12 @@ function getPlayerTag(player) {
     if (auth && MODERATOR_AUTHS.indexOf(auth) !== -1) {
         return { label: protPrefix + '🛡️[' + formatText('MOD') + ']' + clanSuffix, color: 0x00BFFF };
     }
-    // VIP - dorado
+    // VIP - dorado (con insignias y prefijo personalizados)
     if (getVIPLevel({ auth: auth }) >= 1) {
-        return { label: protPrefix + '🥇[' + formatText('VIP') + ']' + clanSuffix, color: 0xFFD700 };
+        var _vp = getVipPrefs(auth);
+        var _vbadges = _vp.badges || '🥇';
+        var _vprefix = _vp.prefix || formatText('VIP');
+        return { label: protPrefix + _vbadges + '[' + _vprefix + ']' + clanSuffix, color: _vp.color != null ? _vp.color : 0xFFD700, style: _vp.style };
     }
     if (auth === 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic') {
         return { label: protPrefix + '👑[' + formatText('KING') + ']' + clanSuffix, color: 0xFFFFFF };
@@ -1887,6 +2159,7 @@ function loadLuckyMap(winner) {
     if (winnerAuth && typeof window.__dbAddBalance === 'function') {
         try { window.__dbAddBalance(winnerAuth, winner.name, totalReward); } catch(e) {}
     }
+    if (winnerAuth) giveXP(winnerAuth, winner.name, winner.id, XP_WIN);
     var rewardMsg = "💰 " + formatText(winner.name) + " gana " + formatMoney(totalReward);
     if (dobleUsado) {
         rewardMsg += " (x2 DOBLE!)";
@@ -2484,6 +2757,7 @@ function checkAndStart() {
                 if (typeof window.__dbAddBalance === 'function') {
                     try { window.__dbAddBalance(pAuth, p.name, moneyConfig.participationReward); } catch(e) {}
                 }
+                giveXP(pAuth, p.name, p.id, XP_PLAY);
             }
         });
 
@@ -2557,7 +2831,7 @@ var soloMessages = [
     "⏳ La sala se pone buena con más gente... ¡Comparte el link!",
     "🏆 El rango más alto es TITAN (201+ victorias). ¿Llegarás?",
     "🔥 Las rachas te dan etiqueta [MVP] y bonus de dinero!",
-    "💰 Por cada minijuego que juegues ganas $5.000 de participación!",
+    "💰 Por cada minijuego que juegues ganas dinero y XP de participación!",
     "⚡ Cada minijuego es diferente: supervivencia, carreras, trivia y más!"
 ];
 var _soloInterval = null;
@@ -2627,6 +2901,7 @@ function gameGoalHandler(team) {
 room.onTeamGoal = gameGoalHandler;
 
 room.onGameTick = function() {
+    try { vipGoalWatcher(); } catch(e) {}
     for (var i = 0; i < minigameModules.length; i++) {
         var g = minigameModules[i];
         if (g.module && g.module.isActive && g.module.isActive() && g.module.onGameTick) {
@@ -2700,6 +2975,19 @@ room.onPlayerJoin = function(player) {
                 }
             }
         }
+
+        // Preferencias VIP / XP y mensaje de entrada personalizado
+        (function(_ep) {
+            loadVipPrefs(_ep.auth, function() {
+                if (!isVipAuth(_ep.auth)) return;
+                var _pp = getVipPrefs(_ep.auth);
+                if (_pp.entry && _pp.tone !== 0) {
+                    room.sendAnnouncement((_pp.badges || '🥇') + ' ' + _ep.name + ': ' + _pp.entry, null, _pp.color != null ? _pp.color : 0xFFD700, 'bold', _pp.tone != null ? _pp.tone : 1);
+                } else if (_pp.entry) {
+                    room.sendAnnouncement((_pp.badges || '🥇') + ' ' + _ep.name + ': ' + _pp.entry, null, _pp.color != null ? _pp.color : 0xFFD700, 'bold', 0);
+                }
+            });
+        })(player);
 
         // Aviso de cuentas: invita a registrarse a quien no tiene cuenta vinculada
         if (typeof window.__dbGetAccountByAuth === 'function') {
@@ -4593,7 +4881,8 @@ room.onPlayerChat = function(player, message) {
     if (!message.startsWith('!')) {
         var tag = getPlayerTag(player);
         if (tag) {
-            room.sendAnnouncement(tag.label + ' ' + player.name + ': ' + message, null, tag.color, 'bold');
+            var _cs = tag.style || 'bold';
+            room.sendAnnouncement(tag.label + ' ' + player.name + ': ' + message, null, tag.color, _cs === 'normal' ? undefined : _cs);
             return false;
         }
     }
@@ -5166,6 +5455,13 @@ room.onPlayerChat = function(player, message) {
             '!cuenta | !logout | !eliminarcuenta CONFIRMAR',
             '!stats / !me | !balance | !wins | !games | !rank'
         ], 0x00FF99);
+        helpSection(player.id, '💎', 'VIP', [
+            '!vip - Ver beneficios | !vip comprar - Comprar VIP',
+            '!vcolor <HEX> | !vstyle <estilo> | !badges 👑💎🔥 | !prefijo <texto>',
+            '!setentry <frase> | !entradatono <0-2> | !vreset',
+            '!animaciongol <1-3> | !animacion <1-5> | !announce <mensaje>',
+            '!xp - Ver tu nivel y XP'
+        ], 0xFFD700);
         helpSection(player.id, 'ℹ️', 'OTROS', [
             '!miauth - Ver tu token | !discord - Link de Discord',
             '!version - Versión del bot | !proteccion - Protección contra bans',
@@ -5471,6 +5767,11 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // SISTEMA VIP
     // ============================================
+    if (VIP_PERK_RE.test(message.trim())) {
+        handleVipPerk(player, playerAuth, message);
+        return false;
+    }
+
     if (message === '!vip') {
         if (getVIPLevel(player) >= 1) {
             room.sendAnnouncement(
@@ -5481,7 +5782,10 @@ room.onPlayerChat = function(player, message) {
                 '  Inmunidad total a efectos negativos del Lucky\n' +
                 '  1 protección gratis por juego\n' +
                 '  Elegir equipo con !equipo [1/2]\n' +
-                '  Avatares con emojis y etiqueta [VIP] dorada',
+                '  Avatares con emojis y etiqueta [VIP] dorada\n' +
+                '  Personalización: !vcolor !vstyle !badges !prefijo !setentry !entradatono\n' +
+                '  Efectos: !animaciongol !animacion !announce\n' +
+                '  XP x2.5 (x5 sábados y domingos): !xp',
                 player.id, 0xFFD700
             );
         } else {
@@ -5493,7 +5797,10 @@ room.onPlayerChat = function(player, message) {
                 '  Inmunidad total a efectos negativos del Lucky\n' +
                 '  1 protección gratis por juego\n' +
                 '  Elegir equipo con !equipo [1/2]\n' +
-                '  Avatares con emojis y etiqueta [VIP] dorada\n\n' +
+                '  Avatares con emojis y etiqueta [VIP] dorada\n' +
+                '  Personalización: !vcolor !vstyle !badges !prefijo !setentry !entradatono\n' +
+                '  Efectos: !animaciongol !animacion !announce\n' +
+                '  XP x2.5 (x5 sábados y domingos): !xp\n\n' +
                 'Comandos:\n' +
                 '  !vip comprar - Comprar VIP ($' + VIP_PRICE.toLocaleString() + ')\n' +
                 '  !topvip - Cantidad de jugadores VIP',

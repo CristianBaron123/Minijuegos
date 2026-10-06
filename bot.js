@@ -1845,6 +1845,9 @@ var BUHO = ` + buhoModule + `;
             // Base de test aparte (haxball_test): las cuentas funcionan
             await page.exposeFunction('__dbResetAccountPassword', async (username, newPassword) => db.resetAccountPassword(username, newPassword));
             await page.exposeFunction('__dbIncStat', async () => { /* no-op en test */ });
+            await page.exposeFunction('__dbSetField', async (auth, name, field, value) => {
+                return await db.setPlayerField(auth, name, field, value);
+            });
             console.log('🧪 Funciones expuestas en MODO TEST (escrituras desactivadas)');
         } else {
             await page.exposeFunction('__dbSaveWin', async (auth, name, minigame) => {
@@ -1987,6 +1990,9 @@ var BUHO = ` + buhoModule + `;
             });
             await page.exposeFunction('__dbResetAccountPassword', async (username, newPassword) => {
                 return await db.resetAccountPassword(username, newPassword);
+            });
+            await page.exposeFunction('__dbSetField', async (auth, name, field, value) => {
+                return await db.setPlayerField(auth, name, field, value);
             });
             await page.exposeFunction('__dbIncStat', async (auth, name, field, amount) => {
                 await db.incStat(auth, name, field, amount);
