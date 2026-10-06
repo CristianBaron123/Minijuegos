@@ -217,10 +217,46 @@ function sendFormatted(room, msg, target, color, style, duration) {
 // Igual que formatText pero respeta lo que el jugador tiene que poder escribir:
 // comandos (!algo), #ID, [opcional], <obligatorio>, montos y números.
 function formatKeep(text) {
-    return String(text).split(/(![\wáéíóúñ]+|#ID|\[[^\]]*\]|<[^>]*>|\$[\d.,k]+|\d[\d.,]*)/i).map(function(part, i) {
+    return String(text).split(/(![\wáéíóúñ]+|#ID|\[[^\]]*\]|<[^>]*>|\$[\d.,k]+|\d[\d.,]*|(?:^|\s)[A-D]\))/i).map(function(part, i) {
         return i % 2 ? part : formatText(part);
     }).join('');
 }
+
+// ============================================
+// ESTILO UNIFICADO DE ANUNCIOS (panel con versalitas)
+// Todo room.sendAnnouncement pasa por acá:
+//  - Anuncio general (para todos) de 2+ líneas: título en un marco ╔═╗ y el resto en versalitas.
+//  - Cualquier otro mensaje: texto en versalitas (se respetan comandos, #ID, números, [..] y <..>).
+//  - NO se toca: chat de jugadores (prefijo \u200B), mensajes con links, auths o tokens largos,
+//    ni los que ya traen marco.
+// ============================================
+(function installAnnouncementStyle() {
+    var rawSend = room.sendAnnouncement.bind(room);
+    var BOX = '══════════════════════════';
+    var PROTECTED = /https?:|www\.|discord\.gg|[A-Za-z0-9_-]{22,}/;
+    var DECOR = /^\s*[━═─\-=_]{6,}\s*$/;
+
+    room.sendAnnouncement = function(msg, target, color, style, sound) {
+        try {
+            if (typeof msg !== 'string' || !msg) return rawSend(msg, target, color, style, sound);
+            if (msg.charAt(0) === '\u200B') return rawSend(msg.slice(1), target, color, style, sound);
+            if (msg.indexOf('╔') !== -1 || PROTECTED.test(msg)) return rawSend(msg, target, color, style, sound);
+            var lines = msg.split('\n').filter(function(l) { return !DECOR.test(l); });
+            while (lines.length && !lines[0].trim()) lines.shift();
+            while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+            if (!lines.length) return rawSend(msg, target, color, style, sound);
+            var out;
+            if (lines.length >= 2 && target == null && msg.length <= 500) {
+                out = '╔' + BOX + '╗\n   ' + formatKeep(lines[0].trim()) + '\n╚' + BOX + '╝\n' + lines.slice(1).map(formatKeep).join('\n');
+            } else {
+                out = lines.map(formatKeep).join('\n');
+            }
+            return rawSend(out, target, color, style, sound);
+        } catch(e) {
+            return rawSend(msg, target, color, style, sound);
+        }
+    };
+})();
 
 // Sección de ayuda: título en versalitas y una línea por comando con viñeta
 function helpSection(pid, emoji, title, lines, color) {
@@ -4970,7 +5006,7 @@ room.onPlayerChat = function(player, message) {
         var tag = getPlayerTag(player);
         if (tag) {
             var _cs = tag.style || 'bold';
-            room.sendAnnouncement(tag.label + ' ' + player.name + ': ' + message, null, tag.color, _cs === 'normal' ? undefined : _cs);
+            room.sendAnnouncement('​' + tag.label + ' ' + player.name + ': ' + message, null, tag.color, _cs === 'normal' ? undefined : _cs);
             return false;
         }
     }
@@ -6346,7 +6382,7 @@ room.onPlayerChat = function(player, message) {
         if (anonMsg.length > 100) { room.sendAnnouncement('⚠️ Mensaje muy largo (máximo 100 caracteres)', player.id, 0xFF6600); return false; }
         if (anonMsg.startsWith('!')) { room.sendAnnouncement('⚠️ No puedes enviar comandos como anónimo', player.id, 0xFF6600); return false; }
         shopBuy(playerAuth, player.name, player.id, 2000, '!anon', 30000, function() {
-            room.sendAnnouncement('🎭 ANÓNIMO: ' + anonMsg, null, 0x999999, 'bold');
+            room.sendAnnouncement('​🎭 ANÓNIMO: ' + anonMsg, null, 0x999999, 'bold');
         });
         return false;
     }
