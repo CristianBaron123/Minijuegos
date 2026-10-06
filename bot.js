@@ -1662,7 +1662,11 @@ var BUHO = ` + buhoModule + `;
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu'
+            '--disable-gpu',
+            // Sin esto Chrome frena los timers cuando la ventana está minimizada/oculta y la sala se laguea
+            '--disable-background-timer-throttling',
+            '--disable-renderer-backgrounding',
+            '--disable-backgrounding-occluded-windows'
         ]
     });
     

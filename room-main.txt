@@ -361,6 +361,9 @@ room.onPlayerBallKick = function(player) {
 
 // Detecta goles por cambio del marcador y aplica la animación VIP del goleador
 function vipGoalWatcher() {
+    // Se revisa 1 de cada 6 ticks (~10 veces/seg): sobra para detectar un gol
+    botState.vipTick = (botState.vipTick || 0) + 1;
+    if (botState.vipTick % 6 !== 0) return;
     var sc = null;
     try { sc = room.getScores(); } catch(e) {}
     if (!sc) { botState.vipLastScore = { red: 0, blue: 0 }; return; }
@@ -381,7 +384,7 @@ function vipGoalWatcher() {
 
 // Auras: ciclan el avatar. Se pausan mientras hay un minijuego activo para no pisar sus avatares.
 setInterval(function() {
-    if (botState.gameActive) return;
+    if (botState.gameActive || !VIP_AUTHS.length) return;
     botState.auraIdx++;
     room.getPlayerList().forEach(function(p) {
         if (p.id === 0) return;
@@ -1411,6 +1414,9 @@ var minigameModules = [
     { name: 'JUMPING_SURVIVAL', module: JUMPING_SURVIVAL, displayName: 'JUMPING SURVIVAL' },
     { name: 'SPACEBOUNCE_POWER', module: SPACEBOUNCE_POWER, displayName: 'SPACEBOUNCE POWER' },
     { name: 'SHAOLIN_SOCCER', module: SHAOLIN_SOCCER, displayName: 'SHAOLIN SOCCER' },
+    { name: 'GOT', module: GOT, displayName: 'GAME OF THRONES' },
+    { name: 'CAPTURE_THE_FLAG', module: CAPTURE_THE_FLAG, displayName: 'CAPTURE THE FLAG' },
+    { name: 'SURVIVOR_VOL17', module: SURVIVOR_VOL17, displayName: 'SURVIVOR VOL.17' },
     { name: 'BTL', module: BTL, displayName: 'B.T.L' },
     { name: 'CHARGE', module: CHARGE, displayName: 'Charge' },
     { name: 'RUN_MINI', module: RUN_MINI, displayName: 'RUN MINI' },
@@ -1422,6 +1428,26 @@ var minigameModules = [
 ];
 
 // Función genérica para iniciar minijuego
+// Límite de tiempo por minijuego (ms). Si un juego no termina, se corta y no gana nadie.
+// Los que no estén en la tabla usan GAME_TIME_LIMIT_DEFAULT. Se pueden ajustar uno por uno.
+var GAME_TIME_LIMIT_DEFAULT = 300000;
+var GAME_TIME_LIMITS = {
+    TRIVIA: 480000,
+    GOT: 480000,
+    BUHO: 480000,
+    GYMMIX: 480000,
+    WAR_CONQUEST: 480000
+};
+
+function getGameTimeLimit(name) {
+    return GAME_TIME_LIMITS[name] || GAME_TIME_LIMIT_DEFAULT;
+}
+
+function fmtLimit(ms) {
+    var secs = Math.round(ms / 1000);
+    return Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
+}
+
 function startMinigame(gameEntry) {
     botState.gameActive = true;
     botState.minigameStartTime = Date.now();
@@ -1432,15 +1458,25 @@ function startMinigame(gameEntry) {
     try { room.onTeamGoal = gameGoalHandler; } catch(e){}
     var mod = gameEntry.module;
     if (typeof mod !== 'undefined' && mod.start) {
-        // Timeout de seguridad: si el juego no termina en 5 minutos, forzar reinicio
+        // Límite de tiempo del juego: aviso a 30s del final y corte si no termina
+        var _limitMs = getGameTimeLimit(gameEntry.name);
+        var _startedAt = botState.minigameStartTime;
         if (botState.gameSafetyTimeout) clearTimeout(botState.gameSafetyTimeout);
+        if (_limitMs > 45000) {
+            setTimeout(function() {
+                if (botState.gameActive && botState.minigameStartTime === _startedAt) {
+                    room.sendAnnouncement('⏰ ' + formatText('Quedan 30 segundos para que termine el juego'), null, 0xFFA500, 'bold');
+                }
+            }, _limitMs - 30000);
+        }
         botState.gameSafetyTimeout = setTimeout(function() {
             if (botState.gameActive) {
-                reportBug('startMinigame.safetyTimeout', gameEntry.name + ' no termino en 5 minutos, forzando reinicio');
+                room.sendAnnouncement('⏰ ' + formatText('Se acabó el tiempo de ' + gameEntry.displayName + ' — nadie gana esta vez'), null, 0xFF6600, 'bold', 2);
+                reportBug('startMinigame.limiteTiempo', gameEntry.name + ' no termino en ' + fmtLimit(_limitMs) + ', forzando reinicio');
                 forceStopAllGames();
                 setTimeout(checkAndStart, 3000);
             }
-        }, 300000);
+        }, _limitMs);
         try {
             mod.start(room, function(winner) {
                 if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
@@ -2690,6 +2726,11 @@ function checkAndStart() {
             var chosen = minigames.find(function(g) { return g.name === botState.chosenNextGame.name; });
             if (chosen) {
                 selectedGame = chosen;
+                // Un juego elegido con !elegir cuenta como jugado en este ciclo de la bolsa
+                if (botState.minigameBag) {
+                    var _ci = botState.minigameBag.indexOf(chosen.name);
+                    if (_ci !== -1) botState.minigameBag.splice(_ci, 1);
+                }
                 if (botState.chosenNextGame.isBites) {
                     room.sendAnnouncement('💣 BITES THE DUST — Repitiendo: ' + formatText(chosen.displayName), null, 0xFF69B4, 'bold', 2);
                 } else {
@@ -2709,6 +2750,10 @@ function checkAndStart() {
                 botState.minigameBag[i] = botState.minigameBag[j];
                 botState.minigameBag[j] = tmp;
             }
+            // El primero de la bolsa nueva no puede ser el último que se jugó
+            if (botState.minigameBag.length > 1 && botState.minigameBag[0] === botState.lastMinigame) {
+                botState.minigameBag.push(botState.minigameBag.shift());
+            }
             console.log("🎲 Nueva bolsa de minijuegos: " + botState.minigameBag.join(", "));
         }
 
@@ -2721,14 +2766,8 @@ function checkAndStart() {
             // Buscar en la lista de minijuegos
             var gameObj = minigames.find(function(g) { return g.name === gameName; });
             if (!gameObj) continue;
-            // Verificar restricciones de jugadores
-            if (gameName === 'DODGEBALL' && playerCount < 3) continue;
-            if (gameName === 'CHAIRMIX' && playerCount < 8) continue;
-            if (gameName === 'SURVIVAL' && playerCount > 21) continue;
-            if (gameName === 'METEORS' && playerCount > 15) continue;
-            if (gameName === 'RING_SURVIVAL' && playerCount > 20) continue;
-            if (gameName === 'COPS_ROBBERS' && playerCount < 4) continue;
-            if (gameName === 'WWECROSS' && playerCount > 12) continue;
+            // Verificar restricciones de jugadores (misma regla que filterByPlayerCount)
+            if (filterByPlayerCount([gameObj]).length === 0) continue;
             selectedGame = gameObj;
             selectedIndex = i;
             break;
@@ -2798,12 +2837,16 @@ function checkAndStart() {
 
         // Anuncio del minijuego + cuenta regresiva
         room.sendAnnouncement(
-            "🎲 Proximo: " + selectedGame.displayName + "\n👥 Jugadores: " + playerCount,
+            "╔══════════════════════════╗\n" +
+            "   🎲 " + formatText("PRÓXIMO MINIJUEGO") + "\n" +
+            "   🎮 " + formatText(selectedGame.displayName) + "\n" +
+            "   👥 " + formatText("jugadores") + ": " + playerCount + "    ⏱️ " + formatText("límite") + ": " + fmtLimit(getGameTimeLimit(selectedGame.name)) + "\n" +
+            "╚══════════════════════════╝",
             null, 0x00BFFF, "bold", 2
         );
-        setTimeout(function() { room.sendAnnouncement("⏱️ 3...", null, 0xFFFF00, "bold", 2); }, 500);
-        setTimeout(function() { room.sendAnnouncement("⏱️ 2...", null, 0xFFA500, "bold", 2); }, 1500);
-        setTimeout(function() { room.sendAnnouncement("⏱️ 1...", null, 0xFF6600, "bold", 2); }, 2500);
+        setTimeout(function() { room.sendAnnouncement("▸ " + formatText("sale en") + " 3", null, 0xFFFF00, "bold", 2); }, 500);
+        setTimeout(function() { room.sendAnnouncement("▸ " + formatText("sale en") + " 2", null, 0xFFA500, "bold", 2); }, 1500);
+        setTimeout(function() { room.sendAnnouncement("▸ " + formatText("sale en") + " 1", null, 0xFF6600, "bold", 2); }, 2500);
 
         // Liberar spectatorLocked "viejos": un jugador queda locked junto con su
         // spectatorNext. El minijuego que debía saltarse ya pasó si su auth YA NO
@@ -2939,8 +2982,11 @@ room.onGameTick = function() {
     try { vipGoalWatcher(); } catch(e) {}
     for (var i = 0; i < minigameModules.length; i++) {
         var g = minigameModules[i];
-        if (g.module && g.module.isActive && g.module.isActive() && g.module.onGameTick) {
-            try { g.module.onGameTick(room); } catch(e) { reportBug('onGameTick(' + g.name + ')', e); }
+        if (g.module && g.module.isActive && g.module.isActive()) {
+            if (g.module.onGameTick) {
+                try { g.module.onGameTick(room); } catch(e) { reportBug('onGameTick(' + g.name + ')', e); }
+            }
+            break; // un solo juego activo a la vez
         }
     }
 };
@@ -2948,8 +2994,11 @@ room.onGameTick = function() {
 room.onPositionsReset = function() {
     for (var i = 0; i < minigameModules.length; i++) {
         var g = minigameModules[i];
-        if (g.module && g.module.isActive && g.module.isActive() && g.module.onPositionsReset) {
-            try { g.module.onPositionsReset(room); } catch(e) { reportBug('onPositionsReset(' + g.name + ')', e); }
+        if (g.module && g.module.isActive && g.module.isActive()) {
+            if (g.module.onPositionsReset) {
+                try { g.module.onPositionsReset(room); } catch(e) { reportBug('onPositionsReset(' + g.name + ')', e); }
+            }
+            break;
         }
     }
 };
@@ -3450,6 +3499,8 @@ room.onPlayerChat = function(player, message) {
 
     // Resolver auth (no disponible en onPlayerChat, usar authMap)
     var playerAuth = getAuth(player);
+    // El staff (creadores, mods y admins) puede escribir aunque el chat esté pausado
+    var _isStaffChat = !!playerAuth && (CREATOR_AUTHS.indexOf(playerAuth) !== -1 || MODERATOR_AUTHS.indexOf(playerAuth) !== -1 || isAnyAdmin(playerAuth));
 
     // ============================================
     // SISTEMA DE CUENTAS (registro/login)
@@ -3604,7 +3655,7 @@ room.onPlayerChat = function(player, message) {
     }
 
     // Bloqueo de chat durante anuncios automáticos
-    if (botState.chatBlocked) {
+    if (botState.chatBlocked && !_isStaffChat) {
         return false;
     }
 
@@ -4906,7 +4957,7 @@ room.onPlayerChat = function(player, message) {
     for (var mgi = 0; mgi < minigameModules.length; mgi++) {
         var mg = minigameModules[mgi];
         if (mg.module && mg.module.isActive && mg.module.isActive() && mg.module.onPlayerChat) {
-            try { var mgr = mg.module.onPlayerChat(player, message); if (mgr === false) return false; } catch(e) { reportBug('onPlayerChat(' + mg.name + ')', e); }
+            try { var mgr = mg.module.onPlayerChat(player, message); if (mgr === false && !_isStaffChat) return false; } catch(e) { reportBug('onPlayerChat(' + mg.name + ')', e); }
         }
     }
     // Sistema de etiquetas: mostrar tag antes del nombre
