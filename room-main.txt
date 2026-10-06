@@ -1436,13 +1436,9 @@ var minigameModules = [
 // Función genérica para iniciar minijuego
 // Límite de tiempo por minijuego (ms). Si un juego no termina, se corta y no gana nadie.
 // Los que no estén en la tabla usan GAME_TIME_LIMIT_DEFAULT. Se pueden ajustar uno por uno.
-var GAME_TIME_LIMIT_DEFAULT = 300000;
+var GAME_TIME_LIMIT_DEFAULT = 600000;   // 10 minutos por partida
 var GAME_TIME_LIMITS = {
-    TRIVIA: 480000,
-    GOT: 480000,
-    BUHO: 480000,
-    GYMMIX: 480000,
-    WAR_CONQUEST: 480000
+    // Para un juego puntual: NOMBRE: milisegundos (ej. TRIVIA: 480000)
 };
 
 function getGameTimeLimit(name) {

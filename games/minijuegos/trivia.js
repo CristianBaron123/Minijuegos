@@ -119,9 +119,89 @@ var questions = [
 ];
 
 // ============================================
+// PREGUNTAS CON DOS RESPUESTAS CORRECTAS (correct: "ac" = A y C valen)
+// Las opciones se mezclan al elegirlas para que no sea siempre A y C.
+// ============================================
+var questionsDual = [
+    { q: "Cuales de estos paises estan en Sudamerica?", a: "Peru", b: "Mexico", c: "Chile", d: "Espana", correct: "ac" },
+    { q: "Cuales de estos animales son mamiferos?", a: "Delfin", b: "Tiburon", c: "Murcielago", d: "Aguila", correct: "ac" },
+    { q: "Cuales de estos numeros son primos?", a: "7", b: "9", c: "11", d: "15", correct: "ac" },
+    { q: "Cuales de estos cuerpos son planetas del sistema solar?", a: "Marte", b: "Sirio", c: "Venus", d: "Luna", correct: "ac" },
+    { q: "Cuales de estos son colores primarios (rojo, amarillo y azul)?", a: "Rojo", b: "Verde", c: "Azul", d: "Naranja", correct: "ac" },
+    { q: "Cuales de estas frutas son citricos?", a: "Naranja", b: "Manzana", c: "Limon", d: "Banana", correct: "ac" },
+    { q: "Cuales de estos paises son islas?", a: "Cuba", b: "Peru", c: "Japon", d: "Bolivia", correct: "ac" },
+    { q: "Cuales de estos numeros son pares?", a: "14", b: "21", c: "38", d: "55", correct: "ac" },
+    { q: "Cuales de estos son oceanos?", a: "Indico", b: "Caspio", c: "Artico", d: "Rojo", correct: "ac" },
+    { q: "Cuales de estos son lenguajes de programacion?", a: "Python", b: "Cafe", c: "JavaScript", d: "Mouse", correct: "ac" },
+    { q: "Cuales de estos son huesos del cuerpo humano?", a: "Femur", b: "Tendon", c: "Humero", d: "Musculo", correct: "ac" },
+    { q: "Cuales de estos paises tienen el espanol como idioma oficial?", a: "Argentina", b: "Brasil", c: "Colombia", d: "Francia", correct: "ac" },
+    { q: "Cuales de estos elementos son metales?", a: "Hierro", b: "Oxigeno", c: "Oro", d: "Helio", correct: "ac" },
+    { q: "Cuales de estos numeros son multiplos de 4?", a: "12", b: "18", c: "20", d: "30", correct: "ac" },
+    { q: "Cuales de estos animales ponen huevos?", a: "Gallina", b: "Perro", c: "Tortuga", d: "Vaca", correct: "ac" },
+    { q: "Cuales de estos son continentes?", a: "Africa", b: "Groenlandia", c: "Oceania", d: "Islandia", correct: "ac" },
+    { q: "Cuales de estas ciudades son capitales de un pais?", a: "Lima", b: "Barcelona", c: "Roma", d: "Sao Paulo", correct: "ac" },
+    { q: "Cuales de estos deportes se juegan con una pelota?", a: "Natacion", b: "Voleibol", c: "Esgrima", d: "Baloncesto", correct: "bd" },
+    { q: "Cuales de estas sustancias son gases a temperatura ambiente?", a: "Oxigeno", b: "Hierro", c: "Nitrogeno", d: "Mercurio", correct: "ac" },
+    { q: "Cuales de estas figuras son cuadrilateros?", a: "Cuadrado", b: "Triangulo", c: "Rombo", d: "Circulo", correct: "ac" },
+    { q: "Que numeros al cuadrado dan menos de 30?", a: "5", b: "6", c: "4", d: "7", correct: "ac" },
+    { q: "Cuales de estos planetas son gaseosos?", a: "Jupiter", b: "Mercurio", c: "Saturno", d: "Marte", correct: "ac" },
+    { q: "Cuales de estas aves no pueden volar?", a: "Pinguino", b: "Aguila", c: "Avestruz", d: "Paloma", correct: "ac" },
+    { q: "Cuales de estos son rios?", a: "Amazonas", b: "Everest", c: "Nilo", d: "Pacifico", correct: "ac" },
+    { q: "Cuales de estas operaciones dan como resultado 12?", a: "3 x 4", b: "5 + 8", c: "24 / 2", d: "20 - 9", correct: "ac" },
+    { q: "Cuales de estos son instrumentos de cuerda?", a: "Guitarra", b: "Trompeta", c: "Violin", d: "Flauta", correct: "ac" },
+    { q: "Cuales de estos paises estan en Europa?", a: "Portugal", b: "Egipto", c: "Grecia", d: "Peru", correct: "ac" },
+    { q: "Cuales de estas ciudades son de Colombia?", a: "Medellin", b: "Quito", c: "Cali", d: "Lima", correct: "ac" }
+];
+
+var usedDual = [];
+
+// Letras correctas de una pregunta: "a" o "ac" (o un array)
+function correctLetters(q) {
+    var c = q.correct;
+    return typeof c === 'string' ? c.split('') : c;
+}
+
+function isCorrectZone(q, zone) {
+    return correctLetters(q).indexOf(zone) !== -1;
+}
+
+// Copia de la pregunta con las opciones en otro orden (y las letras correctas ajustadas)
+function shuffleOptions(q) {
+    var letters = ['a', 'b', 'c', 'd'];
+    var perm = letters.slice();
+    for (var i = perm.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = perm[i]; perm[i] = perm[j]; perm[j] = tmp;
+    }
+    var good = correctLetters(q);
+    var out = { q: q.q };
+    var newCorrect = [];
+    for (var k = 0; k < letters.length; k++) {
+        out[letters[k]] = q[perm[k]];
+        if (good.indexOf(perm[k]) !== -1) newCorrect.push(letters[k]);
+    }
+    out.correct = newCorrect.join('');
+    return out;
+}
+
+// ============================================
 // SELECCIONAR PREGUNTA (sin repetir)
 // ============================================
 function selectQuestion() {
+    // La mitad de las rondas usan una pregunta con DOS respuestas correctas
+    if (Math.random() < 0.5) {
+        var poolDual = [];
+        for (var d = 0; d < questionsDual.length; d++) {
+            if (usedDual.indexOf(d) === -1) poolDual.push(d);
+        }
+        if (poolDual.length === 0) {
+            usedDual = [];
+            for (var e = 0; e < questionsDual.length; e++) poolDual.push(e);
+        }
+        var di = poolDual[Math.floor(Math.random() * poolDual.length)];
+        usedDual.push(di);
+        return shuffleOptions(questionsDual[di]);
+    }
     var available = [];
     for (var i = 0; i < questions.length; i++) {
         if (usedQuestions.indexOf(i) === -1) available.push(i);
@@ -197,6 +277,7 @@ function startRound(room) {
         'B) ' + q.b + '\n' +
         'C) ' + q.c + '\n' +
         'D) ' + q.d + '\n\n' +
+        (correctLetters(q).length > 1 ? '✌️ Esta pregunta tiene ' + correctLetters(q).length + ' respuestas correctas: cualquiera de las dos vale!\n' : '') +
         '👉 Muevete a la zona de tu respuesta!\n' +
         '⏱️ Tienes 15 segundos...',
         null, 0xFFFF00, 'bold', 2
@@ -251,7 +332,7 @@ function checkAnswers(room) {
         }
         var zone = getPlayerZone(player.position);
         playerZones[zone].push(p);
-        if (zone === correct) {
+        if (isCorrectZone(q, zone)) {
             correctPlayers.push(p);
         } else {
             wrongPlayers.push(p);
@@ -267,9 +348,10 @@ function checkAnswers(room) {
     // Fase 1: Revelar respuesta correcta (1.5s despues)
     var t1 = setTimeout(function() {
         if (!gameState.active) return;
-        var answerText = correct === 'a' ? q.a : correct === 'b' ? q.b : correct === 'c' ? q.c : q.d;
+        var goodLetters = correctLetters(q);
+        var goodParts = goodLetters.map(function(l) { return l.toUpperCase() + ') ' + q[l]; });
         room.sendAnnouncement(
-            '✅ Respuesta correcta: ' + correct.toUpperCase() + ') ' + answerText,
+            '✅ ' + (goodLetters.length > 1 ? 'Respuestas correctas: ' : 'Respuesta correcta: ') + goodParts.join('  |  '),
             null, 0x00FF00, 'bold', 2
         );
     }, 1500);
@@ -288,8 +370,8 @@ function checkAnswers(room) {
                 for (var j = 0; j < playerZones[zn].length; j++) {
                     names.push(playerZones[zn][j].name);
                 }
-                var icon = zn === correct ? '✅' : '❌';
-                var color = zn === correct ? 0x00FF00 : 0xFF0000;
+                var icon = isCorrectZone(q, zn) ? '✅' : '❌';
+                var color = isCorrectZone(q, zn) ? 0x00FF00 : 0xFF0000;
                 room.sendAnnouncement(icon + ' Zona ' + zoneLabels[zn] + ': ' + names.join(', '), null, color);
             }
         }
