@@ -85,7 +85,8 @@ async function sendDiscordReplay(replayArray, gameName) {
     const url = DISCORD_WEBHOOKS.replays;
     if (!url) { console.log("⚠️ Webhook replays no configurado"); return false; }
     try {
-        const buffer = Buffer.from(replayArray);
+        // Acepta base64 (actual) o array de bytes (formato viejo)
+        const buffer = typeof replayArray === 'string' ? Buffer.from(replayArray, 'base64') : Buffer.from(replayArray);
         const blob = new Blob([buffer], { type: 'application/octet-stream' });
         const formData = new FormData();
         const now = new Date();

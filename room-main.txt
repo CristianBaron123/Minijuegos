@@ -582,10 +582,16 @@ function stopReplay() {
         var data = room.stopRecording();
         botState.replayRecording = false;
         if (data && data.length > 0) {
-            var arr = Array.from(data);
-            console.log('🎥 Replay detenido: ' + botState.replayGameName + ' (' + arr.length + ' bytes)');
+            // Se manda en base64 (en vez de un array de números): ~3x menos datos y ~6x más rápido,
+            // así no se traba la sala al terminar cada juego.
+            var b64 = '';
+            for (var ri = 0; ri < data.length; ri += 0x8000) {
+                b64 += String.fromCharCode.apply(null, data.subarray(ri, ri + 0x8000));
+            }
+            b64 = btoa(b64);
+            console.log('🎥 Replay detenido: ' + botState.replayGameName + ' (' + data.length + ' bytes)');
             if (typeof window.__sendReplay === 'function') {
-                window.__sendReplay(arr, botState.replayGameName).catch(function(e) {
+                window.__sendReplay(b64, botState.replayGameName).catch(function(e) {
                     console.log('⚠️ Replay send error: ' + e);
                 });
             }
