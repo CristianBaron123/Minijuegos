@@ -468,10 +468,6 @@ const mapEarnEasilyData = fs.readFileSync(mapEarnEasilyPath, 'utf8');
 const mapBonkSummerPath = path.join(__dirname, 'Mapas', 'Bonk-Summer-by-Serefli-Seref-20-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae18e96d540.hbs');
 const mapBonkSummerData = fs.readFileSync(mapBonkSummerPath, 'utf8');
 
-// Map: Basketball
-const mapBasketballPath = path.join(__dirname, 'Mapas', '\u0299\u1D00s\u1D0B\u1D07\u1D1B\u0299\u1D00\u029F\u029F \uD83C\uDFC0 By GLH.hbs');
-const mapBasketballData = fs.readFileSync(mapBasketballPath, 'utf8');
-
 // Map: Bonk Winter
 const mapBonkWinterPath = path.join(__dirname, 'Mapas', 'Bonk-Winter-by-Serefli-Seref-20-players-\u029C\u1D00x\u1D0D\u1D0F\u1D05s.\u1D04\u1D0F\u1D0D_61ae19074320f.hbs');
 const mapBonkWinterData = fs.readFileSync(mapBonkWinterPath, 'utf8');
@@ -737,8 +733,6 @@ const spaceVortexModuleCode = fs.readFileSync(spaceVortexModulePath, 'utf8');
 const spaceBouncePowerModulePath = path.join(__dirname, 'games', 'minijuegos', 'spacebounce_power.js');
 const spaceBouncePowerModuleCode = fs.readFileSync(spaceBouncePowerModulePath, 'utf8');
 
-const basketballModulePath = path.join(__dirname, 'games', 'minijuegos', 'basketball.js');
-const basketballModuleCode = fs.readFileSync(basketballModulePath, 'utf8');
 
 const btlModulePath = path.join(__dirname, 'games', 'minijuegos', 'btl.js');
 const btlModuleCode = fs.readFileSync(btlModulePath, 'utf8');
@@ -749,8 +743,6 @@ const bonkSummerModuleCode = fs.readFileSync(bonkSummerModulePath, 'utf8');
 const bonkWinterModulePath = path.join(__dirname, 'games', 'minijuegos', 'bonk_winter.js');
 const bonkWinterModuleCode = fs.readFileSync(bonkWinterModulePath, 'utf8');
 
-const zombieRunModulePath = path.join(__dirname, 'games', 'minijuegos', 'zombie_run.js');
-const zombieRunModuleCode = fs.readFileSync(zombieRunModulePath, 'utf8');
 
 const racingGroundModulePath = path.join(__dirname, 'games', 'minijuegos', 'racing_ground.js');
 const racingGroundModuleCode = fs.readFileSync(racingGroundModulePath, 'utf8');
@@ -804,10 +796,6 @@ if (fs.existsSync(buhoMapsDir)) {
     });
     console.log('Mapas Buho cargados: ' + Object.keys(buhoMapsData).length);
 }
-
-// Map: Zombie Run
-const mapZombieRunPath = path.join(__dirname, 'Mapas', '¡ZOMBIE-RUN-LaboratorioByEmaxM16Ofi-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_67c8ecb1e06b7.hbs');
-const mapZombieRunData = fs.readFileSync(mapZombieRunPath, 'utf8');
 
 // Map: Racing Ground
 const mapRacingGroundPath = path.join(__dirname, 'Mapas', '1.-Racing-Ground-ʜᴀxᴍᴏᴅs.ᴄᴏᴍ_66d7c2a6a6359.hbs');
@@ -939,12 +927,10 @@ const getBotScript = () => {
         const shaolinSoccerModule = transformModuleForBrowser(shaolinSoccerModuleCode, mapShaolinSoccerData);
         const spaceVortexModule = transformModuleForBrowser(spaceVortexModuleCode, mapSpaceVortexData);
         const spaceBouncePowerModule = transformModuleForBrowser(spaceBouncePowerModuleCode, mapSpaceBouncePowerData);
-        const basketballModule = transformModuleForBrowser(basketballModuleCode, mapBasketballData);
         const btlModule = transformModuleForBrowser(btlModuleCode, mapBtlData);
         const chargeModule = transformModuleForBrowser(chargeModuleCode, mapChargeData);
         const bonkSummerModule = transformModuleForBrowser(bonkSummerModuleCode, mapBonkSummerData);
         const bonkWinterModule = transformModuleForBrowser(bonkWinterModuleCode, mapBonkWinterData);
-        const zombieRunModule = transformModuleForBrowser(zombieRunModuleCode, mapZombieRunData);
         const racingGroundModule = transformModuleForBrowser(racingGroundModuleCode, mapRacingGroundData);
         const buhoModule = transformBuhoForBrowser(buhoModuleCode, buhoMapsData, buhoGoalCenters);
     const gymModule = transformModuleForBrowser(gymModuleCode, mapGymData);
@@ -1448,11 +1434,6 @@ var SPACE_VORTEX = ` + spaceVortexModule + `;
 var SPACEBOUNCE_POWER = ` + spaceBouncePowerModule + `;
 
 // ============================================
-// MÓDULO: BASKETBALL
-// ============================================
-var BASKETBALL = ` + basketballModule + `;
-
-// ============================================
 // MÓDULO: B.T.L
 // ============================================
 var BTL = ` + btlModule + `;
@@ -1481,11 +1462,6 @@ var BONK_SUMMER = ` + bonkSummerModule + `;
 // MÓDULO: BONK WINTER
 // ============================================
 var BONK_WINTER = ` + bonkWinterModule + `;
-
-// ============================================
-// MÓDULO: ZOMBIE RUN
-// ============================================
-var ZOMBIE_RUN = ` + zombieRunModule + `;
 
 // ============================================
 // MÓDULO: RACING GROUND
