@@ -115,6 +115,7 @@ function runTournament(room) {
                 if (typeof AIR_HOCKEY !== 'undefined') _finaleGames.push(AIR_HOCKEY);
                 if (typeof GOL_A_GOL !== 'undefined') _finaleGames.push(GOL_A_GOL);
                 if (typeof SPACE_VORTEX !== 'undefined') _finaleGames.push(SPACE_VORTEX);
+                if (typeof SURVIVOR_VOL17 !== 'undefined') _finaleGames.push(SURVIVOR_VOL17);
                 if (_finaleGames.length > 0 && Math.random() < 0.50) {
                     var p1 = room.getPlayerList().find(function(x) { return x.id === ids[0]; });
                     var p2 = room.getPlayerList().find(function(x) { return x.id === ids[1]; });
@@ -330,6 +331,15 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             cleanupAndResolve(winnerTeam);
         }, timeMs);
 
+        // Si el juego se detiene (stop()), este partido se corta: sin timer vivo ni handler de gol pisado
+        gameState.abortMatch = function() {
+            if (stopped) return;
+            stopped = true;
+            clearTimeout(to);
+            try { room.onTeamGoal = prevOnGoal; } catch(e){}
+            resolve(null);
+        };
+
         function cleanupAndResolve(team) {
             clearTimeout(to);
             // restaurar handler
@@ -361,6 +371,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
 function stop(room) {
     gameState.active = false;
     gameState.stopRequested = true;
+    if (gameState.abortMatch) { var _am = gameState.abortMatch; gameState.abortMatch = null; try { _am(); } catch(e){} }
     clearTimeout(gameState.matchTimeout); gameState.matchTimeout = null;
     gameState.firstRound = true;
     gameState.players = [];

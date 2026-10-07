@@ -14,7 +14,8 @@ var gameState = {
     prevOnGoal: null,
     onGameEnd: null,
     goalEnabled: false,
-    scores: {1: 0, 2: 0}
+    scores: {1: 0, 2: 0},
+    timers: []
 };
 
 var config = {
@@ -33,6 +34,7 @@ function start(room, player1, player2, onGameEnd) {
 
     gameState.active = true;
     gameState.goalEnabled = false;
+    gameState.timers = [];
     gameState.onGameEnd = onGameEnd;
     gameState.scores = {1: 0, 2: 0};
     gameState.players = [
@@ -56,7 +58,8 @@ function start(room, player1, player2, onGameEnd) {
         null, 0xFF4444, 'bold', 2
     );
 
-    setTimeout(function() {
+    gameState.timers.push(setTimeout(function() {
+        if (!gameState.active) return;
         try { room.startGame(); } catch(e){}
         try { room.pauseGame(true); } catch(e){}
         gameState.chatBlocked = true;
@@ -70,7 +73,8 @@ function start(room, player1, player2, onGameEnd) {
             null, 0xFFFF00, 'bold', 2
         );
 
-        setTimeout(function() {
+        gameState.timers.push(setTimeout(function() {
+            if (!gameState.active) return;
             try { room.pauseGame(false); } catch(e){}
             gameState.chatBlocked = false;
             gameState.gameStartTime = Date.now();
@@ -100,17 +104,17 @@ function start(room, player1, player2, onGameEnd) {
                 } else {
                     room.sendAnnouncement('⚽ ¡GOL de ' + scorerName + '!\n' + scoreStr, null, 0x00BFFF, 'bold', 2);
                     gameState.goalEnabled = false;
-                    setTimeout(function() {
+                    gameState.timers.push(setTimeout(function() {
                         if (gameState.active) gameState.goalEnabled = true;
-                    }, config.goalGraceMs);
+                    }, config.goalGraceMs));
                 }
             };
 
-            setTimeout(function() {
-                gameState.goalEnabled = true;
-            }, config.graceMs);
-        }, config.explanationMs);
-    }, 1500);
+            gameState.timers.push(setTimeout(function() {
+                if (gameState.active) gameState.goalEnabled = true;
+            }, config.graceMs));
+        }, config.explanationMs));
+    }, 1500));
 }
 
 function declareWinner(room, winner) {
@@ -133,10 +137,13 @@ function declareWinner(room, winner) {
 
     var cb = gameState.onGameEnd;
     gameState.onGameEnd = null;
+    // El callback no se cancela en stop(): ya hay ganador. Se ignora si el juego pasó a otro.
     setTimeout(function() { if (cb) cb(winner); }, 3000);
 }
 
 function stop(room) {
+    for (var ti = 0; ti < gameState.timers.length; ti++) clearTimeout(gameState.timers[ti]);
+    gameState.timers = [];
     gameState.active = false;
     gameState.goalEnabled = false;
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e){}

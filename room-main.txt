@@ -1458,7 +1458,6 @@ var minigameModules = [
     { name: 'SHAOLIN_SOCCER', module: SHAOLIN_SOCCER, displayName: 'SHAOLIN SOCCER' },
     { name: 'GOT', module: GOT, displayName: 'GAME OF THRONES' },
     { name: 'CAPTURE_THE_FLAG', module: CAPTURE_THE_FLAG, displayName: 'CAPTURE THE FLAG' },
-    { name: 'SURVIVOR_VOL17', module: SURVIVOR_VOL17, displayName: 'SURVIVOR VOL.17' },
     { name: 'BTL', module: BTL, displayName: 'B.T.L' },
     { name: 'CHARGE', module: CHARGE, displayName: 'Charge' },
     { name: 'RUN_MINI', module: RUN_MINI, displayName: 'RUN MINI' },
@@ -1517,6 +1516,8 @@ function startMinigame(gameEntry) {
         }, _limitMs);
         try {
             mod.start(room, function(winner) {
+                // Si este juego ya fue reemplazado por otro (stop + nuevo start), el callback viejo se descarta
+                if (botState.minigameStartTime !== _startedAt) { console.log('[startMinigame] Callback tardio de ' + gameEntry.name + ' ignorado'); return; }
                 if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
                 if (typeof showGameStats === 'function' && mod) showGameStats(mod);
                 console.log('[startMinigame] Callback recibido de ' + gameEntry.name + '. winner=' + (winner ? winner.name + ' (id=' + winner.id + ')' : 'null/undefined'));
@@ -1793,10 +1794,6 @@ function startRUN_REBOUND() {
 
 function startMEADOWLANDS() {
     startMinigame(minigameModules.find(function(g) { return g.name === 'MEADOWLANDS'; }));
-}
-
-function startSURVIVOR_VOL17() {
-    startMinigame(minigameModules.find(function(g) { return g.name === 'SURVIVOR_VOL17'; }));
 }
 
 function startWIND() {
@@ -2538,6 +2535,7 @@ function forceStopAllGames() {
     try { room.stopGame(); } catch(e){}
     room.onTeamGoal = gameGoalHandler;
     botState.gameActive = false;
+    botState.minigameStartTime = 0; // invalida callbacks tardíos del juego detenido
     if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
     if (botState.startTimeout) {
         clearTimeout(botState.startTimeout);

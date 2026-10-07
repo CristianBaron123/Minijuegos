@@ -108,6 +108,7 @@ function runTournament(room) {
                 if (typeof AIR_HOCKEY !== 'undefined') _finaleGames.push(AIR_HOCKEY);
                 if (typeof GOL_A_GOL !== 'undefined') _finaleGames.push(GOL_A_GOL);
                 if (typeof SPACE_VORTEX !== 'undefined') _finaleGames.push(SPACE_VORTEX);
+                if (typeof SURVIVOR_VOL17 !== 'undefined') _finaleGames.push(SURVIVOR_VOL17);
                 if (_finaleGames.length > 0 && Math.random() < 0.50) {
                     var p1 = room.getPlayerList().find(function(x) { return x.id === ids[0]; });
                     var p2 = room.getPlayerList().find(function(x) { return x.id === ids[1]; });

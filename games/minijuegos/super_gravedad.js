@@ -272,6 +272,15 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             cleanupAndResolve(winnerTeam);
         }, timeMs);
 
+        // Si el juego se detiene (stop()), este partido se corta: sin timer vivo ni handler de gol pisado
+        gameState.abortMatch = function() {
+            if (stopped) return;
+            stopped = true;
+            clearTimeout(to);
+            try { room.onTeamGoal = prevOnGoal; } catch(e){}
+            resolve(null);
+        };
+
         function cleanupAndResolve(team) {
             clearTimeout(to);
             try { room.onTeamGoal = prevOnGoal; } catch(e){}
@@ -293,6 +302,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
 function stop(room) {
     gameState.active = false;
     gameState.stopRequested = true;
+    if (gameState.abortMatch) { var _am = gameState.abortMatch; gameState.abortMatch = null; try { _am(); } catch(e){} }
     gameState.firstRound = true;
     gameState.players = [];
     gameState.spectatorPool = [];
