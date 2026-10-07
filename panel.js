@@ -529,6 +529,11 @@ async function startSala(salaId, token) {
 
     s.status = 'running';
     addLog(s, 'Sala encendida! Esperando link...', true);
+    setTimeout(function() {
+        if (s.page === page && s.status === 'running' && !s.link) {
+            addLog(s, '⚠️ Pasaron 40s y no llegó el link de la sala. Probablemente el token de HaxBall esta vencido o ya se uso (cada token sirve una sola vez): genera uno nuevo y vuelve a encender.', true);
+        }
+    }, 40000);
 
     // Detectar si la pestaña se cierra
     page.on('close', () => {
@@ -653,6 +658,18 @@ app.post('/api/maintenance', requireAuth, async (req, res) => {
         res.json({ ok: true, message: 'Mantenimiento completado, sala apagada' });
     } catch(e) {
         res.status(400).json({ error: e.message });
+    }
+});
+
+app.get('/api/screenshot/:id', requireAuth, async (req, res) => {
+    const sala = salas[req.params.id];
+    if (!sala || !sala.page) return res.status(404).json({ error: 'La sala no esta corriendo' });
+    try {
+        const png = await sala.page.screenshot({ type: 'png' });
+        res.setHeader('Content-Type', 'image/png');
+        res.send(png);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 

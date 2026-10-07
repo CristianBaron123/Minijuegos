@@ -13,7 +13,11 @@ var room = HBInit(roomConfig);
 room.setTeamsLock(true);
 
 console.log("✅ Bot iniciado — v" + BOT_VERSION);
-console.log("🔗 Link: " + room.link);
+// El link de la sala llega de forma asíncrona por el evento onRoomLink (room.link no existe en la API)
+room.onRoomLink = function(url) {
+    room.link = url;
+    console.log("🔗 Link: " + url);
+};
 
 // ============================================
 // SISTEMA DE REPORTAR BUGS (terminal)
