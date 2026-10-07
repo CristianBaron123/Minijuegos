@@ -475,6 +475,27 @@ async function getPlayerRank(auth, field) {
     }
 }
 
+// Cobro ATÓMICO: descuenta solo si el saldo alcanza (una única operación en la base).
+// Evita el doble gasto cuando llegan varios comandos de apuesta al mismo tiempo.
+async function spendBalance(auth, name, amount) {
+    await ensureConnected();
+    amount = Math.floor(Number(amount));
+    if (!db || !auth || !(amount > 0)) return { ok: false, balance: 0 };
+    auth = canon(auth);
+    try {
+        var r = await db.collection('players').updateOne(
+            { auth: auth, balance: { $gte: amount } },
+            { $inc: { balance: -amount }, $set: { name: name, lastSeen: new Date() } }
+        );
+        if (r.modifiedCount === 1) return { ok: true, balance: null };
+        var doc = await db.collection('players').findOne({ auth: auth }, { projection: { balance: 1 } });
+        return { ok: false, balance: (doc && doc.balance) || 0 };
+    } catch(e) {
+        console.error('❌ DB spendBalance error:', e.message);
+        return { ok: false, balance: 0 };
+    }
+}
+
 async function addBalance(auth, name, amount) {
     await ensureConnected();
     if (!db || !auth) return;
@@ -1173,4 +1194,4 @@ async function close() {
     }
 }
 
-module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth, logoutAuth, deleteAccount, resetAccountPassword, incStat, setPlayerField };
+module.exports = { connect, saveWin, saveGamePlayed, saveBestStreak, addGayCount, addKickCount, addBanCount, getStats, getTopPlayers, getPlayerRank, addBalance, resetMonthlyWins, getMonthlyReport, createClan, inviteToClan, acceptClanInvite, leaveClan, getClanInfo, getClanByAuth, addClanWin, getTopClans, resetClanWins, kickFromClan, saveMarriage, removeMarriage, loadMarriages, saveTitan, loadTitanData, resetTitanData, saveDailyReward, loadDailyRewards, createBackup, getLatestBackup, saveFutsalGoal, saveFutsalAssist, saveFutsalWin, saveFutsalLoss, saveFutsalGame, getFutsalStats, getFutsalTop, close, addWarning, removeWarning, getWarnings, getAllWarnings, setVip, getAllVips, setAdmin, removeAdmin, getAllAdmins, registerAccount, loginAccount, getAccountByAuth, logoutAuth, deleteAccount, resetAccountPassword, incStat, setPlayerField, spendBalance };

@@ -1732,6 +1732,12 @@ var BUHO = ` + buhoModule + `;
             await page.exposeFunction('__dbAddBalance', async () => {
                 console.log('🧪 [TEST] addBalance ignorado');
             });
+            // En test no se escribe, pero se valida el saldo igual para probar los comandos
+            await page.exposeFunction('__dbSpendBalance', async (auth, name, amount) => {
+                const st = await db.getStats(auth);
+                const bal = (st && st.balance) || 0;
+                return bal >= amount ? { ok: true, balance: bal } : { ok: false, balance: bal };
+            });
             await page.exposeFunction('__sendReplay', async () => {
                 console.log('🧪 [TEST] sendReplay ignorado');
                 return true;
@@ -1875,6 +1881,9 @@ var BUHO = ` + buhoModule + `;
             });
             await page.exposeFunction('__dbAddBalance', async (auth, name, amount) => {
                 await db.addBalance(auth, name, amount);
+            });
+            await page.exposeFunction('__dbSpendBalance', async (auth, name, amount) => {
+                return await db.spendBalance(auth, name, amount);
             });
             await page.exposeFunction('__discordWebhook', async (type, content) => {
                 return await sendDiscordWebhook(type, content);

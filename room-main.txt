@@ -987,14 +987,14 @@ function shopBuy(playerAuth, playerName, playerId, cost, commandName, cooldownMs
             return;
         }
     }
-    if (typeof window.__dbGetStats !== 'function') { room.sendAnnouncement('⚠️ Tienda no disponible.', playerId, 0xFF6600); return; }
-    window.__dbGetStats(playerAuth).then(function(stats) {
-        var balance = (stats && stats.balance) ? stats.balance : 0;
-        if (balance < cost) {
+    if (typeof window.__dbSpendBalance !== 'function') { room.sendAnnouncement('⚠️ Tienda no disponible.', playerId, 0xFF6600); return; }
+    // Cobro atómico en la base: si no alcanza el saldo no descuenta nada
+    window.__dbSpendBalance(playerAuth, playerName, cost).then(function(res) {
+        var balance = res ? res.balance : 0;
+        if (!res || !res.ok) {
             room.sendAnnouncement('⚠️ Saldo insuficiente. Necesitas ' + formatMoney(cost) + ' (tienes ' + formatMoney(balance) + ')', playerId, 0xFF6600);
             return;
         }
-        try { window.__dbAddBalance(playerAuth, playerName, -cost); } catch(e) {}
         if (finalCooldown > 0) botState.shopCooldowns[playerAuth][commandName] = now;
         callback();
     }).catch(function() { room.sendAnnouncement('❌ Error al verificar saldo.', playerId, 0xFF0000); });
@@ -5172,10 +5172,10 @@ room.onPlayerChat = function(player, message) {
         }
 
         // Verificar saldo del sender
-        if (typeof window.__dbGetStats === 'function' && playerAuth) {
-            window.__dbGetStats(playerAuth).then(function(stats) {
-                var balance = (stats && stats.balance) ? stats.balance : 0;
-                if (balance < amount) {
+        if (typeof window.__dbSpendBalance === 'function' && playerAuth) {
+            window.__dbSpendBalance(playerAuth, player.name, amount).then(function(res) {
+                var balance = res ? res.balance : 0;
+                if (!res || !res.ok) {
                     room.sendAnnouncement("⚠️ Saldo insuficiente. Tienes: " + formatMoney(balance), player.id, 0xFF6600);
                     return;
                 }
@@ -5184,7 +5184,6 @@ room.onPlayerChat = function(player, message) {
                 botState.pasarCooldowns[player.id] = Date.now();
 
                 // Hacer la transferencia
-                try { window.__dbAddBalance(playerAuth, player.name, -amount); } catch(e) {}
                 try { window.__dbAddBalance(targetAuth, targetPlayer.name, amount); } catch(e) {}
 
                 room.sendAnnouncement(
@@ -5659,24 +5658,27 @@ room.onPlayerChat = function(player, message) {
                 return false;
             }
             (function(pid, pname, pauth, ctag, cname) {
-                __dbGetStats(pauth).then(function(stats) {
-                    var bal = (stats && stats.balance) || 0;
-                    if (bal < 50000) {
-                        room.sendAnnouncement('⚠️ Necesitas $50.000 para crear un clan. Tienes: $' + bal.toLocaleString(), pid, 0xFF6600);
+                // Se cobra PRIMERO (atómico) y, si el clan no se puede crear, se devuelve el dinero
+                __dbSpendBalance(pauth, pname, 50000).then(function(spend) {
+                    if (!spend || !spend.ok) {
+                        room.sendAnnouncement('⚠️ Necesitas $50.000 para crear un clan. Tienes: $' + ((spend && spend.balance) || 0).toLocaleString(), pid, 0xFF6600);
                         return;
                     }
+                    var refund = function() { try { __dbAddBalance(pauth, pname, 50000); } catch(e) {} };
                     __dbCreateClan(ctag, cname, pauth, pname).then(function(result) {
-                        if (result.error) {
-                            room.sendAnnouncement('⚠️ ' + result.error, pid, 0xFF6600);
+                        if (!result || result.error) {
+                            refund();
+                            room.sendAnnouncement('⚠️ ' + ((result && result.error) || 'No se pudo crear el clan') + ' (no se cobró nada)', pid, 0xFF6600);
                             return;
                         }
-                        __dbAddBalance(pauth, pname, -50000).then(function() {
-                            botState.clanTags[pauth] = result.tag;
-                            room.sendAnnouncement('🛡️ Clan [' + formatText(result.tag) + '] ' + result.name + ' creado! (-$50.000)', pid, 0x00FF00, 'bold');
-                            room.sendAnnouncement('🛡️ ' + formatText(pname) + ' ha creado el clan [' + formatText(result.tag) + ']!', null, 0x00BFFF);
-                        });
+                        botState.clanTags[pauth] = result.tag;
+                        room.sendAnnouncement('🛡️ Clan [' + formatText(result.tag) + '] ' + result.name + ' creado! (-$50.000)', pid, 0x00FF00, 'bold');
+                        room.sendAnnouncement('🛡️ ' + formatText(pname) + ' ha creado el clan [' + formatText(result.tag) + ']!', null, 0x00BFFF);
+                    }).catch(function() {
+                        refund();
+                        room.sendAnnouncement('❌ Error al crear el clan (no se cobró nada)', pid, 0xFF0000);
                     });
-                });
+                }).catch(function() { room.sendAnnouncement('❌ Error al verificar saldo', pid, 0xFF0000); });
             })(player.id, player.name, playerAuth, clanTag, clanName);
             return false;
         }
@@ -6401,9 +6403,10 @@ room.onPlayerChat = function(player, message) {
             var impCount = 0;
             impPlayers.forEach(function(ip) {
                 var ipAuth = getAuth(ip);
-                if (ipAuth && typeof window.__dbAddBalance === 'function') {
-                    try { window.__dbAddBalance(ipAuth, ip.name, -500); } catch(e) {}
-                    try { window.__dbAddBalance(playerAuth, player.name, 500); } catch(e) {}
+                if (ipAuth && typeof window.__dbSpendBalance === 'function') {
+                    window.__dbSpendBalance(ipAuth, ip.name, 500).then(function(r) {
+                        if (r && r.ok) { try { window.__dbAddBalance(playerAuth, player.name, 500); } catch(e) {} }
+                    }).catch(function() {});
                     impCount++;
                 }
             });
@@ -6835,15 +6838,14 @@ room.onPlayerChat = function(player, message) {
         if (isNaN(montoPagar) || montoPagar <= 0) { room.sendAnnouncement('⚠️ Monto invalido. Usa: !pagar [monto] o !pagar todo', player.id, 0xFF6600); return false; }
         if (montoPagar > miPrestPagar.deudaTotal) montoPagar = miPrestPagar.deudaTotal;
         // Verificar que tiene saldo
-        if (typeof window.__dbGetStats !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', player.id, 0xFF6600); return false; }
+        if (typeof window.__dbSpendBalance !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', player.id, 0xFF6600); return false; }
         (function(pAuth, pName, pId, monto, prestRef) {
-            window.__dbGetStats(pAuth).then(function(stats) {
-                var balance = (stats && stats.balance) ? stats.balance : 0;
-                if (balance < monto) {
+            window.__dbSpendBalance(pAuth, pName, monto).then(function(res) {
+                var balance = res ? res.balance : 0;
+                if (!res || !res.ok) {
                     room.sendAnnouncement('⚠️ Saldo insuficiente. Necesitas ' + formatMoney(monto) + ' (tienes ' + formatMoney(balance) + ')', pId, 0xFF6600);
                     return;
                 }
-                try { window.__dbAddBalance(pAuth, pName, -monto); } catch(e) {}
                 prestRef.deudaTotal -= monto;
                 if (prestRef.deudaTotal <= 0) {
                     // Prestamo pagado completamente
@@ -6955,18 +6957,17 @@ room.onPlayerChat = function(player, message) {
         if (botState.ofertasPrestamo[prestarTargetAuth]) { room.sendAnnouncement('⚠️ ' + prestarTarget.name + ' ya tiene una oferta pendiente', player.id, 0xFF6600); return false; }
         // Verificar saldo del prestamista
         (function(pAuth, pName, pId, tAuth, tName, tId, monto, cuotas) {
-            if (typeof window.__dbGetStats !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', pId, 0xFF6600); return; }
-            window.__dbGetStats(pAuth).then(function(stats) {
-                var bal = (stats && stats.balance) ? stats.balance : 0;
-                if (bal < monto) {
+            if (typeof window.__dbSpendBalance !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', pId, 0xFF6600); return; }
+            window.__dbSpendBalance(pAuth, pName, monto).then(function(res) {
+                var bal = res ? res.balance : 0;
+                if (!res || !res.ok) {
                     room.sendAnnouncement('⚠️ Saldo insuficiente. Necesitas ' + formatMoney(monto) + ' (tienes ' + formatMoney(bal) + ')', pId, 0xFF6600);
                     return;
                 }
                 var interes = p2pInteresTabla[cuotas];
                 var montoTotal = Math.floor(monto * (1 + interes));
                 var cuotaMonto = Math.floor(montoTotal / cuotas);
-                // Descontar del prestamista
-                try { window.__dbAddBalance(pAuth, pName, -monto); } catch(e) {}
+                // (el monto ya se descontó del prestamista de forma atómica)
                 // Crear oferta
                 botState.ofertasPrestamo[tAuth] = { fromAuth: pAuth, fromName: pName, monto: monto, cuotas: cuotas, montoTotal: montoTotal, cuotaMonto: cuotaMonto, timestamp: Date.now() };
                 room.sendAnnouncement(
@@ -7101,14 +7102,13 @@ room.onPlayerChat = function(player, message) {
         if (isNaN(montoP2PPagar) || montoP2PPagar <= 0) { room.sendAnnouncement('⚠️ Monto invalido. Usa: !pagarp2p [monto] o !pagarp2p todo', player.id, 0xFF6600); return false; }
         if (montoP2PPagar > p2pRestantePagar) montoP2PPagar = p2pRestantePagar;
         (function(dAuth, dName, dId, monto, prestRef) {
-            if (typeof window.__dbGetStats !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', dId, 0xFF6600); return; }
-            window.__dbGetStats(dAuth).then(function(stats) {
-                var bal = (stats && stats.balance) ? stats.balance : 0;
-                if (bal < monto) {
+            if (typeof window.__dbSpendBalance !== 'function') { room.sendAnnouncement('⚠️ Sistema no disponible', dId, 0xFF6600); return; }
+            window.__dbSpendBalance(dAuth, dName, monto).then(function(res) {
+                var bal = res ? res.balance : 0;
+                if (!res || !res.ok) {
                     room.sendAnnouncement('⚠️ Saldo insuficiente. Necesitas ' + formatMoney(monto) + ' (tienes ' + formatMoney(bal) + ')', dId, 0xFF6600);
                     return;
                 }
-                try { window.__dbAddBalance(dAuth, dName, -monto); } catch(e) {}
                 try { window.__dbAddBalance(prestRef.prestamistaAuth, prestRef.prestamistaNombre, monto); } catch(e) {}
                 // Calcular cuotas cubiertas
                 var cuotasCubiertas = Math.floor(monto / prestRef.cuotaMonto);
