@@ -72,14 +72,25 @@
                 }
             } catch (e) {}
         })();
+        let memToken = '';
         function panelToken() {
-            let t = null;
-            try { t = localStorage.getItem('panelToken'); } catch (e) {}
-            if (!t) {
-                t = window.prompt('Token del panel (PANEL_TOKEN):') || '-';
-                try { localStorage.setItem('panelToken', t); } catch (e) {}
-            }
-            return t;
+            if (memToken) return memToken;
+            try { return localStorage.getItem('panelToken') || ''; } catch (e) { return ''; }
+        }
+        function guardarToken() {
+            const v = (document.getElementById('login-token').value || '').trim();
+            if (!v) return;
+            memToken = v;
+            try { localStorage.setItem('panelToken', v); } catch (e) {}
+            fetchStatus();
+        }
+        function mostrarLogin(msg) {
+            const c = document.getElementById('salas') || document.getElementById('rooms') || document.body;
+            c.innerHTML = '<div style="max-width:420px;margin:60px auto;padding:24px;background:#16213e;border-radius:12px;text-align:center">' +
+                '<h3 style="margin:0 0 8px">Acceso al panel</h3>' +
+                '<p style="color:#9aa;font-size:14px;margin:0 0 16px">' + msg + '</p>' +
+                '<input id="login-token" type="password" placeholder="Token del panel" style="width:100%;padding:10px;border-radius:8px;border:1px solid #345;background:#0f1530;color:#fff;box-sizing:border-box" onkeydown="if(event.keyCode===13)guardarToken()">' +
+                '<button onclick="guardarToken()" style="margin-top:12px;padding:10px 24px;border:0;border-radius:8px;background:#0a84ff;color:#fff;font-weight:bold;cursor:pointer">Entrar</button></div>';
         }
         const _fetchOriginal = window.fetch.bind(window);
         window.fetch = function (url, opts) {
@@ -111,7 +122,13 @@
         async function fetchStatus() {
             try {
                 const res = await fetch('/api/status');
-                salasData = await res.json();
+                const data = await res.json();
+                const ids = Object.keys(data || {});
+                if (ids.length && !data[ids[0]].config) {
+                    mostrarLogin(panelToken() ? 'El token no es válido. Probá de nuevo.' : 'Ingresá el token del panel (PANEL_TOKEN).');
+                    return;
+                }
+                salasData = data;
                 render();
             } catch(e) {}
         }
