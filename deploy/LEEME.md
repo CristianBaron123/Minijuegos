@@ -17,13 +17,12 @@ El script te pide pegar la llave pública, crea el usuario `bot`, bloquea el log
 Antes de cerrar la sesión, probá en otra ventana: `ssh bot@IP_DEL_SERVIDOR`.
 
 ## 2. Subir el proyecto
-Desde la carpeta del proyecto, en tu PC (no se sube `.git`, `node_modules` ni los backups):
+Desde la carpeta del proyecto, en tu PC, un solo comando (empaqueta sin `.git`, `node_modules`, backups ni secretos, sube, instala y reinicia):
 ```powershell
-tar --exclude=node_modules --exclude=.git --exclude=backups --exclude=Mapas.rar --exclude=debug-script.js -czf minijuegos.tgz .
-scp minijuegos.tgz bot@IP_DEL_SERVIDOR:~/
-ssh bot@IP_DEL_SERVIDOR "mkdir -p ~/Minijuegos && tar -xzf ~/minijuegos.tgz -C ~/Minijuegos && cd ~/Minijuegos && npm install --omit=dev"
+.\deploy\subir.ps1 -CopiarSecretos     # la primera vez: copia tambien .env y secrets.json
+.\deploy\subir.ps1                     # las siguientes: NO toca los secretos del servidor
 ```
-`npm install` baja también el Chrome que usa Puppeteer.
+`npm install` baja tambien el Chrome que usa Puppeteer.
 
 ## 3. Secretos (se crean en el servidor, no se suben a git)
 ```bash
