@@ -11,7 +11,7 @@ Servidor: Miami (EE. UU.). El bot corre como usuario `bot`, el panel solo se usa
 Desde tu PC:
 ```powershell
 scp deploy\install.sh root@IP_DEL_SERVIDOR:/root/
-ssh root@IP_DEL_SERVIDOR "bash /root/install.sh"
+ssh -t root@IP_DEL_SERVIDOR "bash /root/install.sh"
 ```
 El script te pide pegar la llave pública, crea el usuario `bot`, bloquea el login por contraseña, activa firewall y fail2ban e instala Node 20, las librerías de Chrome y pm2.
 Antes de cerrar la sesión, probá en otra ventana: `ssh bot@IP_DEL_SERVIDOR`.
