@@ -20,14 +20,20 @@ echo "== 2/6  Usuario '$BOT_USER' y llave SSH =="
 if ! id "$BOT_USER" >/dev/null 2>&1; then
     adduser --disabled-password --gecos "" "$BOT_USER"
 fi
-echo
-echo "Pegá tu llave PÚBLICA SSH (una línea que empieza con ssh-ed25519 o ssh-rsa) y apretá Enter."
-echo "(En tu PC de Windows se genera con:  ssh-keygen -t ed25519   y se muestra con:  type %USERPROFILE%\\.ssh\\id_ed25519.pub )"
-read -r PUBKEY
-case "$PUBKEY" in
-    ssh-ed25519\ *|ssh-rsa\ *|ecdsa-sha2-*) ;;
-    *) echo "Eso no parece una llave pública SSH. Abortando SIN tocar el acceso por contraseña."; exit 1 ;;
-esac
+# La llave se recibe como argumento (recomendado) o se pide por teclado.
+RAW_KEY="${1:-}"
+if [ -z "$RAW_KEY" ]; then
+    echo
+    echo "Pegá tu llave PÚBLICA SSH (una línea que empieza con ssh-ed25519 o ssh-rsa) y apretá Enter."
+    read -r RAW_KEY
+fi
+# Se extrae la llave aunque venga con espacios, retornos de carro o caracteres de control del pegado
+PUBKEY="$(printf '%s' "$RAW_KEY" | tr -d '' | grep -oE '(ssh-ed25519|ssh-rsa|ecdsa-sha2-[a-z0-9-]+) [A-Za-z0-9+/=]+( [^ ]+)?' | head -n1 || true)"
+if [ -z "$PUBKEY" ]; then
+    echo "No encontré una llave pública SSH en lo que pegaste. Abortando SIN tocar el acceso por contraseña."
+    exit 1
+fi
+echo "Llave detectada: ${PUBKEY:0:40}..."
 install -d -m 700 -o "$BOT_USER" -g "$BOT_USER" "/home/$BOT_USER/.ssh"
 echo "$PUBKEY" > "/home/$BOT_USER/.ssh/authorized_keys"
 chown "$BOT_USER:$BOT_USER" "/home/$BOT_USER/.ssh/authorized_keys"
