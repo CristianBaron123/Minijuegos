@@ -44,8 +44,11 @@ function leerToken(req) {
     return req.headers['x-panel-token'];
 }
 
+// PANEL_AUTH=off desactiva la autenticación (solo para uso en red local o detrás de otra protección)
+const AUTH_OFF = process.env.PANEL_AUTH === 'off';
+
 function estaAutenticado(req) {
-    return tokenValido(leerToken(req));
+    return AUTH_OFF || tokenValido(leerToken(req));
 }
 
 function requireAuth(req, res, next) {

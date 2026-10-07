@@ -61,13 +61,23 @@
     <div class="container" id="salas"></div>
 
     <script>
-        // Token del panel: se pide una vez por sesión y se manda en cada llamada a /api
+        // Token del panel. Entra de una con el link  https://<panel>/#t=TOKEN  (el "#" no viaja al servidor):
+        // se guarda en este navegador y se quita de la barra de direcciones. Si no hay token, se pide una vez.
+        (function () {
+            try {
+                var m = location.hash.match(/[#&]t=([^&]+)/);
+                if (m) {
+                    localStorage.setItem('panelToken', decodeURIComponent(m[1]));
+                    history.replaceState(null, '', location.pathname + location.search);
+                }
+            } catch (e) {}
+        })();
         function panelToken() {
             let t = null;
-            try { t = sessionStorage.getItem('panelToken'); } catch (e) {}
+            try { t = localStorage.getItem('panelToken'); } catch (e) {}
             if (!t) {
                 t = window.prompt('Token del panel (PANEL_TOKEN):') || '-';
-                try { sessionStorage.setItem('panelToken', t); } catch (e) {}
+                try { localStorage.setItem('panelToken', t); } catch (e) {}
             }
             return t;
         }
@@ -76,7 +86,7 @@
             opts = Object.assign({}, opts);
             opts.headers = Object.assign({}, opts.headers, { 'x-panel-token': panelToken() });
             return _fetchOriginal(url, opts).then(function (r) {
-                if (r.status === 401) { try { sessionStorage.removeItem('panelToken'); } catch (e) {} }
+                if (r.status === 401) { try { localStorage.removeItem('panelToken'); } catch (e) {} }
                 return r;
             });
         };
