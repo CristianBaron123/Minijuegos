@@ -112,9 +112,8 @@ function runTournament(room) {
                     if (p1 && p2) {
                         var _chosenFinale = _finaleGames[Math.floor(Math.random() * _finaleGames.length)];
                         _chosenFinale.start(room, p1, p2, function(winner) {
-                            if (winner && gameState.callback) {
-                                gameState.callback(winner);
-                            }
+                            // Con o sin ganador hay que avisar: si no, el minijuego queda esperando hasta el limite de tiempo
+                            if (gameState.callback) gameState.callback(winner || null);
                             stop(room);
                         });
                         return;

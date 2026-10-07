@@ -1527,6 +1527,30 @@ var minigameModules = [
     { name: 'BUHO', module: BUHO, displayName: 'BUHO' }
 ];
 
+// Finales 1v1: no están en la rotación normal (los lanzan los torneos de goles al quedar 2 jugadores),
+// pero necesitan recibir las salidas de jugadores y los stops, o quedan "activos" sin que nadie lo sepa.
+function getFinaleModules() {
+    var list = [];
+    if (typeof AIR_HOCKEY !== 'undefined') list.push(AIR_HOCKEY);
+    if (typeof GOL_A_GOL !== 'undefined') list.push(GOL_A_GOL);
+    if (typeof DOMINIC_SURVIVOR !== 'undefined') list.push(DOMINIC_SURVIVOR);
+    if (typeof SPACE_VORTEX !== 'undefined') list.push(SPACE_VORTEX);
+    if (typeof SURVIVOR_VOL17 !== 'undefined') list.push(SURVIVOR_VOL17);
+    return list;
+}
+
+// Avisa a los juegos activos (normales y finales) que un jugador se fue del juego
+function notifyModulesPlayerLeft(player) {
+    minigameModules.forEach(function(g) {
+        if (g.module && g.module.isActive && g.module.isActive() && g.module.onPlayerLeave) {
+            try { g.module.onPlayerLeave(room, player); } catch(e) { reportBug('onPlayerLeave(' + g.name + ')', e); }
+        }
+    });
+    getFinaleModules().forEach(function(m) {
+        try { if (m.isActive && m.isActive() && m.onPlayerLeave) m.onPlayerLeave(room, player); } catch(e) { reportBug('onPlayerLeave(final)', e); }
+    });
+}
+
 // Función genérica para iniciar minijuego
 // Límite de tiempo por minijuego (ms). Si un juego no termina, se corta y no gana nadie.
 // Los que no estén en la tabla usan GAME_TIME_LIMIT_DEFAULT. Se pueden ajustar uno por uno.
@@ -2570,6 +2594,8 @@ function excludeAFKFromGame() {
 // ============================================
 function forceStopAllGames() {
     stopReplay();
+    // Primero se invalidan los callbacks: cualquier stop() que avise "sin ganador" se ignora
+    botState.minigameStartTime = 0;
     if (botState.banVoteActive) {
         if (botState.banVoteInterval) { clearInterval(botState.banVoteInterval); botState.banVoteInterval = null; }
         if (botState.banVoteTimeout) { clearTimeout(botState.banVoteTimeout); botState.banVoteTimeout = null; }
@@ -2586,6 +2612,10 @@ function forceStopAllGames() {
     botState.theWorldActive = null;
     minigameModules.forEach(function(g) {
         try { if (g.module && g.module.isActive && g.module.isActive()) g.module.stop(room); } catch(e) { reportBug('forceStopAllGames.stop(' + g.name + ')', e); }
+    });
+    // Finales 1v1 en curso (no están en minigameModules)
+    getFinaleModules().forEach(function(m) {
+        try { if (m.isActive && m.isActive()) m.stop(room); } catch(e) { reportBug('forceStopAllGames.stop(final)', e); }
     });
     // Lucky modules (separados por lógica especial)
     try { if (LUCKY.isActive()) LUCKY.stop(room); } catch(e){}
@@ -3400,12 +3430,8 @@ room.onPlayerLeave = function(player) {
     var _leftAuth = botState.authMap[player.id];
     delete botState.authMap[player.id];
 
-    // Notificar a los módulos activos sobre la salida del jugador
-    minigameModules.forEach(function(g) {
-        if (g.module && g.module.isActive && g.module.isActive() && g.module.onPlayerLeave) {
-            try { g.module.onPlayerLeave(room, player); } catch(e) { reportBug('onPlayerLeave(' + g.name + ')', e); }
-        }
-    });
+    // Notificar a los módulos activos (normales y finales 1v1) sobre la salida del jugador
+    notifyModulesPlayerLeft(player);
     if (LUCKY && LUCKY.isActive && LUCKY.isActive()) {
         try { LUCKY.onPlayerLeave(player); } catch(e){}
     }
@@ -3534,9 +3560,7 @@ room.onPlayerTeamChange = function(changedPlayer, byPlayer) {
         if (changedPlayer.team !== 0) {
             try { room.setPlayerTeam(changedPlayer.id, 0); } catch(e){}
             try { room.sendAnnouncement('👻 No puedes unirte al equipo: estás bloqueado para el siguiente minijuego', changedPlayer.id, 0xFF6600, 'bold'); } catch(e){}
-            minigameModules.forEach(function(g) {
-                try { if (g.module && g.module.isActive && g.module.isActive() && g.module.onPlayerLeave) g.module.onPlayerLeave(room, changedPlayer); } catch(e){}
-            });
+            notifyModulesPlayerLeft(changedPlayer);
         }
         return;
     }

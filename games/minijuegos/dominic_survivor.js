@@ -125,6 +125,7 @@ function declareWinner(room, winner, reason) {
     if (!gameState.active) return;
     gameState.active = false;
     gameState.goalEnabled = false;
+    if (gameState.safetyTimeout) { clearTimeout(gameState.safetyTimeout); gameState.safetyTimeout = null; }
     // Restaurar handler de gol
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e){}
 

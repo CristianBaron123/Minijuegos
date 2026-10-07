@@ -121,6 +121,7 @@ function start(room, player1, player2, onGameEnd) {
 function declareWinner(room, winner, reason) {
     if (!gameState.active) return;
     gameState.active = false;
+    if (gameState.safetyTimeout) { clearTimeout(gameState.safetyTimeout); gameState.safetyTimeout = null; }
     gameState.goalEnabled = false;
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e) {}
 

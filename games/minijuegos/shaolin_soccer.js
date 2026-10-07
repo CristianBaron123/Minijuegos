@@ -113,7 +113,8 @@ function runTournament(room) {
                     if (p1 && p2) {
                         var _chosenFinale = _finaleGames[Math.floor(Math.random() * _finaleGames.length)];
                         _chosenFinale.start(room, p1, p2, function(winner) {
-                            if (winner && gameState.callback) gameState.callback(winner);
+                            // Con o sin ganador hay que avisar: si no, el minijuego queda esperando hasta el limite de tiempo
+                            if (gameState.callback) gameState.callback(winner || null);
                             stop(room);
                         });
                         return;
@@ -331,7 +332,7 @@ function onPlayerLeave(room, player) {
     if (gameState.active && gameState.players.length >= 2) {
         var _t1 = gameState.players.filter(function(id) { var p = room.getPlayer(id); return p && p.team === 1; });
         var _t2 = gameState.players.filter(function(id) { var p = room.getPlayer(id); return p && p.team === 2; });
-        if (Math.abs(_t1.length - _t2.length) >= 2) {
+        if (Math.abs(_t1.length - _t2.length) >= 1) {
             var _big = _t1.length > _t2.length ? _t1 : _t2;
             var _toSpec = _big[Math.floor(Math.random() * _big.length)];
             var _si = gameState.players.indexOf(_toSpec); if (_si !== -1) gameState.players.splice(_si, 1);

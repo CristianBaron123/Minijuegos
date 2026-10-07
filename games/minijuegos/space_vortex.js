@@ -17,7 +17,8 @@ var gameState = {
     scores: { 1: 0, 2: 0 },
     gameTimer: null,
     suddenDeathTimeout: null,
-    timeWarnings: {}
+    timeWarnings: {},
+    warnTimers: []
 };
 
 var config = {
@@ -78,6 +79,7 @@ function start(room, player1, player2, onGameEnd) {
             gameState.chatBlocked = false;
             gameState.gameStartTime = Date.now();
             gameState.timeWarnings = {};
+            gameState.warnTimers = [];
             room.sendAnnouncement('🟢 COMIENZA! ⚽ GOL GANA!', null, 0x00FF00, 'bold', 2);
 
             gameState.prevOnGoal = room.onTeamGoal;
@@ -117,21 +119,21 @@ function start(room, player1, player2, onGameEnd) {
                 }
             }, config.gameDurationMs);
 
-            setTimeout(function() {
+            gameState.warnTimers.push(setTimeout(function() {
                 if (!gameState.active) return;
                 if (!gameState.timeWarnings['60']) {
                     gameState.timeWarnings['60'] = true;
                     room.sendAnnouncement('⏰ 1 minuto restante!', null, 0xFFFF00, 'bold');
                 }
-            }, config.gameDurationMs - 60000);
+            }, config.gameDurationMs - 60000));
 
-            setTimeout(function() {
+            gameState.warnTimers.push(setTimeout(function() {
                 if (!gameState.active) return;
                 if (!gameState.timeWarnings['30']) {
                     gameState.timeWarnings['30'] = true;
                     room.sendAnnouncement('⏰ 30 segundos!', null, 0xFF6600, 'bold');
                 }
-            }, config.gameDurationMs - 30000);
+            }, config.gameDurationMs - 30000));
         }, config.explanationMs);
     }, 1500);
 }
@@ -140,6 +142,8 @@ function declareWinner(room, winner, reason) {
     if (!gameState.active) return;
     gameState.active = false;
     gameState.goalEnabled = false;
+    for (var wi = 0; wi < gameState.warnTimers.length; wi++) clearTimeout(gameState.warnTimers[wi]);
+    gameState.warnTimers = [];
     if (gameState.gameTimer) { clearTimeout(gameState.gameTimer); gameState.gameTimer = null; }
     if (gameState.suddenDeathTimeout) { clearTimeout(gameState.suddenDeathTimeout); gameState.suddenDeathTimeout = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e) {}
@@ -163,6 +167,8 @@ function stop(room) {
     var cb = gameState.onGameEnd;
     gameState.active = false;
     gameState.goalEnabled = false;
+    for (var wi = 0; wi < gameState.warnTimers.length; wi++) clearTimeout(gameState.warnTimers[wi]);
+    gameState.warnTimers = [];
     if (gameState.gameTimer) { clearTimeout(gameState.gameTimer); gameState.gameTimer = null; }
     if (gameState.suddenDeathTimeout) { clearTimeout(gameState.suddenDeathTimeout); gameState.suddenDeathTimeout = null; }
     try { room.onTeamGoal = gameState.prevOnGoal; } catch(e) {}
