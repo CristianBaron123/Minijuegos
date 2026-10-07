@@ -51,6 +51,25 @@ const DISCORD_WEBHOOKS = {};
 
 const TEST_MODE = process.env.TEST_MODE === 'true';
 
+// ============================================
+// RED DE SEGURIDAD DEL PROCESO
+// Un error suelto no debe tumbar el bot en silencio. NUNCA se mata el proceso desde acá:
+// el arranque necesita un CAPTCHA manual y reiniciar es costoso. Solo se registra y se avisa.
+// ============================================
+let _lastCrashAlert = 0;
+function alertCrash(kind, err) {
+    const msg = (err && err.stack) ? err.stack : String(err);
+    console.error('🚨 ' + kind + ':', msg);
+    const now = Date.now();
+    if (now - _lastCrashAlert < 60000) return; // máx. 1 aviso por minuto
+    _lastCrashAlert = now;
+    try {
+        sendDiscordWebhook('mods', '🚨 **' + kind + '** en el bot:\n```' + msg.slice(0, 1500) + '```').catch(() => {});
+    } catch (e) {}
+}
+process.on('unhandledRejection', (reason) => alertCrash('Promesa rechazada sin capturar', reason));
+process.on('uncaughtException', (err) => alertCrash('Excepción sin capturar', err));
+
 async function sendDiscordWebhook(type, content) {
     // Allow 'mods' webhook even in TEST_MODE (for creator/owner reiniciar)
     if (TEST_MODE && type !== 'mods') {
@@ -1672,6 +1691,10 @@ var BUHO = ` + buhoModule + `;
     });
     
     const page = await browser.newPage();
+    // Avisar (sin matar nada) si Chrome o la página se cierran: la sala queda muerta y hay que mirarla a mano
+    browser.on('disconnected', () => alertCrash('Chrome desconectado', 'El navegador se cerró: la sala dejó de responder. Hay que reiniciarla (requiere CAPTCHA).'));
+    page.on('close', () => alertCrash('Página de la sala cerrada', 'La pestaña de HaxBall se cerró: la sala dejó de responder.'));
+    page.on('pageerror', (err) => console.error('🌐 Error en la página:', err && err.message ? err.message : err));
     
     console.log('📄 Navegando a Haxball Headless...');
     await page.goto('https://www.haxball.com/headless', {

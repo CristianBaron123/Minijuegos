@@ -266,6 +266,37 @@ async function deleteAccount(auth) {
     }
 }
 
+// Índices: sin ellos cada !top / !stats / login recorre toda la colección.
+async function ensureIndexes() {
+    if (!db) return;
+    const specs = [
+        ['players', { auth: 1 }, { unique: true }],
+        ['players', { wins: -1 }, {}],
+        ['players', { balance: -1 }, {}],
+        ['players', { bestStreak: -1 }, {}],
+        ['players', { gamesPlayed: -1 }, {}],
+        ['players', { gayCount: -1 }, {}],
+        ['players', { kickCount: -1 }, {}],
+        ['players', { banCount: -1 }, {}],
+        ['players', { vip: 1 }, { sparse: true }],
+        ['accounts', { username: 1 }, { unique: true }],
+        ['accounts', { mainAuth: 1 }, {}],
+        ['accounts', { linkedAuths: 1 }, {}],
+        ['clans', { tag: 1 }, { unique: true }],
+        ['clans', { leaderAuth: 1 }, {}],
+        ['clans', { 'members.auth': 1 }, {}],
+        ['clans', { invites: 1 }, {}],
+        ['clans', { totalWins: -1 }, {}],
+        ['backups', { createdAt: 1 }, {}]
+    ];
+    let ok = 0;
+    for (const [col, keys, opts] of specs) {
+        try { await db.collection(col).createIndex(keys, opts); ok++; }
+        catch(e) { console.error('⚠️ Índice ' + col + ' ' + JSON.stringify(keys) + ': ' + e.message); }
+    }
+    console.log('📇 Índices de MongoDB listos: ' + ok + '/' + specs.length);
+}
+
 async function connect() {
     if (!MONGO_URI) {
         console.error('🚨🚨🚨 MONGO_URI NO está definido — el .env no se cargó.');
@@ -293,6 +324,7 @@ async function connect() {
         var _esLocal = /localhost|127\.0\.0\.1/.test(MONGO_URI);
         console.log('✅ MongoDB conectado a ' + DB_NAME + ' @ ' + _host + (_esLocal ? '  ⚠️ ¡BASE LOCAL!' : '  (Atlas)'));
         await loadAccountLinks();
+        ensureIndexes(); // en segundo plano; no frena el arranque
         return db;
     } catch(e) {
         console.error('❌ Error conectando a MongoDB:', e.message);
@@ -440,8 +472,13 @@ async function getStats(auth) {
     }
 }
 
+// Solo nombres de campo simples: evita que un valor raro llegue como operador/ruta de Mongo
+function isSafeField(field) {
+    return typeof field === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(field);
+}
+
 async function getTopPlayers(field, limit) {
-    if (!db) return [];
+    if (!db || !isSafeField(field)) return [];
     try {
         var filter = {};
         filter[field] = { $gt: 0 };
@@ -461,7 +498,7 @@ async function getTopPlayers(field, limit) {
 }
 
 async function getPlayerRank(auth, field) {
-    if (!db || !auth) return null;
+    if (!db || !auth || !isSafeField(field)) return null;
     try {
         var player = await db.collection('players').findOne({ auth: auth });
         if (!player || !player[field]) return null;
@@ -914,6 +951,7 @@ async function createBackup() {
         var clans       = await db.collection('clans').find({}).toArray();
         var titan       = await db.collection('titan').find({}).toArray();
         var daily       = await db.collection('dailyRewards').find({}).toArray();
+        var accounts    = await db.collection('accounts').find({}).toArray();
 
         var timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         var snapshot = {
@@ -921,34 +959,39 @@ async function createBackup() {
             players:  players,
             clans:    clans,
             titan:    titan,
-            dailyRewards: daily
+            dailyRewards: daily,
+            accounts: accounts
         };
+        var json = JSON.stringify(snapshot);
 
-        // Guardar en Atlas (colección backups, máximo 7)
-        await db.collection('backups').insertOne(snapshot);
-        var total = await db.collection('backups').countDocuments();
-        if (total > 7) {
-            var oldest = await db.collection('backups').find({}).sort({ createdAt: 1 }).limit(total - 7).toArray();
-            var ids = oldest.map(function(d) { return d._id; });
-            await db.collection('backups').deleteMany({ _id: { $in: ids } });
+        // Copia en Atlas (máx. 7). Un documento no puede pasar de 16 MB: si el snapshot es muy grande
+        // se omite esta copia y queda el archivo local (antes fallaba en silencio y los backups dejaban de rotar).
+        if (json.length < 12 * 1024 * 1024) {
+            await db.collection('backups').insertOne(snapshot);
+            var total = await db.collection('backups').countDocuments();
+            if (total > 7) {
+                var oldest = await db.collection('backups').find({}).sort({ createdAt: 1 }).limit(total - 7).toArray();
+                var ids = oldest.map(function(x) { return x._id; });
+                await db.collection('backups').deleteMany({ _id: { $in: ids } });
+            }
+        } else {
+            console.warn('⚠️ Backup demasiado grande para un documento de Atlas (' + (json.length / 1048576).toFixed(1) + ' MB): solo se guarda el archivo local.');
         }
 
-        // Guardar como archivo JSON local
+        // Archivo JSON local (compacto) y rotación: se conservan los últimos 14
         try {
             var fs = require('fs');
             var path = require('path');
             var dir = path.join(__dirname, 'backups');
             if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-            fs.writeFileSync(
-                path.join(dir, 'backup_' + timestamp + '.json'),
-                JSON.stringify(snapshot, null, 2),
-                'utf8'
-            );
+            fs.writeFileSync(path.join(dir, 'backup_' + timestamp + '.json'), json, 'utf8');
+            var files = fs.readdirSync(dir).filter(function(f) { return /^backup_.*\.json$/.test(f); }).sort();
+            while (files.length > 14) { try { fs.unlinkSync(path.join(dir, files.shift())); } catch(ue) { break; } }
         } catch(fe) {
             console.warn('⚠️ No se pudo guardar backup local:', fe.message);
         }
 
-        console.log('✅ Backup creado: ' + players.length + ' jugadores, ' + clans.length + ' clanes');
+        console.log('✅ Backup creado: ' + players.length + ' jugadores, ' + clans.length + ' clanes, ' + accounts.length + ' cuentas');
     } catch(e) {
         console.error('❌ createBackup error:', e.message);
     }
@@ -1047,7 +1090,19 @@ async function getFutsalTop(field, limit) {
 async function getLatestBackup() {
     if (!db) return null;
     try {
-        return await db.collection('backups').findOne({}, { sort: { createdAt: -1 } });
+        var remote = await db.collection('backups').findOne({}, { sort: { createdAt: -1 } });
+        // El archivo local puede ser más nuevo (cuando el snapshot era demasiado grande para Atlas)
+        try {
+            var fs = require('fs');
+            var path = require('path');
+            var dir = path.join(__dirname, 'backups');
+            var files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(function(f) { return /^backup_.*\.json$/.test(f); }).sort() : [];
+            if (files.length) {
+                var localSnap = JSON.parse(fs.readFileSync(path.join(dir, files[files.length - 1]), 'utf8'));
+                if (!remote || new Date(localSnap.createdAt) > new Date(remote.createdAt)) return localSnap;
+            }
+        } catch(le) { /* si falla el local, se usa el de Atlas */ }
+        return remote;
     } catch(e) {
         console.error('❌ getLatestBackup error:', e.message);
         return null;
