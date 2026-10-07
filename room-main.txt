@@ -272,6 +272,61 @@ function helpSection(pid, emoji, title, lines, color) {
 }
 
 // ============================================
+// BIENVENIDA PERSONALIZADA (un solo mensaje por jugador que entra)
+// ============================================
+function sendWelcome(player) {
+    var auth = getAuth(player);
+    var pid = player.id;
+    var statsP = (auth && typeof window.__dbGetStats === 'function') ? window.__dbGetStats(auth).catch(function() { return null; }) : Promise.resolve(null);
+    var accP = (auth && typeof window.__dbGetAccountByAuth === 'function') ? window.__dbGetAccountByAuth(auth).catch(function() { return null; }) : Promise.resolve(null);
+
+    Promise.all([statsP, accP]).then(function(res) {
+        var stats = res[0], acc = res[1];
+        if (!room.getPlayer(pid)) return; // se fue antes de que llegara la base
+
+        if (acc) botState.loggedAccounts[pid] = acc.displayName;
+        var online = room.getPlayerList().filter(function(p) { return p.id !== 0; }).length;
+        var lines = [];
+        lines.push('🎮 ' + minigameModules.length + ' minijuegos automáticos · 👥 ' + online + ' en la sala');
+
+        var played = stats && (stats.gamesPlayed || 0) > 0;
+        if (played) {
+            var wins = stats.wins || 0;
+            var rank = getRankByWins(wins);
+            lines.push('🏅 ' + rank.label + ' · 🏆 ' + wins + ' victorias · ✨ Nivel ' + xpLevel(stats.xp || 0));
+            lines.push('💰 Saldo: ' + formatMoney(stats.balance || 0));
+        } else {
+            lines.push('🌱 ¡Primera vez por acá! Jugá un minijuego para ganar dinero y XP.');
+        }
+
+        if (isVipAuth(auth)) {
+            lines.push('💎 VIP activo · XP x' + (isWeekend() ? VIP_XP_MULT_WEEKEND : VIP_XP_MULT) + ' · !vcolor !badges !prefijo');
+        } else {
+            lines.push('💎 !vip — +30% de dinero, XP x2.5 y personalización');
+        }
+
+        if (acc) {
+            lines.push('👤 Cuenta: ' + acc.displayName + ' (tus stats están guardadas)');
+        } else {
+            lines.push('📝 Sin cuenta: registrate con !registrar <usuario> <clave> para no perder tus stats');
+        }
+        lines.push('📋 !ayuda · 🏆 !top · 🛡️ !clan · 🎰 !casino');
+
+        var BOX = '══════════════════════════';
+        room.sendAnnouncement(
+            '╔' + BOX + '╗\n   👋 ' + formatText('Bienvenido a [TLD] Mini Games') + '\n╚' + BOX + '╝\n' +
+            '¡Hola, ' + player.name + '!\n' +
+            lines.map(function(l) { return ' ▸ ' + formatKeep(l); }).join('\n'),
+            pid, 0x00BFFF, 'bold'
+        );
+        // El link va aparte: los mensajes con links no se transforman para no romperlos
+        room.sendAnnouncement('💬 Discord: ' + DISCORD_INVITE, pid, 0x5865F2);
+    }).catch(function() {
+        try { room.sendAnnouncement('👋 ¡Bienvenido, ' + player.name + '! Escribí !ayuda para ver los comandos.', pid, 0x00BFFF, 'bold'); } catch(e) {}
+    });
+}
+
+// ============================================
 // BENEFICIOS VIP: personalización, efectos y XP
 // ============================================
 botState.vipPrefs = {};      // { auth: { color, style, badges, prefix, entry, tone, goalAnim, aura } }
@@ -3113,20 +3168,6 @@ room.onPlayerJoin = function(player) {
             });
         })(player);
 
-        // Aviso de cuentas: invita a registrarse a quien no tiene cuenta vinculada
-        if (typeof window.__dbGetAccountByAuth === 'function') {
-            (function(_ap) {
-                window.__dbGetAccountByAuth(_ap.auth).then(function(acc) {
-                    if (acc) {
-                        botState.loggedAccounts[_ap.id] = acc.displayName;
-                        room.sendAnnouncement('👤 Sesión activa: ' + acc.displayName + ' — tus stats se guardan en tu cuenta.', _ap.id, 0x00FF00);
-                    } else {
-                        room.sendAnnouncement('📝 No tenés cuenta. Registrate para no perder tus stats: !registrar <usuario> <contraseña>\n🔑 ¿Ya tenés cuenta en otro dispositivo? !login <usuario> <contraseña>', _ap.id, 0xFFFF00, 'bold');
-                    }
-                }).catch(function() {});
-            })(player);
-        }
-
         // Anti-VPN: consulta la IP (conn viene en hex) y kickea si es proxy/VPN/hosting
         if (botState.antiVpn && player.conn && typeof window.__checkVPN === 'function'
             && player.auth !== OWNER_AUTH && CREATOR_AUTHS.indexOf(player.auth) === -1 && MODERATOR_AUTHS.indexOf(player.auth) === -1) {
@@ -3276,17 +3317,7 @@ room.onPlayerJoin = function(player) {
         room.sendAnnouncement('👑 Bienvenido PRINCESA! Admin activado', player.id, 0xFF69B4, 'bold');
     }
 
-    room.sendAnnouncement(
-        "👋 Bienvenido " + formatText(player.name) + "!\n" +
-        "🎮 Sala de Minijuegos v2.1 - Los juegos inician automaticamente\n" +
-        "💰 Gana dinero jugando minijuegos\n" +
-        "🛡️ Crea o unete a un clan con !clan\n" +
-        "📋 Escribe !ayuda para ver comandos\n" +
-        "🏆 Escribe !top para ver el ranking",
-        player.id,
-        0x00BFFF,
-        "bold"
-    );
+    try { sendWelcome(player); } catch(e) {}
     
     // Si está en la lista de spectatorNext (por auth), moverlo a espectador
     if (player.auth && botState.spectatorNext[player.auth]) {
