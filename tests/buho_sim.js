@@ -1,6 +1,8 @@
-// Simulador de BUHO con los mapas reales: elimina jugadores poniendo la pelota en su portería.
-// Uso: node tests/buho_sim.js   (juega partidas completas de 3 a 16 jugadores y busca fallos:
-// jugador equivocado eliminado, posiciones apiladas, mapa mal reducido, ganador incorrecto, avatares/equipos sobrantes)
+// Simulador de BUHO con los mapas reales: imita los puntos de aparición de HaxBall y elimina jugadores
+// poniendo la pelota en su portería.
+// Uso: node tests/buho_sim.js   (juega partidas completas de 2 a 16 jugadores y busca fallos:
+// jugador equivocado eliminado, jugadores movidos de donde aparecen, posiciones apiladas, mapa mal reducido,
+// ganador incorrecto, avatares/equipos sobrantes)
 const vm = require('vm'), fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..') + '/';
 
@@ -34,23 +36,33 @@ function setup(n) {
 
     const players = [];
     for (let i = 1; i <= n; i++) players.push({ id: i, name: 'P' + i, team: 0, auth: 'a' + i, pos: null, avatar: null });
-    const log = { announcements: [], stadiums: [], starts: 0, stops: 0, paused: null };
+    const log = { announcements: [], stadiums: [], starts: 0, stops: 0, paused: null, teleports: [] };
     const ball = { x: 0, y: 0 };
+    const spawnAll = () => {
+        const m = log.stadiums[log.stadiums.length - 1]; if (!m) return;
+        [[1, m.redSpawnPoints || []], [2, m.blueSpawnPoints || []]].forEach(([team, pts]) => {
+            players.filter(p => p.team === team).sort((a, b) => a.id - b.id).forEach((p, i) => {
+                if (pts.length) p.pos = { x: pts[i % pts.length][0], y: pts[i % pts.length][1] };
+            });
+        });
+        players.filter(p => p.team === 0).forEach(p => { p.pos = null; });
+    };
     const base = {
         getPlayerList: () => players.map(p => ({ id: p.id, name: p.name, team: p.team, auth: p.auth, position: p.pos })),
         getPlayer: (id) => { const p = players.find(q => q.id === id); return p ? { id: p.id, name: p.name, team: p.team, position: p.pos } : null; },
         setPlayerTeam: (id, t) => { const p = players.find(q => q.id === id); if (p) p.team = t; },
         setPlayerAvatar: (id, a) => { const p = players.find(q => q.id === id); if (p) p.avatar = a; },
-        setPlayerDiscProperties: (id, props) => { const p = players.find(q => q.id === id); if (p && props.x != null) p.pos = { x: props.x, y: props.y }; },
+        setPlayerDiscProperties: (id, props) => { const p = players.find(q => q.id === id); if (p && props.x != null) { p.pos = { x: props.x, y: props.y }; log.teleports.push(id); } },
+        getPlayerDiscProperties: (id) => { const p = players.find(q => q.id === id); return p && p.pos ? { x: p.pos.x, y: p.pos.y } : null; },
         getDiscProperties: (i) => i === 0 ? { x: ball.x, y: ball.y } : null,
         setCustomStadium: (s) => { log.stadiums.push(JSON.parse(s)); },
-        startGame: () => { log.starts++; log.inGame = true; },
+        startGame: () => { log.starts++; log.inGame = true; spawnAll(); },
         stopGame: () => { log.stops++; log.inGame = false; },
         pauseGame: (b) => { log.paused = b; },
         sendAnnouncement: (m) => { log.announcements.push(String(m)); }
     };
     const room = new Proxy(base, { get: (t, k) => (k in t) ? t[k] : () => undefined });
-    return { exp, room, players, log, ball, st };
+    return { exp, room, players, log, ball, st, spawnAll };
 }
 
 function runFor(env, ms) {
@@ -77,6 +89,8 @@ function playFull(n, opts) {
     let winner = 'no-callback', cbCount = 0;
     exp.start(room, (w) => { cbCount++; winner = w; });
     runFor(env, 6000); // intro + asignación de porterías
+    const movedAtStart = new Set(log.teleports).size;
+    if (movedAtStart > 0) issues.push('el script MOVIÓ a ' + movedAtStart + ' de ' + n + ' jugadores lejos de donde aparecieron (n=' + n + ')');
 
     const alive = new Set(players.map(p => p.id));
     const elimOrder = [];
@@ -103,7 +117,8 @@ function playFull(n, opts) {
         const victim = players.find(p => p.id === victimId);
         // la pelota entra por la portería donde fue puesto este jugador (posición = 0.7 * centro)
         if (!victim.pos) { issues.push('victima sin posición'); break; }
-        ball.x = victim.pos.x / 0.7; ball.y = victim.pos.y / 0.7;
+        { const m = log.stadiums[log.stadiums.length - 1]; let bd = 1e9;
+          (m.goals || []).forEach(g => { const c = { x: (g.p0[0] + g.p1[0]) / 2, y: (g.p0[1] + g.p1[1]) / 2 }; const d = dist(c, victim.pos); if (d < bd) { bd = d; ball.x = c.x; ball.y = c.y; } }); }
         log.announcements.length = 0;
         if (opts.beforeGoal) opts.beforeGoal(env, victimId, alive);
         exp.onTeamGoal(room, 2);
@@ -112,7 +127,7 @@ function playFull(n, opts) {
         else if (eliminated[0] !== victim.name) issues.push('ELIMINÓ AL JUGADOR EQUIVOCADO: ' + eliminated[0] + ' en vez de ' + victim.name + ' (n=' + n + ', vivos=' + alive.size + ')');
         else { alive.delete(victimId); elimOrder.push(victim.name); }
         if (eliminated.length !== 1) { alive.delete(victimId); } // para no quedar en bucle
-        if (log.inGame) exp.onPositionsReset(room);
+        if (log.inGame) { env.spawnAll(); exp.onPositionsReset(room); }
         runFor(env, 7000);
         if (alive.size > 1) {
             checkPositions('tras reducir a ' + alive.size);
@@ -135,7 +150,7 @@ module.exports = { playFull, setup, runFor, BUHO_DATA };
 
 if (require.main === module) {
     const counts = {};
-    for (let n = 3; n <= 16; n++) {
+    for (let n = 2; n <= 16; n++) {
         let bad = 0;
         for (let t = 0; t < 8; t++) {
             const r = playFull(n);

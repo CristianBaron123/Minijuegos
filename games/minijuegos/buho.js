@@ -86,6 +86,18 @@ function getAlivePlayers() {
     return result;
 }
 
+// Los mapas de BUHO ya ubican a cada jugador pegado a su portería (un punto de aparición por portería,
+// a 3-11 unidades de su centro). Cada jugador defiende la portería MÁS CERCANA a donde apareció y NO se
+// lo mueve: antes se asignaba por orden de ID y se teletransportaba a todos, así que en un 1v1 los dos
+// terminaban cambiados de lugar. Solo se acomoda a quien aparezca lejos de toda portería libre.
+var NEAR_SPAWN = 90;
+
+function playerPos(room, id) {
+    try { var pl = room.getPlayer(id); if (pl && pl.position) return { x: pl.position.x, y: pl.position.y }; } catch(e) {}
+    try { var dp = room.getPlayerDiscProperties(id); if (dp && dp.x != null) return { x: dp.x, y: dp.y }; } catch(e) {}
+    return null;
+}
+
 function assignGoals(room) {
     var alive = getAlivePlayers();
     var goals = gameState.goalCenters;
@@ -95,20 +107,50 @@ function assignGoals(room) {
         gameState.players[alive[ri]].goalIndex = -1;
     }
 
-    for (var i = 0; i < alive.length; i++) {
-        var goalIdx = i % goals.length;
-        gameState.players[alive[i]].goalIndex = goalIdx;
+    var pos = {};
+    var allKnown = true;
+    for (var a = 0; a < alive.length; a++) {
+        pos[alive[a]] = playerPos(room, alive[a]);
+        if (!pos[alive[a]]) allKnown = false;
     }
 
-    for (var m = 0; m < alive.length; m++) {
-        var pid2 = alive[m];
-        var gi2 = gameState.players[pid2].goalIndex;
-        if (gi2 < 0 || gi2 >= goals.length) continue;
-        var gx = goals[gi2].x;
-        var gy = goals[gi2].y;
-        try {
-            room.setPlayerDiscProperties(pid2, { x: Math.round(gx * 0.7), y: Math.round(gy * 0.7), xspeed: 0, yspeed: 0 });
-        } catch(e) {}
+    var moved = 0;
+    if (allKnown) {
+        // Pares (jugador, portería) por distancia: se asigna primero lo más cercano
+        var pairs = [];
+        for (var pi = 0; pi < alive.length; pi++) {
+            for (var gi = 0; gi < goals.length; gi++) {
+                pairs.push({ id: alive[pi], gi: gi, d: Math.sqrt(Math.pow(pos[alive[pi]].x - goals[gi].x, 2) + Math.pow(pos[alive[pi]].y - goals[gi].y, 2)) });
+            }
+        }
+        pairs.sort(function(x, y) { return x.d - y.d; });
+        var takenGoal = {};
+        var chosen = {};
+        for (var k = 0; k < pairs.length; k++) {
+            var pr = pairs[k];
+            if (chosen[pr.id] === undefined && takenGoal[pr.gi] === undefined) {
+                chosen[pr.id] = pr;
+                takenGoal[pr.gi] = true;
+            }
+        }
+        for (var m = 0; m < alive.length; m++) {
+            var sel = chosen[alive[m]];
+            if (!sel) continue;
+            gameState.players[alive[m]].goalIndex = sel.gi;
+            if (sel.d > NEAR_SPAWN) {
+                try { room.setPlayerDiscProperties(alive[m], { x: Math.round(goals[sel.gi].x * 0.9), y: Math.round(goals[sel.gi].y * 0.9), xspeed: 0, yspeed: 0 }); moved++; } catch(e) {}
+            }
+        }
+    } else {
+        // Sin posiciones disponibles: asignación por orden y se ubica a cada uno en su portería
+        for (var i = 0; i < alive.length; i++) {
+            var goalIdx = i % goals.length;
+            gameState.players[alive[i]].goalIndex = goalIdx;
+            try {
+                room.setPlayerDiscProperties(alive[i], { x: Math.round(goals[goalIdx].x * 0.7), y: Math.round(goals[goalIdx].y * 0.7), xspeed: 0, yspeed: 0 });
+                moved++;
+            } catch(e) {}
+        }
     }
 
     room.sendAnnouncement('🎯 ' + alive.length + ' jugadores asignados a sus porterías', null, 0x00FFFF);
