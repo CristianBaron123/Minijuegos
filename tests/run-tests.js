@@ -5,7 +5,8 @@ const sim = path.join(__dirname, 'goal_sim.js');
 let fail = false;
 for (const [label, args, env] of [
     ['Torneos de goles (con finales 1v1)', [sim], { WITHFINALES: '1' }],
-    ['Finales 1v1', [sim, 'air_hockey,dominic_survivor,gol_a_gol,space_vortex,survivor_vol17'], { FINALE: '1' }]
+    ['Finales 1v1', [sim, 'air_hockey,dominic_survivor,gol_a_gol,space_vortex,survivor_vol17'], { FINALE: '1' }],
+    ['BUHO (3 a 16 jugadores, mapas reales)', [path.join(__dirname, 'buho_sim.js')], {}]
 ]) {
     console.log('\n== ' + label + ' ==');
     const r = spawnSync(process.execPath, args, { env: Object.assign({}, process.env, env), encoding: 'utf8' });

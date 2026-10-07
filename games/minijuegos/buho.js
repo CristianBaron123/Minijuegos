@@ -21,6 +21,20 @@ var gameState = {
 // Helpers
 // ──────────────────────────────────────────
 
+// Quita centros de portería repetidos (el mapa de 16 trae 17 porterías y dos están en el mismo punto:
+// dos jugadores quedaban apilados y el segundo no se podía eliminar)
+function dedupeCenters(list) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+        var dup = false;
+        for (var j = 0; j < out.length; j++) {
+            if (Math.abs(out[j].x - list[i].x) < 10 && Math.abs(out[j].y - list[i].y) < 10) { dup = true; break; }
+        }
+        if (!dup) out.push(list[i]);
+    }
+    return out;
+}
+
 function loadMapForPlayers(room, n) {
     var maps = buhoData.maps;
     var key = n.toString();
@@ -55,6 +69,7 @@ function loadMapForPlayers(room, n) {
                 console.error('[BUHO] Fallback goalCenter parse failed for key=' + key + ': ' + e2.message + ' mapType=' + typeof maps[key]);
             }
         }
+        gameState.goalCenters = dedupeCenters(gameState.goalCenters);
         console.log('[BUHO] loadMap: key=' + key + ' goalCenters=' + gameState.goalCenters.length + ' mapType=' + typeof maps[key]);
         return true;
     } catch(e) {
@@ -120,6 +135,9 @@ function checkRemaining(room) {
             if (buhoData.maps['CAMPEON']) {
                 try { room.stopGame(); } catch(e) {}
                 try { room.setCustomStadium(buhoData.maps['CAMPEON']); } catch(e) {}
+                // Los eliminados salen a espectador: el mapa campeón es solo del ganador
+                var allChamp = room.getPlayerList().filter(function(p) { return p.id !== 0 && p.id !== winnerId; });
+                for (var c = 0; c < allChamp.length; c++) { try { room.setPlayerTeam(allChamp[c].id, 0); } catch(e) {} }
                 try { room.setPlayerTeam(winnerId, 1); } catch(e) {}
                 try { room.startGame(); } catch(e) {}
             }
@@ -137,19 +155,25 @@ function checkRemaining(room) {
         } else {
             room.sendAnnouncement('🦉 Empate! No hay ganador.', null, 0xFF6600);
             try { room.stopGame(); } catch(e) {}
+            var allDraw = room.getPlayerList().filter(function(p) { return p.id !== 0; });
+            for (var d = 0; d < allDraw.length; d++) {
+                try { room.setPlayerTeam(allDraw[d].id, 0); } catch(e) {}
+                try { room.setPlayerAvatar(allDraw[d].id, null); } catch(e) {}
+            }
             if (gameState.callback) gameState.callback(null);
         }
 
     } else if (alive.length < gameState.currentMapSize) {
-        // Reducir mapa
+        // Reducir mapa (una sola vez: si ya hay una reducción en curso, esa usa los vivos del momento)
+        if (gameState.shrinkTimeout) return;
         try { room.stopGame(); } catch(e) {}
 
         gameState.shrinkTimeout = setTimeout(function() {
-            if (!gameState.active && alive.length > 1) {
-                // ya se resolvió en otro path, no hacer nada
-                return;
-            }
-            var newSize = Math.min(alive.length, 16);
+            gameState.shrinkTimeout = null;
+            if (!gameState.active) return;
+            var aliveNow = getAlivePlayers();
+            if (aliveNow.length <= 1) { checkRemaining(room); return; }
+            var newSize = Math.min(aliveNow.length, 16);
             if (!loadMapForPlayers(room, newSize)) return;
 
             // Mover eliminados a spec, reasignar equipos a los vivos
