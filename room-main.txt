@@ -2934,10 +2934,10 @@ function checkAndStart() {
 var soloMessages = [
     "💡 ¿Sabías que puedes ver tu rango con !stats?",
     "💡 Usa !discord para unirte a la comunidad!",
-    "💡 El ganador de cada minijuego gana $50.000!",
+    "💡 El ganador de cada minijuego gana " + formatMoney(moneyConfig.winReward) + " (y más con racha o VIP)!",
     "💡 Si llevas racha de victorias, ganas bonus extra!",
     "💡 Usa !top para ver a los mejores jugadores!",
-    "💡 Hay 30 minijuegos diferentes en esta sala!",
+    "💡 Hay " + minigameModules.length + " minijuegos diferentes en esta sala!",
     "💡 Los rangos van desde Novato hasta Titan!",
     "💡 Puedes transferir dinero a otros con !pasar!",
     "💡 Si necesitas un admin usa !calladmin!",

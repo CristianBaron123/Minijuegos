@@ -61,6 +61,25 @@
     <div class="container" id="salas"></div>
 
     <script>
+        // Token del panel: se pide una vez por sesión y se manda en cada llamada a /api
+        function panelToken() {
+            let t = null;
+            try { t = sessionStorage.getItem('panelToken'); } catch (e) {}
+            if (!t) {
+                t = window.prompt('Token del panel (PANEL_TOKEN):') || '-';
+                try { sessionStorage.setItem('panelToken', t); } catch (e) {}
+            }
+            return t;
+        }
+        const _fetchOriginal = window.fetch.bind(window);
+        window.fetch = function (url, opts) {
+            opts = Object.assign({}, opts);
+            opts.headers = Object.assign({}, opts.headers, { 'x-panel-token': panelToken() });
+            return _fetchOriginal(url, opts).then(function (r) {
+                if (r.status === 401) { try { sessionStorage.removeItem('panelToken'); } catch (e) {} }
+                return r;
+            });
+        };
         let salasData = {};
         let logsVisible = {};
 

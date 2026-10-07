@@ -10,7 +10,61 @@ let dbBuho = null;
 try { dbBuho = require(path.resolve(__dirname, '../Buho/script/db')); } catch(e) {}
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1); // Railway/proxy: IP real para el límite de intentos
+
+// ============================================
+// AUTENTICACIÓN DEL PANEL
+// Todas las rutas /api (menos el estado público mínimo) exigen el token del panel.
+// PANEL_TOKEN en el .env / variables de entorno. Si no está, se genera uno al azar y se
+// imprime en la consola al iniciar (cambia en cada reinicio).
+// ============================================
+const crypto = require('crypto');
+let PANEL_TOKEN = process.env.PANEL_TOKEN;
+let panelTokenGenerado = false;
+if (!PANEL_TOKEN || PANEL_TOKEN.length < 12) {
+    PANEL_TOKEN = crypto.randomBytes(18).toString('hex');
+    panelTokenGenerado = true;
+}
+
+const authFails = new Map(); // ip -> { count, until }
+const MAX_AUTH_FAILS = 8;
+const AUTH_LOCK_MS = 15 * 60 * 1000;
+
+function tokenValido(candidate) {
+    if (typeof candidate !== 'string' || !candidate) return false;
+    const a = crypto.createHash('sha256').update(candidate).digest();
+    const b = crypto.createHash('sha256').update(PANEL_TOKEN).digest();
+    return crypto.timingSafeEqual(a, b);
+}
+
+function leerToken(req) {
+    const h = req.headers['authorization'];
+    if (typeof h === 'string' && h.startsWith('Bearer ')) return h.slice(7);
+    return req.headers['x-panel-token'];
+}
+
+function estaAutenticado(req) {
+    return tokenValido(leerToken(req));
+}
+
+function requireAuth(req, res, next) {
+    const ip = req.ip || (req.socket && req.socket.remoteAddress) || 'desconocida';
+    // El token correcto siempre pasa (adivinarlo sería igual de posible sin el bloqueo)
+    if (estaAutenticado(req)) {
+        authFails.delete(ip);
+        return next();
+    }
+    const f = authFails.get(ip);
+    if (f && f.until && f.until > Date.now()) {
+        return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos.' });
+    }
+    const cur = f && (!f.until || f.until > Date.now()) ? f : { count: 0, until: 0 };
+    cur.count++;
+    if (cur.count >= MAX_AUTH_FAILS) { cur.until = Date.now() + AUTH_LOCK_MS; cur.count = 0; }
+    authFails.set(ip, cur);
+    return res.status(401).json({ error: 'No autorizado' });
+}
 
 // Chrome compartido
 let browser = null;
@@ -43,7 +97,8 @@ const DISCORD_REPLAY_WEBHOOK = 'https://discord.com/api/webhooks/147532173959154
 
 async function sendDiscordReplay(replayArray, gameName) {
     try {
-        const buffer = Buffer.from(replayArray);
+        // Acepta base64 (actual) o array de bytes (formato viejo)
+        const buffer = typeof replayArray === 'string' ? Buffer.from(replayArray, 'base64') : Buffer.from(replayArray);
         const blob = new Blob([buffer], { type: 'application/octet-stream' });
         const formData = new FormData();
         const now = new Date();
@@ -103,7 +158,9 @@ function loadBotScriptForSala(salaConfig, token) {
     }
     var script = fs.readFileSync(debugPath, 'utf8');
     // Reemplazar token por el nuevo
-    script = script.replace(/token:\s*"thr1\.[^"]*"/g, 'token: "' + token + '"');
+    // El token se inserta como string JSON (no puede cerrar la comilla ni inyectar código)
+    if (!/^thr1\.[A-Za-z0-9_.-]+$/.test(String(token))) return null;
+    script = script.replace(/token:\s*"thr1\.[^"]*"/g, function() { return 'token: ' + JSON.stringify(String(token)); });
     return script;
 }
 
@@ -325,16 +382,14 @@ async function exposeDbFunctions(page) {
                 return await dbBuho.loadAllStats();
             });
         }
-        // Discord webhook
-        const DISCORD_WEBHOOKS = {
-            calladmin: 'https://discord.com/api/webhooks/1474239767452582111/4yh70-ixJH5MxtRc5r0oCVSFqL8IyMQw1BnNd94_VlnC_2OKFiPLSn7ttI0nwR8lMrO_',
-            reportes:  'https://discord.com/api/webhooks/1474240910459011143/MYAaiXpGD-S9yjPe_JEF7VcZxa_7SAlLHDTukt0aB6kOvdaHh9LxvWww0DoYd0RSke97',
-            tokens:    'https://discord.com/api/webhooks/1474240022461943862/-ETrQZuogk-52LRh_f6j1TvstlPqnt-Uf4NfVH4GUoNrz7XpfdyUM0lAjSF97PZHLa2m',
-            chatlog:   'https://discord.com/api/webhooks/1475216935850475560/tzzFhOdHCgUwBZoy0vE_Vde9BErDbCB0OmX_jbEvj24_dmeEtdemz16TtoGWYwx2taKu',
-            replays:   'https://discord.com/api/webhooks/1475321739591549091/OdpkhWdvgD-psJISt5r0YjE51W2wuwV7uAo_ab6RigjmwNAeStN09eii3_fKNat-qdmn',
-            stats:     'https://discord.com/api/webhooks/1477693022148886540/ojM5ATpO2A6F_sny-AknN-KKuJTLaDwmQ1H_e0l-R9ocb48zzuZC38ryiDlDa68FKwR8',
-            bugs:      'https://discord.com/api/webhooks/1474240910459011143/MYAaiXpGD-S9yjPe_JEF7VcZxa_7SAlLHDTukt0aB6kOvdaHh9LxvWww0DoYd0RSke97'
-        };
+        // Discord webhook (desde variables de entorno o secrets.json; nunca hardcodeados)
+        let _secretsFile = {};
+        try { _secretsFile = JSON.parse(fs.readFileSync(path.join(__dirname, 'secrets.json'), 'utf8')); } catch(e) {}
+        const DISCORD_WEBHOOKS = {};
+        ['calladmin', 'reportes', 'tokens', 'chatlog', 'replays', 'stats', 'bugs', 'mods'].forEach(function(k) {
+            DISCORD_WEBHOOKS[k] = process.env['DISCORD_WEBHOOK_' + k.toUpperCase()]
+                || (_secretsFile.DISCORD_WEBHOOKS && _secretsFile.DISCORD_WEBHOOKS[k]) || '';
+        });
         await page.exposeFunction('__discordWebhook', async (type, content) => {
             const url = DISCORD_WEBHOOKS[type];
             if (!url) return 'OK';
@@ -342,7 +397,7 @@ async function exposeDbFunctions(page) {
                 await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: content })
+                    body: JSON.stringify({ content: content, allowed_mentions: { parse: [] } })
                 });
             } catch(e) { console.error('[DISCORD] Error webhook ' + type + ':', e.message); }
             return 'OK';
@@ -539,31 +594,35 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'panel.html'));
 });
 
+// Estado: público solo lo mínimo (lo usa el healthcheck de Railway); el detalle exige token
 app.get('/api/status', (req, res) => {
+    const full = estaAutenticado(req);
     const status = {};
     for (const id in salas) {
         const s = salas[id];
         status[id] = {
-            config: s.config,
             status: s.status,
-            startTime: s.startTime,
-            uptime: s.startTime && s.status === 'running' ? Math.floor((Date.now() - s.startTime) / 1000) : 0,
-            link: s.link,
-            logsCount: s.logs.length
+            uptime: s.startTime && s.status === 'running' ? Math.floor((Date.now() - s.startTime) / 1000) : 0
         };
+        if (full) {
+            status[id].config = s.config;
+            status[id].startTime = s.startTime;
+            status[id].link = s.link;
+            status[id].logsCount = s.logs.length;
+        }
     }
     res.json(status);
 });
 
-app.get('/api/logs/:id', (req, res) => {
+app.get('/api/logs/:id', requireAuth, (req, res) => {
     const s = salas[req.params.id];
     if (!s) return res.status(404).json({ error: 'Sala no encontrada' });
     res.json(s.logs.slice(-50));
 });
 
-app.post('/api/start', async (req, res) => {
-    const { salaId, token } = req.body;
-    if (!token || !token.startsWith('thr1.')) {
+app.post('/api/start', requireAuth, async (req, res) => {
+    const { salaId, token } = req.body || {};
+    if (typeof token !== 'string' || !/^thr1\.[A-Za-z0-9_.-]+$/.test(token)) {
         return res.status(400).json({ error: 'Token invalido. Debe empezar con thr1.' });
     }
     try {
@@ -574,7 +633,7 @@ app.post('/api/start', async (req, res) => {
     }
 });
 
-app.post('/api/stop', async (req, res) => {
+app.post('/api/stop', requireAuth, async (req, res) => {
     const { salaId } = req.body;
     try {
         await stopSala(salaId);
@@ -584,7 +643,7 @@ app.post('/api/stop', async (req, res) => {
     }
 });
 
-app.post('/api/maintenance', async (req, res) => {
+app.post('/api/maintenance', requireAuth, async (req, res) => {
     const { salaId } = req.body;
     try {
         await maintenanceSala(salaId);
@@ -594,14 +653,17 @@ app.post('/api/maintenance', async (req, res) => {
     }
 });
 
-app.get('/api/backup/download/:collection', async (req, res) => {
+app.get('/api/backup/download/:collection', requireAuth, async (req, res) => {
     const allowed = ['players', 'clans', 'titan', 'dailyRewards'];
     const col = req.params.collection;
     if (!allowed.includes(col)) return res.status(400).json({ error: 'Coleccion invalida' });
     try {
         const { EJSON } = require('bson');
-        await db.createBackup();
-        const backup = await db.getLatestBackup();
+        let backup = await db.getLatestBackup();
+        if (!backup || Date.now() - new Date(backup.createdAt).getTime() > 3600000) {
+            await db.createBackup();
+            backup = await db.getLatestBackup();
+        }
         if (!backup) return res.status(404).json({ error: 'No hay backups disponibles' });
         const date = new Date(backup.createdAt).toISOString().slice(0, 10);
         res.setHeader('Content-Disposition', 'attachment; filename="' + col + '_' + date + '.json"');
@@ -649,6 +711,7 @@ app.get('/api/backup/download/:collection', async (req, res) => {
         console.log('\n========================================');
         console.log('  Panel de Salas HaxBall');
         console.log('  http://localhost:' + PORT);
+        console.log('  Token del panel: ' + (panelTokenGenerado ? PANEL_TOKEN + '  (generado; define PANEL_TOKEN en el .env para fijarlo)' : 'definido por PANEL_TOKEN'));
         console.log('  Salas: ' + salaConfigs.map(c => c.name).join(', '));
         console.log('========================================\n');
     });
