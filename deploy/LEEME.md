@@ -46,7 +46,8 @@ En Atlas, en **Network Access**, agregá la IP del servidor.
 cd ~/Minijuegos
 pm2 start panel.js --name tld-panel
 pm2 save
-pm2 startup        # copiá y ejecutá la línea que imprime (con sudo)
+# Arranque automático tras reiniciar el servidor (sin root: el usuario bot no tiene sudo)
+( crontab -l 2>/dev/null | grep -v pm2-resurrect; echo "@reboot sleep 20 && PATH=/usr/bin:/usr/local/bin:\$PATH pm2 resurrect # pm2-resurrect" ) | crontab -
 ```
 
 ## 5. Usar el panel (túnel SSH, el puerto 3000 no está abierto al exterior)
@@ -55,6 +56,9 @@ En tu PC:
 ssh -L 3000:localhost:3000 bot@IP_DEL_SERVIDOR
 ```
 Abrí http://localhost:3000, ingresá el `PANEL_TOKEN`, pegá un token nuevo de HaxBall (de haxball.com/headlesstoken) y encendé la sala.
+
+## Acceso root
+El login por contraseña y el de root por SSH están bloqueados a propósito. Para tareas de administrador (reiniciar el servidor, actualizar paquetes) se usa el panel del proveedor ("Reboot VPS" o su consola).
 
 ## Comandos útiles
 - Estado: `pm2 status` · Logs: `pm2 logs tld-panel` · Reiniciar el panel: `pm2 restart tld-panel`
