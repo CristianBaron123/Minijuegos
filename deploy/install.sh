@@ -20,6 +20,12 @@ echo "== 2/6  Usuario '$BOT_USER' y llave SSH =="
 if ! id "$BOT_USER" >/dev/null 2>&1; then
     adduser --disabled-password --gecos "" "$BOT_USER"
 fi
+# Si /home/bot ya existía (creado por otro proyecto, p. ej. otros bots), adduser lo deja con su dueño original y
+# el usuario no puede escribir. Se corrige SOLO la carpeta del home, sin tocar su contenido (puede ser de otros).
+if [ "$(stat -c %U "/home/$BOT_USER")" != "$BOT_USER" ]; then
+    chown "$BOT_USER:$BOT_USER" "/home/$BOT_USER"
+    echo "Aviso: /home/$BOT_USER tenía otro dueño; se corrigió solo la carpeta (su contenido no se tocó)."
+fi
 # La llave se recibe como argumento (recomendado) o se pide por teclado.
 RAW_KEY="${1:-}"
 if [ -z "$RAW_KEY" ]; then
@@ -38,6 +44,18 @@ install -d -m 700 -o "$BOT_USER" -g "$BOT_USER" "/home/$BOT_USER/.ssh"
 echo "$PUBKEY" > "/home/$BOT_USER/.ssh/authorized_keys"
 chown "$BOT_USER:$BOT_USER" "/home/$BOT_USER/.ssh/authorized_keys"
 chmod 600 "/home/$BOT_USER/.ssh/authorized_keys"
+
+# El endurecimiento desactiva el login por contraseña. Si en la VPS ya hay otros proyectos corriendo y alguien los
+# administra entrando con contraseña, quedaría sin acceso. Se pregunta antes (FORCE=1 salta la pregunta).
+OTROS="$(ps -eo cmd | grep -E '(^| )(node|pm2|PM2)( |$)' | grep -v grep | grep -v 'install.sh' | head -3 || true)"
+if [ -n "$OTROS" ] && [ "${FORCE:-0}" != "1" ]; then
+    echo
+    echo "ATENCION: ya hay otros procesos de Node/pm2 corriendo en este servidor:"
+    echo "$OTROS" | sed 's/^/   /'
+    echo "Seguir desactiva el login por contraseña (solo se podrá entrar con llave SSH o desde la consola del panel)."
+    read -r -p "¿Seguir? (s/N) " RESP
+    case "$RESP" in s|S|si|SI|sí) ;; *) echo "Cancelado: no se tocó el acceso SSH."; exit 1 ;; esac
+fi
 
 echo "== 3/6  Endureciendo SSH (solo llaves, sin root por contraseña) =="
 cat > /etc/ssh/sshd_config.d/99-hardening.conf <<'EOF'
