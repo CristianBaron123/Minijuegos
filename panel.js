@@ -231,6 +231,14 @@ async function exposeDbFunctions(page) {
         await page.exposeFunction('__dbAddBalance', async (auth, name, amount) => {
             await db.addBalance(auth, name, amount);
         });
+        // Funciones compartidas con bot.js (cuentas, VIP, advertencias, admins, XP, cobro atomico, anti-VPN).
+        // Antes faltaban en el panel y comandos como la tienda decian "no disponible".
+        {
+            const bridge = require('./lib/db-bridge')(db);
+            for (const fname of Object.keys(bridge)) {
+                try { await page.exposeFunction(fname, bridge[fname]); } catch (e) { /* ya expuesta */ }
+            }
+        }
         await page.exposeFunction('__dbAddGayCount', async (auth, name) => {
             await db.addGayCount(auth, name);
         });

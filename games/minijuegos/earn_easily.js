@@ -290,10 +290,9 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         room.onTeamGoal = function(team) {
             if (stopped) return;
             if (team === 1 || team === 2) {
-                // FIX: El mapa de EARN_EASILY tiene los goals invertidos
-                // RED spawnea izquierda pero goal "red" está a la derecha
-                // BLUE spawnea derecha pero goal "blue" está a la izquierda
-                var actualTeam = (team === 1) ? 2 : 1;
+                // Las porterías del mapa ya tienen las etiquetas correctas (se corrigieron en el .hbs): el equipo que
+                // anota es el que informa HaxBall, igual que en el marcador y en la muerte súbita.
+                var actualTeam = team;
                 scores[actualTeam]++;
                 room.sendAnnouncement('⚽ Gol del equipo ' + (actualTeam === 1 ? '🔴' : '🔵') + ' — ' + scores[1] + ' : ' + scores[2], null, 0x00FF00);
                 if (scores[actualTeam] >= goalsToWin) { stopped = true; cleanupAndResolve(actualTeam); }

@@ -271,6 +271,42 @@ function helpSection(pid, emoji, title, lines, color) {
     );
 }
 
+// Ayuda del VIP: beneficios, comandos y cómo conseguirlo (!vip, !viphelp, !helpvip)
+function sendVipHelp(player) {
+    var pid = player.id;
+    var BOX = '══════════════════════════';
+    room.sendAnnouncement('╔' + BOX + '╗\n      💎 ' + formatText('SISTEMA VIP') + '\n╚' + BOX + '╝', pid, 0xFFD700, 'bold', 2);
+    helpSection(pid, '🌟', 'BENEFICIOS', [
+        '+30% de dinero al ganar un minijuego',
+        'XP x' + VIP_XP_MULT + ' (x' + VIP_XP_MULT_WEEKEND + ' sábados y domingos): subís de nivel y de rango más rápido',
+        'Cooldown de tienda y casino al 50%',
+        'Límite diario de ganancias de $' + DAILY_CAP_VIP.toLocaleString() + ' (los demás: $' + DAILY_CAP.toLocaleString() + ')',
+        'Inmune a los efectos negativos del Lucky',
+        '1 protección gratis por juego',
+        '!equipo [1/2] - Elegir equipo durante un juego',
+        'Etiqueta [VIP] dorada y avatares con emojis'
+    ], 0xFFD700);
+    helpSection(pid, '🎨', 'PERSONALIZACIÓN', [
+        '!vcolor <HEX> - Color de tus mensajes | !vstyle <bold|italic|small|normal>',
+        '!badges 👑💎🔥 - Hasta 3 emojis antes de tu nombre',
+        '!prefijo <texto> - Tu tag (máx. 8 caracteres)',
+        '!setentry <frase> - Mensaje al entrar | !entradatono <0-2> - Sonido',
+        '!vreset - Volver a lo normal'
+    ], 0xFF69B4);
+    helpSection(pid, '✨', 'EFECTOS', [
+        '!animaciongol <1-3> - Fuego, dinero o estrellas al anotar',
+        '!animacion <1-5> - Aura que cambia tu avatar',
+        '!announce <mensaje> - Anuncio destacado para toda la sala',
+        '!xp - Ver tu nivel, XP y multiplicador'
+    ], 0x00BFFF);
+    if (isVipAuth(getAuth(player))) {
+        room.sendAnnouncement('✅ ' + formatText('Tenés VIP activo. ¡Disfrutalo!'), pid, 0x00FF00, 'bold');
+    } else {
+        room.sendAnnouncement('🔒 ' + formatText('Todavía no tenés VIP. Se consigue con dinero real: pedilo en el Discord.'), pid, 0xFF6600, 'bold');
+        room.sendAnnouncement('💬 Discord: ' + DISCORD_INVITE, pid, 0x5865F2);
+    }
+}
+
 // ============================================
 // BIENVENIDA PERSONALIZADA (un solo mensaje por jugador que entra)
 // ============================================
@@ -292,8 +328,9 @@ function sendWelcome(player) {
         var played = stats && (stats.gamesPlayed || 0) > 0;
         if (played) {
             var wins = stats.wins || 0;
-            var rank = getRankByWins(wins);
-            lines.push('🏅 ' + rank.label + ' · 🏆 ' + wins + ' victorias · ✨ Nivel ' + xpLevel(stats.xp || 0));
+            var lvl = xpLevel(stats.xp || 0);
+            var rank = getRankByLevel(lvl);
+            lines.push('🏅 ' + rank.label + ' · 🏆 ' + wins + ' victorias · ✨ Nivel ' + lvl);
             lines.push('💰 Saldo: ' + formatMoney(stats.balance || 0));
         } else {
             lines.push('🌱 ¡Primera vez por acá! Jugá un minijuego para ganar dinero y XP.');
@@ -395,11 +432,11 @@ function xpMultiplier(auth) {
 }
 
 function xpLevel(xp) {
-    return Math.floor(Math.sqrt((xp || 0) / 100)) + 1;
+    return Math.floor((xp || 0) / XP_PER_LEVEL) + 1;
 }
 
 function xpForLevel(level) {
-    return (level - 1) * (level - 1) * 100;
+    return (level - 1) * XP_PER_LEVEL;
 }
 
 // Texto libre del jugador: sin links, sin saltos de línea y con largo máximo
@@ -437,7 +474,12 @@ function giveXP(auth, name, playerId, base) {
     try { window.__dbIncStat(auth, name, 'xp', amount); } catch(e) {}
     var lvBefore = xpLevel(before), lvAfter = xpLevel(after);
     if (lvAfter > lvBefore) {
-        room.sendAnnouncement('🆙 ' + name + ' subió al nivel ' + lvAfter + '!', null, 0x00FFAA, 'bold');
+        var rkBefore = getRankByLevel(lvBefore), rkAfter = getRankByLevel(lvAfter);
+        if (rkBefore.label !== rkAfter.label) {
+            room.sendAnnouncement('🎖️ ' + name + ' SUBIÓ DE RANGO!\n' + rkBefore.label + ' → ' + rkAfter.label + ' (nivel ' + lvAfter + ')', null, rkAfter.color, 'bold', 2);
+        } else if (playerId != null) {
+            room.sendAnnouncement('🆙 Subiste al nivel ' + lvAfter + ' · ' + rkAfter.label, playerId, 0x00FFAA, 'bold');
+        }
     }
     if (mult > 1 && playerId != null) {
         room.sendAnnouncement('✨ +' + amount + ' XP (x' + mult + ' VIP' + (isWeekend() ? ' · fin de semana' : '') + ')', playerId, 0xFFD700);
@@ -507,7 +549,7 @@ function handleVipPerk(player, auth, message) {
             var xp = botState.xpCache[auth] || 0;
             var lv = xpLevel(xp);
             var mult = xpMultiplier(auth);
-            say('✨ Nivel ' + lv + ' · ' + xp.toLocaleString() + ' XP\n' +
+            say('✨ Nivel ' + lv + ' · ' + xp.toLocaleString() + ' XP · ' + getRankByLevel(lv).label + '\n' +
                 '📈 Próximo nivel (' + (lv + 1) + ') en ' + (xpForLevel(lv + 1) - xp).toLocaleString() + ' XP\n' +
                 '⚡ Multiplicador: x' + mult + (isVipAuth(auth) ? ' (VIP' + (isWeekend() ? ' · fin de semana' : '') + ')' : ' — con !vip llegás a x' + VIP_XP_MULT) + '\n' +
                 '💵 Ganancias de hoy: $' + dailyEntry(auth).amount.toLocaleString() + ' / $' + dailyCapFor(auth).toLocaleString(), 0x00FFAA);
@@ -712,30 +754,50 @@ var PERMA_BANNED_AUTHS = ["TSR_VIyn25T3PGuLRDLttjqS_2QXtLZVBCY7XkmTYpc", "ex4yje
 var CREATOR_AUTHS = [OWNER_AUTH, "MiWy-TJIU1FKLgsUzYQPzXHFwoXRKCbvZSFhmcCiqyU"];
 
 // Sistema de rangos por victorias (de mayor a menor para buscar el más alto primero)
-var RANK_TIERS = [
-    { min: 1000, label: '🏆[INMORTAL]',     color: 0xFFD700 },
-    { min: 750,  label: '💎[DIVINO]',       color: 0x00FFFF },
-    { min: 500,  label: '👑[SUPREMO]',      color: 0xFFD700 },
-    { min: 350,  label: '⚡[CELESTIAL]',    color: 0xE6E6FA },
-    { min: 250,  label: '🔥[TITAN]',        color: 0xFF0000 },
-    { min: 180,  label: '🔥[MITICO]',       color: 0xFF4500 },
-    { min: 130,  label: '🔥[LEYENDA]',      color: 0xFF6600 },
-    { min: 90,   label: '🟪[GRAN MAESTRO]', color: 0x9400D3 },
-    { min: 65,   label: '🟪[MAESTRO]',      color: 0xA020F0 },
-    { min: 45,   label: '🟪[ELITE]',        color: 0xBA55D3 },
-    { min: 30,   label: '🟦[EXPERTO]',      color: 0x1E90FF },
-    { min: 20,   label: '🟦[VETERANO]',     color: 0x4169E1 },
-    { min: 12,   label: '🟦[COMPETIDOR]',   color: 0x6495ED },
-    { min: 7,    label: '🟫[JUGADOR]',      color: 0xCD853F },
-    { min: 3,    label: '🟫[APRENDIZ]',     color: 0xDEB887 },
-    { min: 0,    label: '🟫[NOVATO]',       color: 0xD2B48C }
+// ============================================
+// RANGOS por NIVEL de XP (cada victoria da XP; el nivel sube con la XP)
+// ============================================
+var XP_PER_LEVEL = 100;   // 100 XP = 1 nivel (una victoria = 100 XP, jugar un juego = 20 XP; el VIP gana x2.5)
+var RANKS = [
+    { name: "Diamantico", emoji: "🔹", level: 1, color: 0x63B0F8 },
+    { name: "Diamantico II", emoji: "💠", level: 5, color: 0x0B83F4 },
+    { name: "Diamante I", emoji: "💎", level: 20, color: 0xEBFF00 },
+    { name: "Diamante II", emoji: "💎", level: 40, color: 0xE7F736 },
+    { name: "Promesa Diamonds I", emoji: "🪩", level: 60, color: 0xFFFFFF },
+    { name: "Promesa Diamonds II", emoji: "🪩", level: 80, color: 0xFFFFFF },
+    { name: "Principe Diamonds I", emoji: "🤴🏻", level: 100, color: 0x0008B0 },
+    { name: "Principe Diamonds II", emoji: "🤴🏻", level: 120, color: 0x0008B0 },
+    { name: "Heredero Diamonds I", emoji: "💍", level: 140, color: 0xEEFF00 },
+    { name: "Heredero Diamonds II", emoji: "💍", level: 160, color: 0xEEFF00 },
+    { name: "Rey Diamonds I", emoji: "👑", level: 180, color: 0x00FFF3 },
+    { name: "Rey Diamonds II", emoji: "👑", level: 200, color: 0x00FFF3 },
+    { name: "Rey Zafiro I", emoji: "🧿", level: 230, color: 0x00A6FF },
+    { name: "Rey Zafiro II", emoji: "🧿", level: 260, color: 0x00A6FF },
+    { name: "Alien", emoji: "👽", level: 300, color: 0x00FF96 },
+    { name: "Prime", emoji: "🌀", level: 400, color: 0xA1F7FF },
+    { name: "Leyenda", emoji: "⚜️", level: 500, color: 0x9CD7EC },
+    { name: "Rubi", emoji: "📿", level: 700, color: 0xEB9CEC },
+    { name: "Maestro", emoji: "🚀", level: 950, color: 0xF4CBF5 },
+    { name: "Patron", emoji: "🚬", level: 1050, color: 0x000000 },
+    { name: "Inmortal", emoji: "🧬", level: 1150, color: 0x3BD417 },
+    { name: "Supremo", emoji: "🛸", level: 1250, color: 0x77FF5C },
+    { name: "Mítico", emoji: "👾", level: 1350, color: 0x160075 },
+    { name: "Leyenda Suprema", emoji: "⚡", level: 1450, color: 0x160075 },
+    { name: "Dios", emoji: "⚖️", level: 1550, color: 0x0091FF },
+    { name: "Sabio", emoji: "🧘", level: 1700, color: 0xFFF15C },
+    { name: "Celestial", emoji: "☢️", level: 1850, color: 0xFF5C5C },
+    { name: "Aura", emoji: "🎐", level: 2000, color: 0xD10000 },
+    { name: "The Goat Diamonds", emoji: "♾️", level: 3000, color: 0x2E8CFF }
 ];
 
-function getRankByWins(wins) {
+// Misma forma que antes (min = nivel mínimo) para no tocar el resto del código; ordenado de mayor a menor
+var RANK_TIERS = RANKS.slice().reverse().map(function(r) {
+    return { min: r.level, label: r.emoji + '[' + r.name + ']', color: r.color, name: r.name };
+});
+
+function getRankByLevel(level) {
     for (var i = 0; i < RANK_TIERS.length; i++) {
-        if (wins >= RANK_TIERS[i].min) {
-            return RANK_TIERS[i];
-        }
+        if (level >= RANK_TIERS[i].min) return RANK_TIERS[i];
     }
     return RANK_TIERS[RANK_TIERS.length - 1];
 }
@@ -793,6 +855,17 @@ function isPlayerAfk(playerId) {
     return !!(pAuth && botState.afkProtected[pAuth]);
 }
 
+// Mientras hay un juego en curso, los jugadores en modo !afk no aparecen en getPlayerList():
+// ningún minijuego los filtraba y los habría contado como participantes.
+(function() {
+    var rawGetPlayerList = room.getPlayerList.bind(room);
+    room.getPlayerList = function() {
+        var list = rawGetPlayerList();
+        if (!botState.gameActive) return list;
+        return list.filter(function(p) { return p.id === 0 || !isPlayerAfk(p.id); });
+    };
+})();
+
 function getPlayerTag(player) {
     var auth = getAuth(player);
     var protPrefix = (auth && botState.protectionActive[auth]) ? '🛡️' : '';
@@ -838,9 +911,8 @@ function getPlayerTag(player) {
     if (auth && botState.winStreaks[auth] >= 2) {
         return { label: protPrefix + '[' + formatText('MVP') + ']' + clanSuffix, color: 0xFFD700 };
     }
-    // Sistema de rangos por victorias
-    var wins = (auth && botState.winsCache[auth]) ? botState.winsCache[auth] : 0;
-    var rank = getRankByWins(wins);
+    // Sistema de rangos por nivel de XP
+    var rank = getRankByLevel(xpLevel((auth && botState.xpCache[auth]) || 0));
     return { label: protPrefix + rank.label + clanSuffix, color: rank.color };
 }
 
@@ -1538,6 +1610,12 @@ function getFinaleModules() {
     if (typeof SURVIVOR_VOL17 !== 'undefined') list.push(SURVIVOR_VOL17);
     return list;
 }
+
+// Juegos de equipos que NECESITAN cantidad par: con una cantidad impar sacan a alguien a espectador.
+// Cuando hay un número impar de jugadores se eligen otros juegos para que nadie quede sin jugar.
+var EVEN_ONLY_GAMES = ['AMERICAN_CARRYBALL', 'BOOMERANG_LEAGUE', 'CAPTURE_THE_FLAG', 'DODGEBALL_V2', 'EARN_EASILY',
+    'FUTBOL_CALLEJERO', 'KAFA_TOPU', 'KAFA_TOPU_SHADOW', 'PLUM', 'SHAOLIN_SOCCER', 'SPACEBOUNCE_POWER',
+    'SUPER_GRAVEDAD', 'TANK_WAR', 'ULTRABALL', 'WAR_CONQUEST', 'XD_GOALS'];
 
 // Avisa a los juegos activos (normales y finales) que un jugador se fue del juego
 function notifyModulesPlayerLeft(player) {
@@ -2269,19 +2347,8 @@ function loadLuckyMap(winner) {
     if (winnerAuth && typeof window.__dbSaveWin === 'function') {
         try { window.__dbSaveWin(winnerAuth, winner.name, botState.currentMinigame || 'UNKNOWN'); } catch(e) {}
         try { if (typeof window.__dbAddClanWin === 'function') window.__dbAddClanWin(winnerAuth); } catch(e) {}
-        var oldWins = botState.winsCache[winnerAuth] || 0;
-        var newWins = oldWins + 1;
-        botState.winsCache[winnerAuth] = newWins;
-        // Verificar si subió de rango
-        var oldRank = getRankByWins(oldWins);
-        var newRank = getRankByWins(newWins);
-        if (oldRank.label !== newRank.label) {
-                room.sendAnnouncement(
-                    "🎖️ " + formatText(winner.name) + " SUBIO DE RANGO!\n" +
-                    formatText(oldRank.label) + " → " + formatText(newRank.label),
-                    null, newRank.color, "bold", 2
-                );
-        }
+        botState.winsCache[winnerAuth] = (botState.winsCache[winnerAuth] || 0) + 1;
+        // (la subida de rango ahora la anuncia giveXP, porque el rango depende del nivel de XP)
     }
 
     // Sistema de rachas
@@ -2663,7 +2730,7 @@ function checkAndStart() {
         botState.startTimeout = null;
     }
     
-    var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
+    var playerCount = room.getPlayerList().filter(p => p.id !== 0 && !isPlayerAfk(p.id)).length;
     
     if (playerCount < 2) {
         room.sendAnnouncement(
@@ -2831,6 +2898,7 @@ function checkAndStart() {
         // Filtrar minijuegos que NO se pueden jugar por cantidad de jugadores
         function filterByPlayerCount(gameList) {
             return gameList.filter(function(game) {
+                if (playerCount > 2 && (playerCount % 2) === 1 && EVEN_ONLY_GAMES.indexOf(game.name) !== -1) return false;
                 if (game.name === 'DODGEBALL' && playerCount < 3) return false;
                 if (game.name === 'CHAIRMIX' && playerCount < 8) return false;
                 if (game.name === 'SURVIVAL' && playerCount > 21) return false;
@@ -2906,6 +2974,7 @@ function checkAndStart() {
             if (available.length === 0) {
                 available = filterByPlayerCount(minigames);
             }
+            if (available.length === 0) available = minigames.slice();
             selectedGame = available[Math.floor(Math.random() * available.length)];
             // Resetear la bolsa
             botState.minigameBag = [];
@@ -3027,12 +3096,12 @@ var soloMessages = [
     "💡 Si llevas racha de victorias, ganas bonus extra!",
     "💡 Usa !top para ver a los mejores jugadores!",
     "💡 Hay " + minigameModules.length + " minijuegos diferentes en esta sala!",
-    "💡 Los rangos van desde Novato hasta Titan!",
+    "💡 Los rangos van desde Diamantico hasta The Goat Diamonds. ¡Subís de nivel con XP!",
     "💡 Puedes transferir dinero a otros con !pasar!",
     "💡 Si necesitas un admin usa !calladmin!",
     "🎮 Invita a tus amigos! Más jugadores = más diversión!",
     "⏳ La sala se pone buena con más gente... ¡Comparte el link!",
-    "🏆 El rango más alto es TITAN (201+ victorias). ¿Llegarás?",
+    "🏆 El rango más alto es The Goat Diamonds (nivel 3000). ¿Llegarás?",
     "🔥 Las rachas te dan etiqueta [MVP] y bonus de dinero!",
     "💰 Por cada minijuego que juegues ganas dinero y XP de participación!",
     "⚡ Cada minijuego es diferente: supervivencia, carreras, trivia y más!"
@@ -3060,7 +3129,7 @@ function startSoloEntertainment() {
         var p = players[0];
         var pAuth = getAuth(p);
         var wins = (pAuth && botState.winsCache[pAuth]) ? botState.winsCache[pAuth] : 0;
-        var rank = getRankByWins(wins);
+        var rank = getRankByLevel(xpLevel((pAuth && botState.xpCache[pAuth]) || 0));
 
         // Alternar entre mensaje random y stats personales
         if (_soloMsgIndex % 3 === 0 && pAuth) {
@@ -3373,7 +3442,7 @@ room.onPlayerJoin = function(player) {
     }
     
     if (!botState.startTimeout) {
-        var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
+        var playerCount = room.getPlayerList().filter(p => p.id !== 0 && !isPlayerAfk(p.id)).length;
         if (playerCount >= 2) {
             stopSoloEntertainment();
             room.sendAnnouncement(
@@ -3428,6 +3497,7 @@ room.onPlayerLeave = function(player) {
     // frozen/ghost/inversiones. Si se leía botState.authMap[player.id] después
     // del delete, era undefined y esa limpieza nunca corría (estado pegado).
     var _leftAuth = botState.authMap[player.id];
+    if (botState.authMap[player.id]) delete botState.afkProtected[botState.authMap[player.id]];
     delete botState.authMap[player.id];
 
     // Notificar a los módulos activos (normales y finales 1v1) sobre la salida del jugador
@@ -3464,7 +3534,7 @@ room.onPlayerLeave = function(player) {
         delete botState.inversiones[_leftAuth];
     }
 
-    var playerCount = room.getPlayerList().filter(p => p.id !== 0).length;
+    var playerCount = room.getPlayerList().filter(p => p.id !== 0 && !isPlayerAfk(p.id)).length;
     if (playerCount < 2 && botState.gameActive) {
         room.sendAnnouncement(
             "⏸️ Solo queda 1 jugador. Deteniendo juego...",
@@ -3648,6 +3718,7 @@ room.onPlayerChat = function(player, message) {
                     if (typeof window.__dbGetStats === 'function') {
                         window.__dbGetStats(pauth).then(function(stats) {
                             if (stats && stats.wins) botState.winsCache[pauth] = stats.wins;
+                            if (stats && stats.xp != null) botState.xpCache[pauth] = stats.xp;
                             if (stats && stats.clanTag) botState.clanTags[pauth] = stats.clanTag;
                         }).catch(function(){});
                     }
@@ -5406,12 +5477,13 @@ room.onPlayerChat = function(player, message) {
             window.__dbGetStats(playerAuth).then(function(stats) {
                 if (stats) {
                     var playerWins = stats.wins || 0;
-                    var playerRank = getRankByWins(playerWins);
-                    // Buscar siguiente rango
-                    var nextRankMsg = "";
+                    var playerLevel = xpLevel(stats.xp || 0);
+                    var playerRank = getRankByLevel(playerLevel);
+                    // Nivel y siguiente rango
+                    var nextRankMsg = "\n✨ Nivel " + playerLevel + " (" + (stats.xp || 0) + " XP)";
                     for (var ri = RANK_TIERS.length - 1; ri >= 0; ri--) {
-                        if (RANK_TIERS[ri].min > playerWins) {
-                            nextRankMsg = "\n📈 Siguiente: " + RANK_TIERS[ri].label + " (" + (RANK_TIERS[ri].min - playerWins) + " victorias más)";
+                        if (RANK_TIERS[ri].min > playerLevel) {
+                            nextRankMsg += "\n📈 Siguiente: " + RANK_TIERS[ri].label + " (" + (RANK_TIERS[ri].min - playerLevel) + " niveles más)";
                             break;
                         }
                     }
@@ -5563,10 +5635,6 @@ room.onPlayerChat = function(player, message) {
         room.sendAnnouncement('🏓 pong', player.id, 0x00FF00);
         return false;
     }
-    if (message === '!viphelp') {
-        room.sendAnnouncement('💎 VIP — beneficios:\n  • +30% de dinero al ganar\n  • Cooldown de tienda y casino al 50%\n  • Inmune a efectos negativos del Lucky\n  • 1 protección gratis por juego\n  • !equipo [1/2] para elegir equipo\nTu estado: ' + (getVIPLevel({ auth: playerAuth }) >= 1 ? 'VIP ✅' : 'sin VIP (!vip comprar, $20.000)'), player.id, 0xFFD700);
-        return false;
-    }
     if (message.startsWith('!sugerencia') || message.startsWith('!sugerir')) {
         var sgText = message.replace(/^!sugerencia\s*/i, '').replace(/^!sugerir\s*/i, '').trim();
         if (!sgText) { room.sendAnnouncement('📝 Usa: !sugerencia <tu idea>', player.id, 0xFFFF00); return false; }
@@ -5579,7 +5647,17 @@ room.onPlayerChat = function(player, message) {
 
     // Comando !afk - proteger de ser movido a equipos (solo espectadores)
     if (message === "!afk") {
-        room.sendAnnouncement('⚠️ El comando !afk fue desactivado.', player.id, 0xFF6600);
+        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu cuenta.', player.id, 0xFF6600); return false; }
+        if (botState.afkProtected[playerAuth]) {
+            delete botState.afkProtected[playerAuth];
+            botState.afkLastActivity[player.id] = Date.now();
+            room.sendAnnouncement('✅ Saliste del modo AFK. Entrás en el próximo juego.', player.id, 0x00FF00, 'bold');
+        } else {
+            botState.afkProtected[playerAuth] = true;
+            var _afkInGame = player.team !== 0 && botState.gameActive;
+            if (!_afkInGame) { try { room.setPlayerTeam(player.id, 0); } catch(e) {} }
+            room.sendAnnouncement('💤 Modo AFK activado: no te meten en los juegos ni te kickean por inactividad' + (_afkInGame ? ' (salís al terminar el juego actual)' : '') + '.\nEscribí !afk de nuevo para volver.', player.id, 0xFFFF00, 'bold');
+        }
         return false;
     }
 
@@ -5642,7 +5720,7 @@ room.onPlayerChat = function(player, message) {
             '!stats / !me | !balance | !wins | !games | !rank'
         ], 0x00FF99);
         helpSection(player.id, '💎', 'VIP', [
-            '!vip - Ver beneficios | !vip comprar - Comprar VIP',
+            '!vip / !helpvip - Beneficios, comandos y cómo conseguirlo',
             '!vcolor <HEX> | !vstyle <estilo> | !badges 👑💎🔥 | !prefijo <texto>',
             '!setentry <frase> | !entradatono <0-2> | !vreset',
             '!animaciongol <1-3> | !animacion <1-5> | !announce <mensaje>',
@@ -5651,6 +5729,7 @@ room.onPlayerChat = function(player, message) {
         helpSection(player.id, 'ℹ️', 'OTROS', [
             '!miauth - Ver tu token | !discord - Link de Discord',
             '!version - Versión del bot | !proteccion - Protección contra bans',
+            '!afk - Modo AFK: no te meten en los juegos (!afk otra vez para volver)',
             '!impuesto - Cobrar impuestos (admin+)'
         ], 0xAAAAAA);
 
@@ -5712,6 +5791,14 @@ room.onPlayerChat = function(player, message) {
             var clanName = clanParts.slice(2).join(' ');
             if (!clanTag || !clanName) {
                 room.sendAnnouncement('⚠️ Uso: !clan crear [TAG] [NOMBRE]\nEjemplo: !clan crear PRO ProTeam', player.id, 0xFF6600);
+                return false;
+            }
+            if (!/^[A-Za-z0-9]{2,5}$/.test(clanTag)) {
+                room.sendAnnouncement('⚠️ El TAG del clan debe tener de 2 a 5 letras o números, sin símbolos ni emojis.\nEjemplo: !clan crear PRO ProTeam', player.id, 0xFF6600);
+                return false;
+            }
+            if (!/^[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ _-]{3,20}$/.test(clanName)) {
+                room.sendAnnouncement('⚠️ El NOMBRE del clan debe tener de 3 a 20 caracteres (letras, números, espacios, - o _), sin símbolos ni emojis.', player.id, 0xFF6600);
                 return false;
             }
             (function(pid, pname, pauth, ctag, cname) {
@@ -5916,16 +6003,14 @@ room.onPlayerChat = function(player, message) {
             '  !doble ··· $7.000 - x2 recompensa si ganas\n\n' +
             '🛡️ LUCKY:\n' +
             '  !proteccion ··· $15.000 - Inmunidad en Lucky\n' +
-            '  !robarlucky ··· $30.000 - Robar Lucky del ganador\n' +
-            '  !forzarhell #ID ··· $30.000 - Forzar Lucky Hell\n\n' +
+            '  !robarlucky ··· $30.000 - Robar Lucky del ganador\n\n' +
             '👊 CONTRA JUGADORES:\n' +
             '  !espectador #ID ··· $8.000 - Forzar espectador\n' +
             '  !silenciar #ID ··· $5.000 - Mutear 2 min\n' +
             '  !cambio #ID ··· $20.000 - Cambiar posicion (10min cd)\n' +
             '  !invertir #ID ··· $18.000 - Invertir controles 10s\n' +
             '  !theworld ··· $30.000 - Congelar a todos 4s\n' +
-            '  !bitesthedust ··· $35.000 - Reiniciar ronda actual\n' +
-            '  !forzarhell #ID ··· $30.000 - Forzar Lucky Hell (30min cd global)\n\n' +
+            '  !bitesthedust ··· $35.000 - Reiniciar ronda actual\n\n' +
             '🎰 APUESTAS:\n' +
             '  !ruleta [monto] [rojo/negro/0] - Casino\n' +
             '  !rifa [monto] - Adivina 1-10\n' +
@@ -5961,53 +6046,14 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
-    if (message === '!vip') {
-        if (getVIPLevel(player) >= 1) {
-            room.sendAnnouncement(
-                '🥇 Eres VIP\n\n' +
-                'Beneficios activos:\n' +
-                '  +30% extra de dinero al ganar\n' +
-                '  Cooldown de tienda y casino al 50%\n' +
-                '  Inmunidad total a efectos negativos del Lucky\n' +
-                '  1 protección gratis por juego\n' +
-                '  Elegir equipo con !equipo [1/2]\n' +
-                '  Avatares con emojis y etiqueta [VIP] dorada\n' +
-                '  Personalización: !vcolor !vstyle !badges !prefijo !setentry !entradatono\n' +
-                '  Efectos: !animaciongol !animacion !announce\n' +
-                '  XP x2.5 (x5 sábados y domingos): !xp',
-                player.id, 0xFFD700
-            );
-        } else {
-            room.sendAnnouncement(
-                '🎖️ SISTEMA VIP 🎖️\n\n' +
-                'Beneficios VIP ($' + VIP_PRICE.toLocaleString() + '):\n' +
-                '  +30% extra de dinero al ganar\n' +
-                '  Cooldown de tienda y casino al 50%\n' +
-                '  Inmunidad total a efectos negativos del Lucky\n' +
-                '  1 protección gratis por juego\n' +
-                '  Elegir equipo con !equipo [1/2]\n' +
-                '  Avatares con emojis y etiqueta [VIP] dorada\n' +
-                '  Personalización: !vcolor !vstyle !badges !prefijo !setentry !entradatono\n' +
-                '  Efectos: !animaciongol !animacion !announce\n' +
-                '  XP x2.5 (x5 sábados y domingos): !xp\n\n' +
-                'Comandos:\n' +
-                '  !vip comprar - Comprar VIP ($' + VIP_PRICE.toLocaleString() + ')\n' +
-                '  !topvip - Cantidad de jugadores VIP',
-                player.id, 0xFFD700
-            );
-        }
+    if (message === '!vip' || message === '!viphelp' || message === '!helpvip') {
+        sendVipHelp(player);
         return false;
     }
 
     if (message === '!vip comprar') {
-        var playerAuth = getAuth(player);
-        if (!playerAuth) { room.sendAnnouncement('⚠️ No se pudo verificar tu identidad', player.id, 0xFF6600); return false; }
-        if (getVIPLevel(player) >= 1) { room.sendAnnouncement('⚠️ Ya eres VIP', player.id, 0xFF6600); return false; }
-        shopBuy(playerAuth, player.name, player.id, VIP_PRICE, '!vip comprar', 0, function() {
-            if (VIP_AUTHS.indexOf(playerAuth) === -1) VIP_AUTHS.push(playerAuth);
-            if (typeof window.__dbSetVip === 'function') window.__dbSetVip(playerAuth, player.name, true);
-            room.sendAnnouncement('🥇 ' + formatText(player.name) + ' ahora es VIP! (+30% bonus y más beneficios)', null, 0xFFD700, 'bold', 2);
-        });
+        room.sendAnnouncement('💎 El VIP se compra con DINERO REAL, no con dinero del juego.', player.id, 0xFFD700, 'bold');
+        room.sendAnnouncement('💬 Pedilo en el Discord: ' + DISCORD_INVITE, player.id, 0x5865F2);
         return false;
     }
 
