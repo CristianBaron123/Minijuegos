@@ -214,12 +214,9 @@ const LUCKY_DIOS = (function() {
             return;
         }
 
-        // Pausar juego durante explicación y mover currentPlayer a espectador para evitar solapamientos
-        room.pauseGame(true);
-        try { lockTeamChanges(); } catch(e) {}
-        if (gameState.currentPlayer) {
-            try { room.setPlayerTeam(gameState.currentPlayer.id, 0); } catch(e) {}
-        }
+        // NO se pausa el juego, no se bloquean los equipos ni se mueve al ganador a espectador durante la
+        // selección: esa combinación hacía que a los jugadores les saliera "Bad actor" (el mismo problema que
+        // se corrigió en Lucky HELL, commit be1b6ea).
 
         var purpose = "";
         switch(effectType) {
@@ -241,7 +238,6 @@ const LUCKY_DIOS = (function() {
 
         setTimeout(function() {
             gameState.selection.explanation = false;
-            room.pauseGame(false);
             room.sendAnnouncement("⏱️ ¡AHORA! Escribe el NÚMERO (" + (config.selectionTimeout/1000) + " segundos)", null, 0x00FF00, "bold", 2);
 
             gameState.selection.reminderTimeout = setTimeout(function() {
@@ -267,16 +263,6 @@ const LUCKY_DIOS = (function() {
         gameState.selection.playerList = [];
         if (gameState.selection.timeout) { clearTimeout(gameState.selection.timeout); gameState.selection.timeout = null; }
         if (gameState.selection.reminderTimeout) { clearTimeout(gameState.selection.reminderTimeout); gameState.selection.reminderTimeout = null; }
-        // reanudar juego y restaurar equipo del currentPlayer si existe
-        if (gameState.room) {
-            try {
-                try { unlockTeamChanges(); } catch(e) {}
-                gameState.room.pauseGame(false);
-                if (gameState.currentPlayer) {
-                    gameState.room.setPlayerTeam(gameState.currentPlayer.id, 1);
-                }
-            } catch (e) {}
-        }
     }
 
     function handleSelectionInput(room, message) {

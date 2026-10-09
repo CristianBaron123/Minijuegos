@@ -243,6 +243,10 @@ function formatKeep(text) {
     room.sendAnnouncement = function(msg, target, color, style, sound) {
         try {
             if (typeof msg !== 'string' || !msg) return rawSend(msg, target, color, style, sound);
+            // Últimos anuncios (para diagnosticar expulsiones "Bad actor")
+            var _ra = botState.recentAnnouncements = botState.recentAnnouncements || [];
+            _ra.push({ t: Date.now(), to: target == null ? 'todos' : target, text: msg.slice(0, 120) });
+            if (_ra.length > 8) _ra.shift();
             if (msg.charAt(0) === '\u200B') return rawSend(msg.slice(1), target, color, style, sound);
             if (msg.indexOf('╔') !== -1 || PROTECTED.test(msg)) return rawSend(msg, target, color, style, sound);
             var lines = msg.split('\n').filter(function(l) { return !DECOR.test(l); });
@@ -1452,6 +1456,16 @@ function unlockTeamChanges() {
 // Firma: onPlayerKicked(kickedPlayer, reason, ban, byPlayer)
 room.onPlayerKicked = function(kickedPlayer, reason, ban, byPlayer) {
     try {
+        // Expulsión "Bad actor": se deja registrado qué pasaba justo antes para encontrar el origen
+        if (/actor/i.test(String(reason || ''))) {
+            var _lc = botState.lastChat && botState.lastChat[kickedPlayer.id];
+            var _ctx = '👤 ' + kickedPlayer.name + ' | juego: ' + (botState.currentMinigame || '-') + ' (activo=' + botState.gameActive + ')' +
+                (_lc ? ' | su último mensaje (hace ' + Math.round((Date.now() - _lc.t) / 1000) + 's, ' + _lc.len + ' caracteres): ' + _lc.text : '') +
+                ' | últimos anuncios del bot: ' + (botState.recentAnnouncements || []).slice(-4).map(function(a) { return (a.to === 'todos' ? '[todos] ' : '[a ' + a.to + '] ') + a.text.replace(/\n/g, ' ').slice(0, 70); }).join(' // ');
+            console.log('🚨 BAD ACTOR: ' + _ctx);
+            try { reportBug('BAD ACTOR', _ctx); } catch(e) {}
+            try { if (typeof window.__discordWebhook === 'function') window.__discordWebhook('bugs', '🚨 **BAD ACTOR**\n' + _ctx.slice(0, 1500)); } catch(e) {}
+        }
         // Trackear kicks y bans en DB
         var kickedAuth = getAuth(kickedPlayer);
         if (kickedAuth && kickedPlayer.name) {
@@ -3498,6 +3512,7 @@ room.onPlayerLeave = function(player) {
     // del delete, era undefined y esa limpieza nunca corría (estado pegado).
     var _leftAuth = botState.authMap[player.id];
     if (botState.authMap[player.id]) delete botState.afkProtected[botState.authMap[player.id]];
+    if (botState.lastChat) delete botState.lastChat[player.id];
     delete botState.authMap[player.id];
 
     // Notificar a los módulos activos (normales y finales 1v1) sobre la salida del jugador
@@ -3664,6 +3679,12 @@ room.onPlayerChat = function(player, message) {
 
     // Resolver auth (no disponible en onPlayerChat, usar authMap)
     var playerAuth = getAuth(player);
+    // Último mensaje de cada jugador (para diagnosticar expulsiones "Bad actor"); sin contraseñas
+    botState.lastChat = botState.lastChat || {};
+    botState.lastChat[player.id] = {
+        text: /^!(login|loguear|registrar|register)\b/i.test(String(message).trim()) ? String(message).trim().split(/\s+/)[0] + ' <oculto>' : String(message).slice(0, 140),
+        t: Date.now(), len: String(message).length
+    };
     // El staff (creadores, mods y admins) puede escribir aunque el chat esté pausado
     var _isStaffChat = !!playerAuth && (CREATOR_AUTHS.indexOf(playerAuth) !== -1 || MODERATOR_AUTHS.indexOf(playerAuth) !== -1 || isAnyAdmin(playerAuth));
 
