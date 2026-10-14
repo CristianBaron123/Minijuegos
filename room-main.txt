@@ -299,6 +299,7 @@ var HELP_DB = [
     ['GENERAL', 'afk', [], '!afk', 'Modo AFK: no te meten en los juegos ni te kickean por inactividad. Escríbelo otra vez para volver.', ''],
     ['GENERAL', 'calladmin', [], '!calladmin [razón]', 'Llama a un admin.', ''],
     ['GENERAL', 'mutes', [], '!mutes', 'Muestra la lista de jugadores silenciados.', ''],
+    ['GENERAL', 'afks', [], '!afks', 'Muestra quién está en modo AFK.', ''],
     ['GENERAL', 'report', [], '!report #ID [razón]', 'Reporta a un jugador.', ''],
     ['GENERAL', 'bug', [], '!bug [descripción]', 'Reporta un bug.', ''],
     ['GENERAL', 'fix', [], '!fix', 'Vota para reiniciar si hay un bug.', ''],
@@ -342,7 +343,7 @@ var HELP_DB = [
     ['ECONOMY', 'saldo', ['dinero', 'balance', 'bal', 'money'], '!saldo', 'Muestra tu dinero.', ''],
     ['ECONOMY', 'trabajar', ['work'], '!trabajar', 'Gana dinero (cooldown 10 min).', ''],
     ['ECONOMY', 'diario', ['daily'], '!diario', 'Recompensa diaria (racha de 7 días).', ''],
-    ['ECONOMY', 'pasar', [], '!pasar #ID MONTO', 'Transfiere dinero a otro jugador.', ''],
+    ['ECONOMY', 'pasar', ['dar'], '!pasar #ID MONTO', 'Transfiere dinero a otro jugador.', ''],
     ['ECONOMY', 'tienda', ['shop'], '!tienda', 'Muestra la tienda.', ''],
     ['ECONOMY', 'inversion', [], '!inversion MONTO', 'Invierte dinero: madura en 5 juegos (puedes perder todo o ganar hasta x4).', ''],
     ['ECONOMY', 'impuesto', [], '!impuesto', 'Cobra impuestos a los demás jugadores (cuesta dinero, con cooldown).', ''],
@@ -382,6 +383,10 @@ var HELP_DB = [
     ['MINIJUEGOS', 'theworld', [], '!theworld', 'Pausa el minijuego.', ''],
     ['MINIJUEGOS', 'bitesthedust', [], '!bitesthedust', 'Elimina a un jugador.', ''],
     // SPECIAL
+    ['SPECIAL', 'roll', [], '!roll [2-1000000]', 'Tira un dado (por defecto del 1 al 100). Lo ve toda la sala.', ''],
+    ['SPECIAL', 'flip', [], '!flip', 'Cara o cruz. Lo ve toda la sala.', ''],
+    ['SPECIAL', '8ball', [], '!8ball <pregunta>', 'La bola mágica responde tu pregunta.', ''],
+    ['SPECIAL', 'hug', [], '!hug #ID', 'Le das un abrazo a otro jugador.', ''],
     ['SPECIAL', 'bot', [], '!bot', 'Información del bot.', ''],
     ['SPECIAL', 'ping', [], '!ping', 'Responde pong.', ''],
     ['SPECIAL', 'sugerencia', ['sugerir'], '!sugerencia <idea>', 'Envía una sugerencia al staff.', ''],
@@ -5850,6 +5855,52 @@ room.onPlayerChat = function(player, message) {
     }
     if (message === '!ping') {
         room.sendAnnouncement('🏓 pong', player.id, 0x00FF00);
+        return false;
+    }
+    // Comandos de diversion: !roll !flip !8ball !hug (cooldown de 3s por jugador para no llenar el chat)
+    var _funM = /^!(roll|flip|8ball|hug)(?:\s+(.*))?$/i.exec(String(message).trim());
+    if (_funM) {
+        botState.funCd = botState.funCd || {};
+        var _funNow = Date.now();
+        if (_funNow - (botState.funCd[player.id] || 0) < 3000) {
+            room.sendAnnouncement('⏳ Espera unos segundos.', player.id, 0xFF6600);
+            return false;
+        }
+        var _funCmd = _funM[1].toLowerCase();
+        var _funArg = (_funM[2] || '').trim();
+        if (_funCmd === 'roll') {
+            var _rollMax = _funArg ? parseInt(_funArg, 10) : 100;
+            if (isNaN(_rollMax) || _rollMax < 2 || _rollMax > 1000000) {
+                room.sendAnnouncement('⚠️ Usa: !roll [2-1000000]  (por defecto 100)', player.id, 0xFFFF00);
+                return false;
+            }
+            botState.funCd[player.id] = _funNow;
+            room.sendAnnouncement('🎲 ' + player.name + ' sacó ' + (1 + Math.floor(Math.random() * _rollMax)) + ' (1-' + _rollMax + ')', null, 0x00BFFF, 'bold');
+        } else if (_funCmd === 'flip') {
+            botState.funCd[player.id] = _funNow;
+            room.sendAnnouncement('🪙 ' + player.name + ': ' + (Math.random() < 0.5 ? 'CARA' : 'CRUZ'), null, 0xFFD700, 'bold');
+        } else if (_funCmd === '8ball') {
+            if (!_funArg) { room.sendAnnouncement('🎱 Usa: !8ball <pregunta>', player.id, 0xFFFF00); return false; }
+            var _balls = ['Sí, seguro.', 'Sin duda.', 'Todo apunta a que sí.', 'Probablemente.', 'No lo tengo claro, pregunta de nuevo.',
+                'Mejor no te lo digo ahora.', 'No cuentes con ello.', 'Mi respuesta es no.', 'Lo dudo mucho.', 'Ni lo sueñes.'];
+            botState.funCd[player.id] = _funNow;
+            room.sendAnnouncement('🎱 ' + player.name + ' preguntó: ' + _funArg.slice(0, 80) + '\n🎱 ' + _balls[Math.floor(Math.random() * _balls.length)], null, 0x9966FF, 'bold');
+        } else if (_funCmd === 'hug') {
+            var _hugId = parseInt(_funArg.replace('#', ''), 10);
+            var _hugTarget = isNaN(_hugId) ? null : room.getPlayerList().filter(function(p) { return p.id === _hugId; })[0];
+            if (!_hugTarget || _hugTarget.id === 0) { room.sendAnnouncement('🤗 Usa: !hug #ID  (el # es el número del jugador)', player.id, 0xFFFF00); return false; }
+            if (_hugTarget.id === player.id) { room.sendAnnouncement('🤗 No puedes abrazarte a ti mismo.', player.id, 0xFF6600); return false; }
+            botState.funCd[player.id] = _funNow;
+            room.sendAnnouncement('🤗 ' + player.name + ' le dio un abrazo a ' + _hugTarget.name, null, 0xFF69B4, 'bold');
+        }
+        return false;
+    }
+    if (message === '!afks') {
+        var _afkNames = room.getPlayerList().filter(function(p) {
+            var a = botState.authMap[p.id];
+            return p.id !== 0 && a && botState.afkProtected[a];
+        }).map(function(p) { return p.name; });
+        room.sendAnnouncement(_afkNames.length ? '💤 En modo AFK: ' + _afkNames.join(', ') : '💤 No hay nadie en modo AFK.', player.id, 0xFFFF00);
         return false;
     }
     if (message.startsWith('!sugerencia') || message.startsWith('!sugerir')) {
