@@ -275,6 +275,202 @@ function helpSection(pid, emoji, title, lines, color) {
     );
 }
 
+// ===== AYUDA POR CATEGORIAS (!help y !help <comando>) =====
+// Cada entrada: [categoria, comando, [alias], uso, descripcion, nivel]  (nivel: '' = todos, 'staff', 'creator')
+// Para agregar un comando a la ayuda basta con sumar una linea aqui.
+var HELP_CATS = [
+    { id: 'GENERAL',   emoji: '📁', color: 0x00FF00 },
+    { id: 'ACCOUNT',   emoji: '👤', color: 0x00FF99 },
+    { id: 'STATS',     emoji: '📊', color: 0xFFD700 },
+    { id: 'VIP',       emoji: '💎', color: 0xFFD700 },
+    { id: 'ECONOMY',   emoji: '💰', color: 0x00BFFF },
+    { id: 'CASINO',    emoji: '🎰', color: 0xFF69B4 },
+    { id: 'SOCIAL',    emoji: '💍', color: 0xFF69B4 },
+    { id: 'PRESTAMOS', emoji: '💳', color: 0xFFFF00 },
+    { id: 'MINIJUEGOS', emoji: '🎮', color: 0x00FF00 },
+    { id: 'SPECIAL',   emoji: '✨', color: 0xAAAAAA },
+    { id: 'ADMIN',     emoji: '🛡️', color: 0x00BFFF }
+];
+var HELP_DB = [
+    // GENERAL
+    ['GENERAL', 'help', ['ayuda'], '!help [comando]', 'Muestra la lista de comandos, o el detalle de uno.', ''],
+    ['GENERAL', 'casino', [], '!casino', 'Lista los juegos del casino y cómo usarlos.', ''],
+    ['GENERAL', 'anon', [], '!anon <mensaje>', 'Envía un mensaje anónimo al chat.', ''],
+    ['GENERAL', 'afk', [], '!afk', 'Modo AFK: no te meten en los juegos ni te kickean por inactividad. Escríbelo otra vez para volver.', ''],
+    ['GENERAL', 'calladmin', [], '!calladmin [razón]', 'Llama a un admin.', ''],
+    ['GENERAL', 'mutes', [], '!mutes', 'Muestra la lista de jugadores silenciados.', ''],
+    ['GENERAL', 'report', [], '!report #ID [razón]', 'Reporta a un jugador.', ''],
+    ['GENERAL', 'bug', [], '!bug [descripción]', 'Reporta un bug.', ''],
+    ['GENERAL', 'fix', [], '!fix', 'Vota para reiniciar si hay un bug.', ''],
+    ['GENERAL', 'discord', [], '!discord', 'Link del Discord.', ''],
+    ['GENERAL', 'miauth', [], '!miauth', 'Muestra tu token (auth).', ''],
+    ['GENERAL', 'version', [], '!version', 'Versión del bot.', ''],
+    ['GENERAL', 'proteccion', [], '!proteccion', 'Protección contra bans.', ''],
+    // ACCOUNT
+    ['ACCOUNT', 'registrar', ['register'], '!registrar <usuario> <clave>', 'Crea tu cuenta y vincula tus stats. La clave no se muestra en el chat.', ''],
+    ['ACCOUNT', 'login', ['loguear'], '!login <usuario> <clave>', 'Entra a tu cuenta desde otro PC o navegador.', ''],
+    ['ACCOUNT', 'logout', ['cerrarsesion'], '!logout', 'Cierra la sesión de tu cuenta.', ''],
+    ['ACCOUNT', 'cuenta', ['micuenta', 'account'], '!cuenta', 'Muestra los datos de tu cuenta.', ''],
+    ['ACCOUNT', 'eliminarcuenta', [], '!eliminarcuenta CONFIRMAR', 'Elimina tu cuenta. Hay que escribir CONFIRMAR.', ''],
+    // STATS
+    ['STATS', 'stats', ['me', 'mostrarstats'], '!stats', 'Muestra tus estadísticas.', ''],
+    ['STATS', 'top', [], '!top', 'Top 5 general.', ''],
+    ['STATS', 'wins', [], '!wins', 'Muestra tus victorias.', ''],
+    ['STATS', 'games', [], '!games', 'Muestra tus partidas jugadas.', ''],
+    ['STATS', 'rank', [], '!rank', 'Muestra tu rango.', ''],
+    ['STATS', 'xp', ['nivel'], '!xp', 'Tu nivel, XP y multiplicador.', ''],
+    ['STATS', 'toprachas', ['topracha'], '!toprachas', 'Ranking de mejores rachas.', ''],
+    ['STATS', 'topactivo', [], '!topactivo', 'Ranking de jugadores más activos.', ''],
+    ['STATS', 'topgeis', [], '!topgeis', 'Ranking de la sala.', ''],
+    ['STATS', 'topkick', [], '!topkick', 'Ranking de la sala.', ''],
+    ['STATS', 'topban', [], '!topban', 'Ranking de la sala.', ''],
+    ['STATS', 'toptitan', [], '!toptitan', 'Ranking de la sala.', ''],
+    ['STATS', 'topclanes', ['topclan'], '!topclanes', 'Ranking de clanes.', ''],
+    // VIP
+    ['VIP', 'vip', ['helpvip', 'viphelp'], '!vip', 'Beneficios del VIP, sus comandos y cómo conseguirlo.', ''],
+    ['VIP', 'vcolor', [], '!vcolor <HEX>', 'Color de tus mensajes.', ''],
+    ['VIP', 'vstyle', [], '!vstyle <bold|italic|small|normal>', 'Estilo de tus mensajes.', ''],
+    ['VIP', 'badges', [], '!badges 👑💎🔥', 'Hasta 3 emojis antes de tu nombre.', ''],
+    ['VIP', 'prefijo', [], '!prefijo <texto>', 'Tu tag (máx. 8 caracteres).', ''],
+    ['VIP', 'setentry', [], '!setentry <frase>', 'Mensaje que se muestra al entrar.', ''],
+    ['VIP', 'entradatono', [], '!entradatono <0-2>', 'Sonido de tu entrada: 0 silencio, 1 chat, 2 notificación.', ''],
+    ['VIP', 'vreset', [], '!vreset', 'Vuelve a lo normal (quita tu personalización).', ''],
+    ['VIP', 'animaciongol', [], '!animaciongol <1-3>', 'Fuego, dinero o estrellas al anotar.', ''],
+    ['VIP', 'animacion', [], '!animacion <1-5>', 'Aura que cambia tu avatar.', ''],
+    ['VIP', 'announce', [], '!announce <mensaje>', 'Anuncio destacado para toda la sala.', ''],
+    // ECONOMY
+    ['ECONOMY', 'saldo', ['dinero', 'balance', 'bal', 'money'], '!saldo', 'Muestra tu dinero.', ''],
+    ['ECONOMY', 'trabajar', ['work'], '!trabajar', 'Gana dinero (cooldown 10 min).', ''],
+    ['ECONOMY', 'diario', ['daily'], '!diario', 'Recompensa diaria (racha de 7 días).', ''],
+    ['ECONOMY', 'pasar', [], '!pasar #ID MONTO', 'Transfiere dinero a otro jugador.', ''],
+    ['ECONOMY', 'tienda', ['shop'], '!tienda', 'Muestra la tienda.', ''],
+    ['ECONOMY', 'inversion', [], '!inversion MONTO', 'Invierte dinero: madura en 5 juegos (puedes perder todo o ganar hasta x4).', ''],
+    ['ECONOMY', 'impuesto', [], '!impuesto', 'Cobra impuestos a los demás jugadores (cuesta dinero, con cooldown).', ''],
+    ['ECONOMY', 'toprich', ['topricos'], '!toprich', 'Ranking de los más ricos.', ''],
+    ['ECONOMY', 'topgastadores', [], '!topgastadores', 'Ranking de quienes más gastan.', ''],
+    ['ECONOMY', 'topogs', [], '!topogs', 'Ranking de la sala.', ''],
+    ['ECONOMY', 'toplosses', [], '!toplosses', 'Ranking de la sala.', ''],
+    // CASINO
+    ['CASINO', 'apostar', ['bet'], '!apostar <monto>', 'Cara o cruz (~48%).', ''],
+    ['CASINO', 'blackjack', ['bj'], '!blackjack <monto>', 'Juega al 21. Luego usa !hit para pedir carta o !stand para plantarte.', ''],
+    ['CASINO', 'ruleta', [], '!ruleta <monto> [rojo/negro/0]', 'Ruleta de colores.', ''],
+    ['CASINO', 'slots', [], '!slots <monto>', '777 = x50 | triple = x10 | doble = x3.', ''],
+    ['CASINO', 'dados', [], '!dados <monto>', '7+ = x2 | doble = x3 | doble 6 = x5.', ''],
+    ['CASINO', 'rifa', [], '!rifa <monto>', 'Adivina un número del 1 al 10.', ''],
+    ['CASINO', 'crash', [], '!crash <monto>', 'Multiplicador creciente.', ''],
+    ['CASINO', 'loteria', [], '!loteria', 'Compra un ticket del pozo acumulado (2.000).', ''],
+    ['CASINO', 'verloteria', [], '!verloteria', 'Muestra el estado de la lotería y tus tickets.', ''],
+    // SOCIAL
+    ['SOCIAL', 'casarse', [], '!casarse #ID', 'Propone matrimonio ($25k, +10% de bonus).', ''],
+    ['SOCIAL', 'divorcio', [], '!divorcio', 'Te separas de tu pareja.', ''],
+    ['SOCIAL', 'pareja', [], '!pareja', 'Muestra tu pareja.', ''],
+    ['SOCIAL', 'clan', [], '!clan [ayuda]', 'Sistema de clanes. Usa !clan ayuda para ver todo.', ''],
+    ['SOCIAL', 'titan', [], '!titan', 'Mide tu titan.', ''],
+    // PRESTAMOS
+    ['PRESTAMOS', 'prestamo', [], '!prestamo MONTO', 'Pide un préstamo.', ''],
+    ['PRESTAMOS', 'prestar', [], '!prestar #ID MONTO', 'Presta dinero a otro jugador.', ''],
+    ['PRESTAMOS', 'deuda', [], '!deuda', 'Muestra tu deuda.', ''],
+    ['PRESTAMOS', 'mideudap2p', [], '!mideudap2p', 'Muestra lo que le debes a otros jugadores.', ''],
+    ['PRESTAMOS', 'misdeudores', [], '!misdeudores', 'Muestra quién te debe.', ''],
+    ['PRESTAMOS', 'prestamista', [], '!prestamista', 'Opciones de prestamista.', ''],
+    ['PRESTAMOS', 'pagar', [], '!pagar [MONTO/todo]', 'Paga tu deuda.', ''],
+    ['PRESTAMOS', 'pagarp2p', [], '!pagarp2p [MONTO/todo]', 'Paga una deuda con otro jugador.', ''],
+    // MINIJUEGOS
+    ['MINIJUEGOS', 'cambio', [], '!cambio #ID', 'Cambia de posición (primeros 20 s).', ''],
+    ['MINIJUEGOS', 'equipo', [], '!equipo [1/2]', 'Cambia de equipo durante un juego.', ''],
+    ['MINIJUEGOS', 'invertir', [], '!invertir #ID', 'Invierte los controles de otro jugador por 10 s.', ''],
+    ['MINIJUEGOS', 'theworld', [], '!theworld', 'Pausa el minijuego.', ''],
+    ['MINIJUEGOS', 'bitesthedust', [], '!bitesthedust', 'Elimina a un jugador.', ''],
+    // SPECIAL
+    ['SPECIAL', 'bot', [], '!bot', 'Información del bot.', ''],
+    ['SPECIAL', 'ping', [], '!ping', 'Responde pong.', ''],
+    ['SPECIAL', 'sugerencia', ['sugerir'], '!sugerencia <idea>', 'Envía una sugerencia al staff.', ''],
+    // ADMIN (solo staff)
+    ['ADMIN', 'mute', [], '!mute #ID min', 'Silencia a un jugador.', 'staff'],
+    ['ADMIN', 'unmute', [], '!unmute #ID', 'Quita el silencio.', 'staff'],
+    ['ADMIN', 'mutelist', [], '!mutelist', 'Lista de silenciados.', 'staff'],
+    ['ADMIN', 'unmuteid', [], '!unmuteid [auth]', 'Quita el silencio por auth.', 'staff'],
+    ['ADMIN', 'ban', [], '!ban #ID min', 'Banea a un jugador.', 'staff'],
+    ['ADMIN', 'unban', [], '!unban [auth]', 'Quita un ban.', 'staff'],
+    ['ADMIN', 'banlist', ['bans'], '!banlist', 'Lista de baneados.', 'staff'],
+    ['ADMIN', 'clearbans', [], '!clearbans', 'Limpia todos los bans.', 'staff'],
+    ['ADMIN', 'kick', [], '!kick #ID [razón]', 'Expulsa a un jugador.', 'staff'],
+    ['ADMIN', 'warn', [], '!warn #ID [razón]', 'Da una advertencia.', 'staff'],
+    ['ADMIN', 'unwarn', [], '!unwarn #ID [n]', 'Quita advertencias.', 'staff'],
+    ['ADMIN', 'warns', [], '!warns #ID', 'Ver advertencias de un jugador.', 'staff'],
+    ['ADMIN', 'warnlist', [], '!warnlist', 'Lista de advertidos.', 'staff'],
+    ['ADMIN', 'rr', [], '!rr', 'Reinicia el partido.', 'staff'],
+    ['ADMIN', '3def', [], '!3def', 'Modo 3 defensas (mínimo 6 jugadores en juego).', 'staff'],
+    ['ADMIN', 'setlimit', [], '!setlimit [0-20]', 'Cambia el límite de la partida (0-20).', 'staff'],
+    ['ADMIN', 'settime', [], '!settime [0-60]', 'Cambia el tiempo de la partida en minutos (0-60).', 'staff'],
+    ['ADMIN', 'unisrand', [], '!unisrand', 'Uniformes de colores aleatorios.', 'staff'],
+    ['ADMIN', 'frozen', [], '!frozen #ID', 'Congela a un jugador.', 'staff'],
+    ['ADMIN', 'unfrozen', [], '!unfrozen #ID', 'Descongela a un jugador.', 'staff'],
+    ['ADMIN', 'ghost', [], '!ghost #ID', 'Pone a un jugador en modo ghost.', 'staff'],
+    ['ADMIN', 'unghost', [], '!unghost #ID', 'Quita el modo ghost.', 'staff'],
+    ['ADMIN', 'anuncio', [], '!anuncio [mensaje]', 'Anuncio para toda la sala.', 'staff'],
+    ['ADMIN', 'eco', [], '!eco [#ID]', 'Consulta la economía.', 'staff'],
+    ['ADMIN', 'givemoney', [], '!givemoney #ID monto', 'Da dinero a un jugador.', 'staff'],
+    ['ADMIN', 'lookup', [], '!lookup #ID', 'Consulta datos de un jugador.', 'staff'],
+    ['ADMIN', 'streak', [], '!streak #ID', 'Consulta la racha de un jugador.', 'staff'],
+    ['ADMIN', 'resetstats', [], '!resetstats', 'Reinicia stats (solo creadores).', 'creator'],
+    ['ADMIN', 'setadmin', [], '!setadmin #ID', 'Da admin a un jugador.', 'creator'],
+    ['ADMIN', 'removeadmin', [], '!removeadmin #ID', 'Quita el admin.', 'creator'],
+    ['ADMIN', 'setmasteradmin', [], '!setmasteradmin #ID', 'Da master admin.', 'creator'],
+    ['ADMIN', 'removemasteradmin', [], '!removemasteradmin #ID', 'Quita el master admin.', 'creator'],
+    ['ADMIN', 'admins', [], '!admins', 'Lista de admins.', 'creator'],
+    ['ADMIN', 'setvip', [], '!setvip #ID', 'Da VIP a un jugador.', 'creator'],
+    ['ADMIN', 'delvip', [], '!delvip #ID', 'Quita el VIP.', 'creator'],
+    ['ADMIN', 'vips', [], '!vips', 'Lista de VIPs.', 'creator'],
+    ['ADMIN', 'transferir', [], '!transferir #ID monto', 'Transfiere dinero (solo creadores).', 'creator'],
+    ['ADMIN', 'antismurf', [], '!antismurf [on/off]', 'Activa o desactiva el anti-smurf.', 'creator'],
+    ['ADMIN', 'antivpn', [], '!antivpn [on/off]', 'Activa o desactiva el anti-VPN.', 'creator'],
+    ['ADMIN', 'resetpass', [], '!resetpass <usuario> <nueva>', 'Cambia la clave de una cuenta.', 'creator'],
+    ['ADMIN', 'whitelist', [], '!whitelist [on/off/add/remove/list]', 'Administra la whitelist.', 'creator'],
+    ['ADMIN', 'refreshcache', [], '!refreshcache', 'Refresca la caché.', 'creator'],
+    ['ADMIN', 'cachestatus', [], '!cachestatus', 'Estado de la caché.', 'creator']
+];
+
+function helpCanSee(entry, isStaff, isCreator) {
+    if (entry[5] === 'creator') return isCreator;
+    if (entry[5] === 'staff') return isStaff;
+    return true;
+}
+
+// Menu: una seccion por categoria con los nombres de los comandos
+function sendHelpMenu(pid, isStaff, isCreator) {
+    room.sendAnnouncement(
+        '╔═══════════ 📖 ' + formatText('COMANDOS') + ' ═══════════╗\n' +
+        '║ Escribe !help <comando> para ver detalles.',
+        pid, 0x00FF00, 'bold', 2
+    );
+    HELP_CATS.forEach(function(cat) {
+        var names = HELP_DB.filter(function(e) { return e[0] === cat.id && helpCanSee(e, isStaff, isCreator); })
+            .map(function(e) { return '!' + e[1]; });
+        if (names.length) helpSection(pid, cat.emoji, cat.id, [names.join(', ')], cat.color);
+    });
+}
+
+// Detalle de un comando (acepta el nombre con o sin "!" y sus alias)
+function sendHelpDetail(pid, rawName, isStaff, isCreator) {
+    var name = String(rawName).toLowerCase().trim().replace(/^!/, '').split(/\s+/)[0];
+    var found = null;
+    for (var i = 0; i < HELP_DB.length && !found; i++) {
+        var e = HELP_DB[i];
+        if (helpCanSee(e, isStaff, isCreator) && (e[1] === name || e[2].indexOf(name) !== -1)) found = e;
+    }
+    if (!found) {
+        room.sendAnnouncement('❓ No existe el comando "' + name.slice(0, 20) + '". Escribe !help para ver la lista.', pid, 0xFF6600, 'bold');
+        return;
+    }
+    var lines = ['Uso: ' + found[3], found[4]];
+    if (found[2].length) lines.push('Alias: ' + found[2].map(function(a) { return '!' + a; }).join(', '));
+    if (found[5] === 'creator') lines.push('Solo creadores.');
+    else if (found[5] === 'staff') lines.push('Solo staff.');
+    var cat = HELP_CATS.filter(function(c) { return c.id === found[0]; })[0];
+    helpSection(pid, '📖', '!' + found[1], lines, cat ? cat.color : 0x00FF00);
+}
+
 // Ayuda del VIP: beneficios, comandos y cómo conseguirlo (!vip, !viphelp, !helpvip)
 function sendVipHelp(player) {
     var pid = player.id;
@@ -5682,101 +5878,12 @@ room.onPlayerChat = function(player, message) {
         return false;
     }
 
-    if (message === "!ayuda" || message === "!help") {
-        room.sendAnnouncement(
-            "╔══════════════════════════╗\n" +
-            "      " + formatText("COMANDOS DE LA SALA") + "\n" +
-            "╚══════════════════════════╝",
-            player.id, 0x00FF00, 'bold', 2
-        );
-        helpSection(player.id, '💰', 'ECONOMÍA', [
-            '!saldo / !dinero - Ver tu dinero',
-            '!trabajar / !work - Ganar dinero (CD: 10min)',
-            '!pasar #ID MONTO - Transferir dinero',
-            '!diario - Recompensa diaria (racha 7 días)',
-            '!tienda / !shop - Ver la tienda',
-            '!inversion MONTO - Invertir (madura en 5 juegos)'
-        ], 0x00BFFF);
-        helpSection(player.id, '🎰', 'CASINO', [
-            '!ruleta MONTO [rojo/negro/0] - Ruleta de colores',
-            '!rifa MONTO - Adivina número 1-10',
-            '!crash MONTO - Multiplicador creciente',
-            '!dados MONTO - 7+ = x2 | Doble = x3 | Doble 6 = x5',
-            '!slots MONTO - 777 = x50 | Triple = x10 | Doble = x3',
-            '!apostar MONTO | !blackjack MONTO (!hit/!stand) | !loteria | !verloteria'
-        ], 0xFF69B4);
-        helpSection(player.id, '🏆', 'RANKINGS', [
-            '!top - Top 5 general | !toprich - Más ricos',
-            '!toprachas - Mejores rachas | !topactivo - Más activos',
-            '!topgeis | !topkick | !topban | !toptitan',
-            '!topclanes - Ranking de clanes'
-        ], 0xFFD700);
-        helpSection(player.id, '💍', 'SOCIAL', [
-            '!casarse #ID - Proponer matrimonio ($25k, +10% bonus)',
-            '!divorcio - Separarse | !pareja - Ver tu pareja',
-            '!clan - Sistema de clanes (!clan ayuda)',
-            '!titan - Medir tu titan | !anon MENSAJE - Mensaje anónimo'
-        ], 0xFF69B4);
-        helpSection(player.id, '🎮', 'MINIJUEGOS (durante partida)', [
-            '!cambio #ID - Cambiar posición (primeros 20s)',
-            '!equipo [1/2] - Cambiar de equipo',
-            '!invertir #ID - Invertir controles 10s',
-            '!theworld - Pausar minijuego',
-            '!bitesthedust - Eliminar jugador'
-        ], 0x00FF00);
-        helpSection(player.id, '💳', 'PRÉSTAMOS', [
-            '!prestamo MONTO - Pedir préstamo | !prestar #ID MONTO - Prestar',
-            '!deuda | !mideudap2p | !misdeudores | !prestamista',
-            '!pagar [MONTO/todo] | !pagarp2p [MONTO/todo]'
-        ], 0xFFFF00);
-        helpSection(player.id, '📢', 'REPORTES Y AYUDA', [
-            '!calladmin [razón] - Llamar admin',
-            '!report #ID [razón] - Reportar jugador',
-            '!bug [descripción] - Reportar bug',
-            '!fix - Votar para reiniciar si hay bug'
-        ], 0xFF6600);
-        helpSection(player.id, '👤', 'CUENTAS Y STATS', [
-            '!registrar <usuario> <clave> | !login <usuario> <clave>',
-            '!cuenta | !logout | !eliminarcuenta CONFIRMAR',
-            '!stats / !me | !balance | !wins | !games | !rank'
-        ], 0x00FF99);
-        helpSection(player.id, '💎', 'VIP', [
-            '!vip / !helpvip - Beneficios, comandos y cómo conseguirlo',
-            '!vcolor <HEX> | !vstyle <estilo> | !badges 👑💎🔥 | !prefijo <texto>',
-            '!setentry <frase> | !entradatono <0-2> | !vreset',
-            '!animaciongol <1-3> | !animacion <1-5> | !announce <mensaje>',
-            '!xp - Ver tu nivel y XP'
-        ], 0xFFD700);
-        helpSection(player.id, 'ℹ️', 'OTROS', [
-            '!miauth - Ver tu token | !discord - Link de Discord',
-            '!version - Versión del bot | !proteccion - Protección contra bans',
-            '!afk - Modo AFK: no te meten en los juegos (!afk otra vez para volver)',
-            '!impuesto - Cobrar impuestos (admin+)'
-        ], 0xAAAAAA);
-
-        // Sección de admin (solo visible para admins)
-        if (playerAuth && (CREATOR_AUTHS.indexOf(playerAuth) !== -1 || MODERATOR_AUTHS.indexOf(playerAuth) !== -1)) {
-            var adminHelp = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                "🛡️ COMANDOS ADMIN:\n" +
-                "🔇 !mute #ID min | !unmute #ID | !mutelist | !unmuteid [auth]\n" +
-                "⚖️ !ban #ID min | !unban [auth] | !banlist | !clearbans\n" +
-                "👢 !kick #ID [razón]\n" +
-                "⚠️ !warn #ID [razón] | !unwarn #ID [n] | !warns #ID | !warnlist\n";
-            if (CREATOR_AUTHS.indexOf(playerAuth) !== -1) {
-                adminHelp += "👑 !setadmin #ID | !removeadmin #ID | !setmasteradmin #ID\n" +
-                    "👑 !removemasteradmin #ID | !admins\n" +
-                    "⭐ !setvip #ID | !delvip #ID | !vips\n";
-            }
-            adminHelp += "🎮 !rr | !3def | !setlimit [n] | !settime [min] | !unisrand\n" +
-                "🧊 !frozen #ID | !unfrozen #ID | !ghost #ID | !unghost #ID\n" +
-                "📢 !anuncio [msg] | 💰 !eco [#ID] | !givemoney #ID monto | !transferir #ID monto\n" +
-                "🔍 !lookup #ID | !streak #ID\n";
-            if (CREATOR_AUTHS.indexOf(playerAuth) !== -1) {
-                adminHelp += "🛠️ !antismurf [on/off] | !antivpn [on/off] | !resetpass <usuario> <nueva> | !whitelist [on/off/add/remove/list] | !refreshcache | !cachestatus\n";
-            }
-            adminHelp += "╚══════════════════════════╝";
-            room.sendAnnouncement(formatKeep(adminHelp), player.id, 0x00BFFF, 'bold', 2);
-        }
+    var _helpM = /^!(help|ayuda)(?:\s+(.+))?$/i.exec(String(message).trim());
+    if (_helpM) {
+        var _helpCreator = !!playerAuth && CREATOR_AUTHS.indexOf(playerAuth) !== -1;
+        var _helpStaff = _helpCreator || (!!playerAuth && MODERATOR_AUTHS.indexOf(playerAuth) !== -1);
+        if (_helpM[2]) sendHelpDetail(player.id, _helpM[2], _helpStaff, _helpCreator);
+        else sendHelpMenu(player.id, _helpStaff, _helpCreator);
         return false;
     }
 

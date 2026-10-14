@@ -17,7 +17,9 @@ if (-not (Test-Path $llave)) { throw "No encuentro tu llave publica ($llave). Cr
 $pub = (Get-Content $llave -Raw).Trim()
 
 Write-Host "1/6 Olvidando la huella SSH vieja de $Servidor (el servidor se reinstalo)..." -ForegroundColor Cyan
+$ErrorActionPreference = "Continue"
 ssh-keygen -R $Servidor 2>$null | Out-Null
+$ErrorActionPreference = "Stop"
 
 Write-Host "2/6 Subiendo el instalador. Te pide la contrasena de root." -ForegroundColor Cyan
 scp -o StrictHostKeyChecking=accept-new deploy\install.sh "root@${Servidor}:/root/"
