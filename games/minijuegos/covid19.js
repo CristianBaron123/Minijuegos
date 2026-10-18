@@ -30,8 +30,11 @@ const config = {
 
 function start(room, onGameEnd) {
     console.log('🎮 COVID19 - Iniciando...');
+    // Si algo falla al arrancar hay que avisar con onGameEnd(null): si no, el juego queda "activo" sin empezar
+    // (pantalla en blanco) hasta que el limite de tiempo lo corta.
     if (!mapData) {
         console.error('mapData no cargado en COVID19');
+        if (onGameEnd) onGameEnd(null);
         return;
     }
 
@@ -39,6 +42,7 @@ function start(room, onGameEnd) {
         room.setCustomStadium(mapData);
     } catch (e) {
         console.error('Error al setCustomStadium COVID19', e);
+        if (onGameEnd) onGameEnd(null);
         return;
     }
 
@@ -103,6 +107,7 @@ function start(room, onGameEnd) {
 function checkPlayers(room, onGameEnd, dangerousDiscs) {
     if (!gameState.active) return;
     var alive = [];
+    var eliminatedNow = []; // los que caen en ESTE mismo chequeo (para el desempate si caen todos a la vez)
 
     gameState.players.forEach(function(p){
         if (gameState.eliminated.indexOf(p.id) !== -1) return;
@@ -150,6 +155,7 @@ function checkPlayers(room, onGameEnd, dangerousDiscs) {
 
         if (eliminated && gameState.eliminated.indexOf(p.id) === -1) {
             gameState.eliminated.push(p.id);
+            eliminatedNow.push(p);
             try { room.setPlayerTeam(p.id, 0); } catch(e){}
             // Trackear primer eliminado
             if (!gameState.firstEliminated && gameState.gameStartTime) {
@@ -165,6 +171,11 @@ function checkPlayers(room, onGameEnd, dangerousDiscs) {
 
     if (alive.length === 1) {
         declareWinner(room, alive[0], onGameEnd);
+    } else if (alive.length === 0 && eliminatedNow.length > 0) {
+        // Los ultimos jugadores cayeron en el mismo instante: desempate al azar entre ellos (antes: "nadie gana")
+        var tieWinner = eliminatedNow[Math.floor(Math.random() * eliminatedNow.length)];
+        room.sendAnnouncement('⚖️ Cayeron al mismo tiempo: desempate al azar entre ' + eliminatedNow.length + ' jugadores', null, 0xFFA500, 'bold');
+        declareWinner(room, tieWinner, onGameEnd);
     } else if (alive.length === 0 && gameState.eliminated.length > 0) {
         room.sendAnnouncement('❌ No hay ganador - todos eliminados', null, 0xFF0000);
         stop(room);
