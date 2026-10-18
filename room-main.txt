@@ -1119,7 +1119,7 @@ function getPlayerTag(player) {
         return { label: protPrefix + '🍀[' + formatText('JUST TGW') + ']🍀' + clanSuffix, color: 0x228B22 };
     }
     if (auth === 'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY') {
-        return { label: protPrefix + '👑[' + formatText('PRINCESA') + ']👑' + clanSuffix, color: 0xFF69B4 };
+        return { label: protPrefix + '「👸🏻  ' + formatText('Reina') + '」' + clanSuffix, color: 0xFD8CF1, style: 'bold' };
     }
     if (auth) {
         var tag = botState.playerTags[auth];
@@ -3652,10 +3652,10 @@ room.onPlayerJoin = function(player) {
         room.setPlayerAdmin(player.id, true);
         room.sendAnnouncement('🍀 Bienvenido JUST TGW! Admin activado', player.id, 0x228B22, 'bold');
     }
-    // PRINCESA: dar admin automático
+    // Reina: dar admin automático
     if (kingAuth === 'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY') {
         room.setPlayerAdmin(player.id, true);
-        room.sendAnnouncement('👑 Bienvenido PRINCESA! Admin activado', player.id, 0xFF69B4, 'bold');
+        room.sendAnnouncement('👸🏻 Bienvenida Reina! Admin activado', player.id, 0xFD8CF1, 'bold');
     }
 
     try { sendWelcome(player); } catch(e) {}
@@ -5264,7 +5264,7 @@ room.onPlayerChat = function(player, message) {
             { auth: 'q3qsnVsaZZzr2ZueqLevKtkkJKOL6O6I8DKfiFZA5q4', label: 'JUST TGW' },
             { auth: 'EmnLfhmzGZ0UtP3pjPwAgEyWCNte5yqgwXnvw2qrVic', label: 'KING' },
             { auth: 'SpF1TKzWu5U9Xy66vDN8Xk_QCcY0BUmAFID8_uOf11I', label: 'LEO' },
-            { auth: 'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY', label: 'PRINCESA' }
+            { auth: 'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY', label: 'Reina' }
         ];
         var isOwner = (rAuth === OWNER_AUTH);
         var isCreador = (CREATOR_AUTHS.indexOf(rAuth) !== -1);
