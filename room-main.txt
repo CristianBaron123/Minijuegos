@@ -1070,6 +1070,13 @@ function isCustomAdmin(auth) {
     return auth && CUSTOM_ADMIN_AUTHS_GLOBAL.indexOf(auth) !== -1;
 }
 
+// Reina (antes PRINCESA): puede gestionar roles (!setadmin !deladmin !setvip !delvip) igual que un creador,
+// pero NO tiene los permisos de dinero ni de stats de los creadores.
+var REINA_AUTH = 'A0ajl0YKBihAme4F6TYVZh0ZGy0kDsoDz1rii-hlVOY';
+function isRoleManager(auth) {
+    return !!auth && (CREATOR_AUTHS.indexOf(auth) !== -1 || auth === REINA_AUTH);
+}
+
 function isAnyAdmin(auth) {
     return auth && (CREATOR_AUTHS.indexOf(auth) !== -1 || MODERATOR_AUTHS.indexOf(auth) !== -1 || isCustomAdmin(auth));
 }
@@ -4526,7 +4533,7 @@ room.onPlayerChat = function(player, message) {
     // ============================================
     // !setadmin #ID
     if (message.startsWith('!setadmin')) {
-        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+        if (!isRoleManager(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !setadmin', player.id, 0xFF0000);
             return false;
         }
@@ -4555,7 +4562,7 @@ room.onPlayerChat = function(player, message) {
 
     // !removeadmin #ID
     if (message.startsWith('!removeadmin') || message.startsWith('!deladmin')) {
-        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+        if (!isRoleManager(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !removeadmin', player.id, 0xFF0000);
             return false;
         }
@@ -4668,7 +4675,7 @@ room.onPlayerChat = function(player, message) {
 
     // !setvip #ID
     if (message.startsWith('!setvip')) {
-        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+        if (!isRoleManager(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !setvip', player.id, 0xFF0000);
             return false;
         }
@@ -4694,7 +4701,7 @@ room.onPlayerChat = function(player, message) {
 
     // !delvip #ID
     if (message.startsWith('!delvip')) {
-        if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
+        if (!isRoleManager(playerAuth)) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !delvip', player.id, 0xFF0000);
             return false;
         }
