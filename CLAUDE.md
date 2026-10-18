@@ -25,6 +25,12 @@ Bot de HaxBall headless con más de 60 minijuegos, sistema de economía, clanes,
 - `games/minijuegos/` — Módulos de cada minijuego
 - `games/luckys/lucky.js` — Sistema lucky/ruleta
 
+### Mapas: anti-copia (`/store`)
+Ningún mapa debe poder copiarse con `/store` del cliente de HaxBall. `room-main.txt` (y `futsal/room-main.txt`) envuelven `room.setCustomStadium` justo después de `HBInit` y marcan cada mapa con `canBeStored:false`.
+- **Al agregar un minijuego o mapa nuevo:** cargarlo SIEMPRE con `room.setCustomStadium(...)` (así queda protegido solo, sin tocar el JSON del mapa).
+- **Si se crea una sala nueva** (otro `HBInit`), copiar ese envoltorio justo después de `HBInit`.
+- No frena clientes modificados ni a quien mire el tráfico de red: el mapa viaja completo a cada jugador.
+
 ### Comandos para correr el bot
 ```bash
 node bot.js

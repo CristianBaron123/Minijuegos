@@ -12,6 +12,26 @@ var roomConfig = {
 };
 
 var room = HBInit(roomConfig);
+
+// ANTI-COPIA DE MAPAS: todo mapa cargado con room.setCustomStadium sale marcado canBeStored:false (el cliente
+// oficial rechaza /store). Igual que en la sala principal (room-main.txt de la raiz).
+(function() {
+    var rawSetCustomStadium = room.setCustomStadium.bind(room);
+    var cache = {};
+    room.setCustomStadium = function(data) {
+        var out = data;
+        try {
+            if (typeof data === 'string') {
+                if (cache.hasOwnProperty(data)) out = cache[data];
+                else { var o = JSON.parse(data); o.canBeStored = false; out = cache[data] = JSON.stringify(o); }
+            } else if (data && typeof data === 'object') {
+                var c = JSON.parse(JSON.stringify(data)); c.canBeStored = false; out = JSON.stringify(c);
+            }
+        } catch (e) { out = data; }
+        return rawSetCustomStadium(out);
+    };
+})();
+
 room.setTeamsLock(true);
 room.setScoreLimit(3);
 room.setTimeLimit(5);

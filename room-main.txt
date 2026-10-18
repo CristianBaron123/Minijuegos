@@ -12,6 +12,32 @@ var roomConfig = {
 var room = HBInit(roomConfig);
 room.setTeamsLock(true);
 
+// ANTI-COPIA DE MAPAS: todo mapa que se cargue con room.setCustomStadium sale marcado canBeStored:false, y el
+// cliente oficial de HaxBall rechaza el comando /store (no pueden guardarse el mapa). Cubre los mapas de TODOS los
+// minijuegos y los futuros sin tocar cada modulo. No frena clientes modificados ni a quien mire el trafico de red.
+(function() {
+    var rawSetCustomStadium = room.setCustomStadium.bind(room);
+    var cache = {}; // mapa original -> mapa marcado (evita volver a parsear un mapa grande en cada ronda)
+    room.setCustomStadium = function(data) {
+        var out = data;
+        try {
+            if (typeof data === 'string') {
+                if (cache.hasOwnProperty(data)) out = cache[data];
+                else {
+                    var o = JSON.parse(data);
+                    o.canBeStored = false;
+                    out = cache[data] = JSON.stringify(o);
+                }
+            } else if (data && typeof data === 'object') {
+                var c = JSON.parse(JSON.stringify(data));
+                c.canBeStored = false;
+                out = JSON.stringify(c);
+            }
+        } catch (e) { out = data; } // si no se puede marcar, el mapa carga igual (sin proteccion)
+        return rawSetCustomStadium(out);
+    };
+})();
+
 console.log("✅ Bot iniciado — v" + BOT_VERSION);
 // El link de la sala llega de forma asíncrona por el evento onRoomLink (room.link no existe en la API)
 room.onRoomLink = function(url) {
