@@ -420,7 +420,7 @@ var HELP_DB = [
     ['ADMIN', 'streak', [], '!streak #ID', 'Consulta la racha de un jugador.', 'staff'],
     ['ADMIN', 'resetstats', [], '!resetstats', 'Reinicia stats (solo creadores).', 'creator'],
     ['ADMIN', 'setadmin', [], '!setadmin #ID', 'Da admin a un jugador.', 'creator'],
-    ['ADMIN', 'removeadmin', [], '!removeadmin #ID', 'Quita el admin.', 'creator'],
+    ['ADMIN', 'removeadmin', ['deladmin'], '!removeadmin #ID', 'Quita el admin.', 'creator'],
     ['ADMIN', 'setmasteradmin', [], '!setmasteradmin #ID', 'Da master admin.', 'creator'],
     ['ADMIN', 'removemasteradmin', [], '!removemasteradmin #ID', 'Quita el master admin.', 'creator'],
     ['ADMIN', 'admins', [], '!admins', 'Lista de admins.', 'creator'],
@@ -962,6 +962,10 @@ function stopReplay() {
 
 // Invite de Discord (usado por comando !discord)
 var DISCORD_INVITE = "https://discord.gg/T45MzERZWA";
+// Datos de la comunidad (por ahora solo definidos: todavia no se usan en ningun mensaje)
+var COMUNIDAD = "Diamonds League";
+var LOGO_URL = "image_1.webp"; // OJO: tiene que ser un enlace https publico para usarse en Discord
+var DISCORD_LINK = "https://discord.gg/rUr6VebjSX";
 
 // ============================================
 // SISTEMA DE BANS PERMANENTES
@@ -4550,7 +4554,7 @@ room.onPlayerChat = function(player, message) {
     }
 
     // !removeadmin #ID
-    if (message.startsWith('!removeadmin')) {
+    if (message.startsWith('!removeadmin') || message.startsWith('!deladmin')) {
         if (!playerAuth || CREATOR_AUTHS.indexOf(playerAuth) === -1) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !removeadmin', player.id, 0xFF0000);
             return false;
