@@ -300,6 +300,7 @@ var HELP_DB = [
     ['GENERAL', 'calladmin', [], '!calladmin [razón]', 'Llama a un admin.', ''],
     ['GENERAL', 'mutes', [], '!mutes', 'Muestra la lista de jugadores silenciados.', ''],
     ['GENERAL', 'afks', [], '!afks', 'Muestra quién está en modo AFK.', ''],
+    ['GENERAL', 'bb', [], '!bb', 'Te expulsas a ti mismo de la sala (despedida rápida).', ''],
     ['GENERAL', 'report', [], '!report #ID [razón]', 'Reporta a un jugador.', ''],
     ['GENERAL', 'bug', [], '!bug [descripción]', 'Reporta un bug.', ''],
     ['GENERAL', 'fix', [], '!fix', 'Vota para reiniciar si hay un bug.', ''],
@@ -1673,6 +1674,8 @@ function unlockTeamChanges() {
 // Firma: onPlayerKicked(kickedPlayer, reason, ban, byPlayer)
 room.onPlayerKicked = function(kickedPlayer, reason, ban, byPlayer) {
     try {
+        // !bb: el jugador se expulso solo, no es un kick de moderacion: no cuenta para !topkick ni nada mas
+        if (botState.selfKick && botState.selfKick[kickedPlayer.id]) { delete botState.selfKick[kickedPlayer.id]; return; }
         // Expulsión "Bad actor": se deja registrado qué pasaba justo antes para encontrar el origen
         if (/actor/i.test(String(reason || ''))) {
             var _lc = botState.lastChat && botState.lastChat[kickedPlayer.id];
@@ -5893,6 +5896,14 @@ room.onPlayerChat = function(player, message) {
     }
     if (message === '!ping') {
         room.sendAnnouncement('🏓 pong', player.id, 0x00FF00);
+        return false;
+    }
+    // !bb: el jugador se expulsa a si mismo (despedida rapida)
+    if (String(message).trim().toLowerCase() === '!bb') {
+        botState.selfKick = botState.selfKick || {};
+        botState.selfKick[player.id] = true;
+        room.sendAnnouncement('👋 ' + player.name + ' se despidió (!bb)', null, 0xAAAAAA, 'bold');
+        try { room.kickPlayer(player.id, 'Bye bye 👋', false); } catch(e) { delete botState.selfKick[player.id]; }
         return false;
     }
     // Comandos de diversion: !roll !flip !8ball !hug (cooldown de 3s por jugador para no llenar el chat)
