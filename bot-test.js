@@ -13,8 +13,6 @@ process.env.TEST_MODE = 'true';
 // JUEGOS A PROBAR - Cambia esta lista según lo que quieras testear
 // Si está vacío [], se cargan TODOS los minijuegos (como en producción)
 // ============================================
-process.env.TEST_GAMES = JSON.stringify([
-    'BUHO'
-]);
+process.env.TEST_GAMES = JSON.stringify([]);
 
 require('./bot.js');
