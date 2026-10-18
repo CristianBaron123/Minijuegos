@@ -15,7 +15,9 @@ var gameState = {
     callback: null,
     matchInProgress: false,
     currentMatchPlayers: [],
-    currentMatchHalf: 0
+    currentMatchHalf: 0,
+    // Equipos REALES de la ronda en curso (los devuelve assignTeams, que baraja): { 1: [ids], 2: [ids] }
+    currentMatchTeams: { 1: [], 2: [] }
 };
 
 var config = {
@@ -161,11 +163,12 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         // Move non-participants to spectator
         TournamentBalancer.moveNonParticipantsToSpectator(room, playerIds);
 
-        // Assign teams
-        TournamentBalancer.assignTeams(room, playerIds);
+        // Assign teams. assignTeams BARAJA: quien va a cada equipo lo dice SU resultado, no el orden de playerIds
+        var assigned = TournamentBalancer.assignTeams(room, playerIds);
         gameState.matchInProgress = true;
         gameState.currentMatchPlayers = playerIds.slice();
         gameState.currentMatchHalf = Math.floor(playerIds.length / 2);
+        gameState.currentMatchTeams = { 1: assigned.team1.slice(), 2: assigned.team2.slice() };
         room.startGame();
 
         var prevOnGoal = room.onTeamGoal;
@@ -209,16 +212,19 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             clearTimeout(to);
             try { room.onTeamGoal = prevOnGoal; } catch(e){}
             gameState.matchInProgress = false;
-            var matchPlayers = gameState.currentMatchPlayers;
-            var matchHalf = gameState.currentMatchHalf;
+            var matchTeams = gameState.currentMatchTeams;
             gameState.currentMatchPlayers = [];
             gameState.currentMatchHalf = 0;
+            gameState.currentMatchTeams = { 1: [], 2: [] };
             if (team === null) { resolve(null); return; }
+            // Ganadores = los que REALMENTE estaban en el equipo que ganó (antes se deducia por el orden de la lista)
             var winners = [], losers = [];
-            for (var i = 0; i < matchPlayers.length; i++) {
-                if (!room.getPlayer(matchPlayers[i])) continue;
-                if ((i < matchHalf ? 1 : 2) === team) winners.push(matchPlayers[i]); else losers.push(matchPlayers[i]);
-            }
+            [1, 2].forEach(function(t) {
+                matchTeams[t].forEach(function(id) {
+                    if (!room.getPlayer(id)) return;
+                    if (t === team) winners.push(id); else losers.push(id);
+                });
+            });
             room.sendAnnouncement('\n🏁 Ronda finalizada. Gano el equipo ' + (team === 1 ? '🔴' : '🔵') + ' (' + scores[1] + ' : ' + scores[2] + ')', null, 0xFFD700);
             resolve({ team: team, winners: winners, losers: losers });
         }
@@ -235,6 +241,7 @@ function stop(room) {
     gameState.matchInProgress = false;
     gameState.currentMatchPlayers = [];
     gameState.currentMatchHalf = 0;
+    gameState.currentMatchTeams = { 1: [], 2: [] };
     try { room.stopGame(); } catch(e){}
 }
 
@@ -243,15 +250,15 @@ function onPlayerLeave(room, player) {
 
     // Mid-match replacement: if player is in current match and spectators exist
     if (gameState.matchInProgress) {
-        var idx = -1;
-        for (var i = 0; i < gameState.currentMatchPlayers.length; i++) {
-            if (gameState.currentMatchPlayers[i] === player.id) { idx = i; break; }
-        }
-        if (idx !== -1 && gameState.spectatorPool.length > 0) {
-            var team = (idx < gameState.currentMatchHalf) ? 1 : 2;
+        var idx = gameState.currentMatchPlayers.indexOf(player.id);
+        // Equipo REAL del que se fue (no el orden de la lista: assignTeams baraja)
+        var team = gameState.currentMatchTeams[1].indexOf(player.id) !== -1 ? 1 : (gameState.currentMatchTeams[2].indexOf(player.id) !== -1 ? 2 : 0);
+        if (idx !== -1 && team && gameState.spectatorPool.length > 0) {
             var repIdx = Math.floor(Math.random() * gameState.spectatorPool.length);
             var replacement = gameState.spectatorPool.splice(repIdx, 1)[0];
             gameState.currentMatchPlayers[idx] = replacement;
+            var tIdx = gameState.currentMatchTeams[team].indexOf(player.id);
+            gameState.currentMatchTeams[team][tIdx] = replacement;
             try { room.setPlayerTeam(replacement, team); } catch(e){}
             var repName = room.getPlayer(replacement);
             room.sendAnnouncement('🔄 ' + player.name + ' se desconectó. ' + (repName ? repName.name : 'Alguien') + ' entra al equipo ' + (team === 1 ? '🔴' : '🔵') + '.', null, 0xFFFF00);
