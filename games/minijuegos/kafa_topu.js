@@ -352,8 +352,11 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             var half = Math.floor(playerIds.length / 2);
             for (var i = 0; i < playerIds.length; i++) {
                 var id = playerIds[i];
-                if (!room.getPlayer(id)) continue;
-                var teamOf = (i < half) ? 1 : 2;
+                var _livePlayer = room.getPlayer(id);
+                if (!_livePlayer) continue;
+                // Equipo REAL en este momento (no el orden de la lista): si lo pasaron a espectador al equilibrar por una salida, ni gana ni pierde
+                if (_livePlayer.team !== 1 && _livePlayer.team !== 2) continue;
+                var teamOf = _livePlayer.team;
                 if (teamOf === team) winners.push(id); else losers.push(id);
             }
 

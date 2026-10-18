@@ -288,8 +288,11 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             var losers = [];
             var half = Math.floor(playerIds.length / 2);
             for (var i = 0; i < playerIds.length; i++) {
-                if (!room.getPlayer(playerIds[i])) continue;
-                var teamOf = (i < half) ? 1 : 2;
+                var _livePlayer = room.getPlayer(playerIds[i]);
+                if (!_livePlayer) continue;
+                // Equipo REAL en este momento (no el orden de la lista): si lo pasaron a espectador al equilibrar por una salida, ni gana ni pierde
+                if (_livePlayer.team !== 1 && _livePlayer.team !== 2) continue;
+                var teamOf = _livePlayer.team;
                 if (teamOf === team) winners.push(playerIds[i]); else losers.push(playerIds[i]);
             }
             room.sendAnnouncement('\n🏁 Ronda finalizada. Ganó el equipo ' + (team === 1 ? '🔴' : '🔵') + ' (' + scores[1] + ' : ' + scores[2] + ')', null, 0xFFD700);
