@@ -164,7 +164,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
         TournamentBalancer.moveNonParticipantsToSpectator(room, playerIds);
 
         // Assign teams. assignTeams BARAJA: quien va a cada equipo lo dice SU resultado, no el orden de playerIds
-        var assigned = TournamentBalancer.assignTeams(room, playerIds);
+        var assigned = TournamentBalancer.assignTeamsKeep(room, playerIds); // respeta el reparto de la introduccion si ya es parejo
         gameState.matchInProgress = true;
         gameState.currentMatchPlayers = playerIds.slice();
         gameState.currentMatchHalf = Math.floor(playerIds.length / 2);

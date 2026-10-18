@@ -180,27 +180,65 @@ var TournamentBalancer = (function() {
     //    Shuffle + split half to Team 1, half to Team 2
     //    SIDE EFFECT: calls room.setPlayerTeam()
     // ============================================
+    // Ultimo reparto de cada grupo de jugadores (clave = ids ordenados). Sirve para NO repetir la misma pareja dos juegos
+    // seguidos (antes, con 4 jugadores, 14 juegos armaban siempre 12|34 por orden de entrada).
+    var _lastSplit = {};
+    function _sortNum(a, b) { return a - b; }
+    function _splitKey(ids) { return ids.slice().sort(_sortNum).join(','); }
+    function _partitionKey(team1, team2) {
+        var a = team1.slice().sort(_sortNum).join(','), b = team2.slice().sort(_sortNum).join(',');
+        return a < b ? a + '|' + b : b + '|' + a;
+    }
+
     function assignTeams(room, playerIds) {
         var ids = playerIds.slice();
-        _shuffle(ids);
         var half = Math.floor(ids.length / 2);
-        var team1 = [];
-        var team2 = [];
+        var key = _splitKey(ids);
+        var team1, team2, part, tries = 0;
+        // Baraja; con 4 o mas jugadores hay mas de un reparto posible, asi que se vuelve a barajar si sale el mismo
+        // que la vez anterior para este grupo (maximo 8 intentos)
+        do {
+            _shuffle(ids);
+            team1 = ids.slice(0, half);
+            team2 = ids.slice(half);
+            part = _partitionKey(team1, team2);
+            tries++;
+        } while (ids.length >= 4 && _lastSplit[key] === part && tries < 8);
+        _lastSplit[key] = part;
         for (var i = 0; i < ids.length; i++) {
-            var team = (i < half) ? 1 : 2;
             try {
-                room.setPlayerTeam(ids[i], team);
+                room.setPlayerTeam(ids[i], (i < half) ? 1 : 2);
             } catch (e) {}
-            if (team === 1) {
-                team1.push(ids[i]);
-            } else {
-                team2.push(ids[i]);
-            }
         }
         return {
             team1: team1,
             team2: team2
         };
+    }
+
+    // Igual que assignTeams, pero si los jugadores YA estan repartidos parejo en los equipos 1 y 2 (lo hizo la
+    // introduccion del juego), respeta ese reparto: lo que se ve al empezar es lo que se juega.
+    function assignTeamsKeep(room, playerIds) {
+        var team1 = [], team2 = [], other = false;
+        for (var i = 0; i < playerIds.length; i++) {
+            var p = room.getPlayer(playerIds[i]);
+            var t = p ? p.team : 0;
+            if (t === 1) team1.push(playerIds[i]);
+            else if (t === 2) team2.push(playerIds[i]);
+            else other = true;
+        }
+        if (!other && team1.length > 0 && team1.length === team2.length) {
+            _lastSplit[_splitKey(playerIds)] = _partitionKey(team1, team2);
+            return { team1: team1, team2: team2 };
+        }
+        return assignTeams(room, playerIds);
+    }
+
+    // Devuelve los ids ordenados: primero los del equipo 1 y luego los del 2 (el orden que usan los juegos para
+    // decidir quien gano: la primera mitad de la lista es el equipo 1)
+    function splitTeams(room, playerIds) {
+        var r = assignTeamsKeep(room, playerIds);
+        return r.team1.concat(r.team2);
     }
 
     // ============================================
@@ -324,6 +362,8 @@ var TournamentBalancer = (function() {
         validatePlayers: validatePlayers,
         balanceRound: balanceRound,
         assignTeams: assignTeams,
+        assignTeamsKeep: assignTeamsKeep,
+        splitTeams: splitTeams,
         moveNonParticipantsToSpectator: moveNonParticipantsToSpectator,
         processMatchResult: processMatchResult,
         handleDisconnect: handleDisconnect

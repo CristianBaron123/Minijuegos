@@ -288,6 +288,9 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             }
         }
 
+        // Mismos equipos que se vieron en la introduccion (si no hay un reparto parejo, se baraja); la lista queda ordenada
+        // con el equipo 1 primero, como espera el resto del juego para decidir quien gano
+        playerIds = TournamentBalancer.splitTeams(room, playerIds);
         var half = Math.floor(playerIds.length / 2);
         for (var i = 0; i < playerIds.length; i++) {
             try { room.setPlayerTeam(playerIds[i], i < half ? 1 : 2); } catch(e){}
@@ -439,15 +442,8 @@ function onPlayerLeave(room, player) {
 }
 
 function shuffleTeams(room) {
-    var ids = gameState.players.slice();
-    for (var i = ids.length - 1; i > 0; i--) {
-        var j = Math.floor(Math.random() * (i + 1));
-        var tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
-    }
-    var half = Math.floor(ids.length / 2);
-    for (var i = 0; i < ids.length; i++) {
-        try { room.setPlayerTeam(ids[i], i < half ? 1 : 2); } catch(e){}
-    }
+    // Reparto de la introduccion: compartido (no repite la pareja anterior). La ronda respeta estos mismos equipos.
+    TournamentBalancer.assignTeams(room, gameState.players.slice());
 }
 
 function isActive() { return gameState.active; }
