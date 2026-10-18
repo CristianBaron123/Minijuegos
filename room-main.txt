@@ -1584,6 +1584,22 @@ if (typeof BONK_BERU !== 'undefined' && BONK_BERU.setMapData) {
 // ============================================
 // SISTEMA DE ANUNCIOS AUTOMÁTICOS
 // ============================================
+// Lista de anuncios: se envian en orden, uno cada 2 minutos (agregar uno nuevo = una linea mas)
+var ANNOUNCEMENTS = [
+    { message: "━━━━━━━━━━━━━━━━━━━━━━━━\n💬 ÚNETE A NUESTRO DISCORD\n🔗 https://discord.gg/T45MzERZWA\n━━━━━━━━━━━━━━━━━━━━━━━━", color: 0x5865F2, style: "bold" },
+    { message: "Ves mal comportamiento de admin? esta kickeando baneando pausando informanos en el discord 🚷  ", color: 0xFFD700, style: "bold" },
+    { message: "Tienes mucho lag? pon !ping y veras como en un segundo te baja ese ping 🛜 https://discord.gg/MeHZE75WzF ", color: 0xFFD700, style: "bold" }
+];
+
+function sendNextAnnouncement() {
+    var i = botState.announceIdx || 0;
+    var a = ANNOUNCEMENTS[i % ANNOUNCEMENTS.length];
+    botState.announceIdx = (i + 1) % ANNOUNCEMENTS.length;
+    botState.chatBlocked = true;
+    room.sendAnnouncement(a.message, null, a.color, a.style, 2);
+    setTimeout(function() { botState.chatBlocked = false; }, 2000);
+}
+
 function startAutoAnnouncements() {
     setInterval(function() {
         // No enviar anuncios si hay un juego activo (minijuego en curso)
@@ -1592,23 +1608,7 @@ function startAutoAnnouncements() {
             botState.pendingAnnouncement = true;
             return; // No enviar anuncios durante juegos activos o cuando el chat está bloqueado
         }
-        
-        botState.chatBlocked = true;
-        
-        room.sendAnnouncement(
-            "━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-            "💬 ÚNETE A NUESTRO DISCORD\n" +
-            "🔗 https://discord.gg/T45MzERZWA\n" +
-            "━━━━━━━━━━━━━━━━━━━━━━━━",
-            null,
-            0x5865F2,
-            "bold",
-            2
-        );
-        
-        setTimeout(function() {
-            botState.chatBlocked = false;
-        }, 2000);
+        sendNextAnnouncement();
     }, 120000); // Cada 2 minutos
 }
 
@@ -1617,18 +1617,7 @@ function startPendingAnnouncementWatcher() {
     setInterval(function() {
         if (botState.pendingAnnouncement && !botState.gameActive && !botState.chatBlocked) {
             botState.pendingAnnouncement = false;
-            botState.chatBlocked = true;
-            room.sendAnnouncement(
-                "━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                "💬 ÚNETE A NUESTRO DISCORD\n" +
-                "🔗 https://discord.gg/T45MzERZWA\n" +
-                "━━━━━━━━━━━━━━━━━━━━━━━━",
-                null,
-                0x5865F2,
-                "bold",
-                2
-            );
-            setTimeout(function() { botState.chatBlocked = false; }, 2000);
+            sendNextAnnouncement();
         }
     }, 2000);
 }
