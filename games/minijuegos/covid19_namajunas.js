@@ -144,6 +144,11 @@ function checkPlayers(room, onGameEnd) {
 
         if (eliminated && gameState.eliminated.indexOf(p.id) === -1) {
             gameState.eliminated.push(p.id);
+            // Registro para diagnosticar eliminaciones raras (queda en logs/<sala>.log): motivo, posicion y cuanto se movio en 100 ms
+            var _pv = prev; // posicion del chequeo anterior (prevPositions ya se sobrescribio arriba con la actual)
+            console.log('[COVID_NAMAJUNAS] elimina a ' + p.name + ' | ' + reason + ' | pos=(' + Math.round(pos.x) + ',' + Math.round(pos.y) + ')' +
+                ' | movio=' + (_pv ? Math.round(Math.sqrt(Math.pow(pos.x - _pv.x, 2) + Math.pow(pos.y - _pv.y, 2))) : '-') +
+                ' (limite ' + config.teleportThreshold + ') | a los ' + (gameState.gameStartTime ? ((Date.now() - gameState.gameStartTime) / 1000).toFixed(1) : '-') + 's');
             try { room.setPlayerTeam(p.id, 0); } catch(e){}
             if (!gameState.firstEliminated && gameState.gameStartTime) {
                 var elapsed = ((Date.now() - gameState.gameStartTime) / 1000).toFixed(1);
@@ -211,21 +216,25 @@ function onPlayerChat(player, message) {
 
 function isActive() { return gameState.active; }
 
+// Posiciones de aparicion: UNA sola fila repartida a lo ancho, a la altura de siempre (y=23).
+// Antes eran filas de la cuadricula separadas solo 8 unidades con jugadores de radio 17: se apilaban unos sobre otros.
+function computeSpawns(n) {
+    var SAFE_Y = 23, MIN_X = -550, MAX_X = 550;
+    var out = [];
+    // separacion: hasta 200 unidades (pocos jugadores quedan agrupados en el centro); con muchos se reparte por todo el ancho
+    // (con 30 jugadores siguen a 38 unidades, mas que el diametro de 34)
+    var step = n > 1 ? Math.min((MAX_X - MIN_X) / (n - 1), 200) : 0;
+    for (var i = 0; i < n; i++) out.push({ x: Math.round((i - (n - 1) / 2) * step), y: SAFE_Y });
+    return out;
+}
+
 function repositionSpawns(room) {
     var active = gameState.players;
     var n = active.length;
     if (n === 0) return;
-    var safeY = 23;
-    var sMinX = -550, sMaxX = 550;
-    var cols = Math.ceil(Math.sqrt(n));
-    var rows = Math.ceil(n / cols);
-    var cellW = (sMaxX - sMinX) / cols;
-    var cellH = 8;
+    var spawns = computeSpawns(n);
     for (var i = 0; i < n; i++) {
-        var col = i % cols, row = Math.floor(i / cols);
-        var sx = Math.round(sMinX + cellW * (col + 0.5));
-        var sy = Math.round(safeY + cellH * row);
-        try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
+        try { room.setPlayerDiscProperties(active[i].id, { x: spawns[i].x, y: spawns[i].y, xspeed: 0, yspeed: 0 }); } catch(e){}
     }
 }
 

@@ -1978,7 +1978,13 @@ function startMinigame(gameEntry) {
         try {
             mod.start(room, function(winner) {
                 // Si este juego ya fue reemplazado por otro (stop + nuevo start), el callback viejo se descarta
-                if (botState.minigameStartTime !== _startedAt) { console.log('[startMinigame] Callback tardio de ' + gameEntry.name + ' ignorado'); return; }
+                if (botState.minigameStartTime !== _startedAt) {
+                    console.log('[startMinigame] Callback tardio de ' + gameEntry.name + ' ignorado | ganador=' + (winner ? winner.name : 'null') +
+                        ' | iniciado=' + _startedAt + ' actual=' + botState.minigameStartTime + ' | juegoActual=' + (botState.currentMinigame || '-') +
+                        ' gameActive=' + botState.gameActive + ' | ultimo forceStop: ' + (botState._lastForceStop || 'ninguno'));
+                    logStateSnapshot('callback tardio de ' + gameEntry.name);
+                    return;
+                }
                 if (botState.gameSafetyTimeout) { clearTimeout(botState.gameSafetyTimeout); botState.gameSafetyTimeout = null; }
                 if (typeof showGameStats === 'function' && mod) showGameStats(mod);
                 console.log('[startMinigame] Callback recibido de ' + gameEntry.name + '. winner=' + (winner ? winner.name + ' (id=' + winner.id + ')' : 'null/undefined'));
@@ -2960,6 +2966,12 @@ function excludeAFKFromGame() {
 // DETENER TODOS LOS JUEGOS (helper reutilizable)
 // ============================================
 function forceStopAllGames() {
+    // Deja escrito QUIEN pidio el stop (linea del codigo que lo llamo): clave para entender avisos de fin descartados
+    try {
+        var _st = String(new Error().stack || '').split('\n');
+        botState._lastForceStop = new Date().toISOString().slice(11, 19) + ' ' + String(_st[2] || _st[1] || '').trim().slice(0, 140);
+        console.log('🛑 forceStopAllGames <- ' + botState._lastForceStop);
+    } catch(e) {}
     stopReplay();
     // Primero se invalidan los callbacks: cualquier stop() que avise "sin ganador" se ignora
     botState.minigameStartTime = 0;
@@ -8277,6 +8289,41 @@ setInterval(function() {
         }
     } else {
         _safetyStuckSince = null;
+    }
+}, 5000);
+
+// ============================================
+// WATCHDOG "JUEGO FANTASMA": el bot cree que hay un juego (gameActive=true) pero NINGUN modulo esta activo.
+// Pasa si se descarta el aviso de fin de un juego (ej: COVID-19 con un solo jugador en pie: nadie avanzaba
+// hasta que votaban !fix). Si dura 25s seguidos se reinicia solo y deja una "foto" del estado en el log.
+// ============================================
+function isAnyGameModuleActive() {
+    var any = false;
+    minigameModules.forEach(function(g) {
+        try { if (g.module && g.module.isActive && g.module.isActive()) any = true; } catch(e) {}
+    });
+    try { getFinaleModules().forEach(function(m) { try { if (m.isActive && m.isActive()) any = true; } catch(e) {} }); } catch(e) {}
+    try { if (LUCKY.isActive()) any = true; } catch(e) {}
+    try { if (LUCKY_HELL && LUCKY_HELL.isActive && LUCKY_HELL.isActive()) any = true; } catch(e) {}
+    try { if (LUCKY_DIOS && LUCKY_DIOS.isActive && LUCKY_DIOS.isActive()) any = true; } catch(e) {}
+    try { if (METEORS && METEORS.isActive && METEORS.isActive()) any = true; } catch(e) {}
+    return any;
+}
+var _ghostGameSince = null;
+setInterval(function() {
+    // Estados legitimos donde gameActive puede estar en true sin modulo activo: no es un trabe
+    if (!botState.gameActive || botState.banVoteActive || botState.theWorldActive) { _ghostGameSince = null; return; }
+    // Gracia: el juego recien elegido arranca ~3.5s despues (cuenta atras); no es un trabe
+    if (botState.minigameStartTime && (Date.now() - botState.minigameStartTime < 20000)) { _ghostGameSince = null; return; }
+    if (isAnyGameModuleActive()) { _ghostGameSince = null; return; }
+    if (!_ghostGameSince) { _ghostGameSince = Date.now(); return; }
+    if (Date.now() - _ghostGameSince > 25000) {
+        _ghostGameSince = null;
+        console.log('⚠️ WATCHDOG: juego "' + (botState.currentMinigame || '-') + '" activo pero ningun modulo lo esta por 25s. Reiniciando.');
+        logStateSnapshot('juego fantasma: ' + (botState.currentMinigame || '-'));
+        room.sendAnnouncement('⚠️ El juego se quedó trabado. Pasando al siguiente...', null, 0xFF6600, 'bold');
+        forceStopAllGames();
+        setTimeout(checkAndStart, 2000);
     }
 }, 5000);
 

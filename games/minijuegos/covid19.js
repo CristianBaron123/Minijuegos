@@ -156,6 +156,9 @@ function checkPlayers(room, onGameEnd, dangerousDiscs) {
         if (eliminated && gameState.eliminated.indexOf(p.id) === -1) {
             gameState.eliminated.push(p.id);
             eliminatedNow.push(p);
+            // Registro para diagnosticar eliminaciones raras (queda en logs/<sala>.log)
+            console.log('[COVID19] elimina a ' + p.name + ' | ' + reason + ' | pos=(' + Math.round(pos.x) + ',' + Math.round(pos.y) + ')' +
+                ' | a los ' + (gameState.gameStartTime ? ((Date.now() - gameState.gameStartTime) / 1000).toFixed(1) : '-') + 's | vivos antes: ' + (alive.length + 1));
             try { room.setPlayerTeam(p.id, 0); } catch(e){}
             // Trackear primer eliminado
             if (!gameState.firstEliminated && gameState.gameStartTime) {
@@ -227,37 +230,22 @@ function onPlayerChat(player) {
 
 function isActive() { return gameState.active === true; }
 
-// Posiciones de aparicion: el mapa es un corredor lateral con el SUELO en y=149 (con gravedad hacia abajo).
-// Antes se repartian en una cuadricula en el aire (y entre -225 y 225): con muchos jugadores las filas de abajo
-// quedaban por debajo del suelo. Ahora todos aparecen sobre el suelo, en fila y bien separados.
-var SPAWN_FLOOR_Y = 149;     // borde superior del suelo del mapa
-var SPAWN_PLAYER_R = 10;     // radio del jugador en este mapa (playerPhysics.radius)
-var SPAWN_PER_ROW = 12;      // maximo de jugadores por fila (la fila siguiente cae entre los de la primera)
-var SPAWN_HALF_WIDTH = 230;  // la fila ocupa de -230 a 230 (lejos de los bordes, donde entran los virus)
-var SPAWN_MAX_STEP = 60;     // separacion maxima entre jugadores: con pocos jugadores quedan juntos, cerca del centro
-function computeSpawns(n) {
-    var out = [];
-    var firstRow = Math.min(n, SPAWN_PER_ROW);
-    var firstStep = firstRow > 1 ? Math.min((2 * SPAWN_HALF_WIDTH) / (firstRow - 1), SPAWN_MAX_STEP) : 0;
-    for (var i = 0; i < n; i++) {
-        var row = Math.floor(i / SPAWN_PER_ROW), col = i % SPAWN_PER_ROW;
-        var inRow = Math.min(SPAWN_PER_ROW, n - row * SPAWN_PER_ROW);
-        // fila centrada; las filas impares se corren media separacion para caer entre dos de la fila de abajo
-        var x = (col - (inRow - 1) / 2) * firstStep + (row % 2 ? firstStep / 2 : 0);
-        x = Math.max(-SPAWN_HALF_WIDTH, Math.min(SPAWN_HALF_WIDTH, x));
-        var y = SPAWN_FLOOR_Y - SPAWN_PLAYER_R - 2 - row * 4 * SPAWN_PLAYER_R; // 4 radios de altura entre filas
-        out.push({ x: Math.round(x), y: Math.round(y) });
-    }
-    return out;
-}
-
 function repositionSpawns(room) {
     var active = gameState.players;
     var n = active.length;
     if (n === 0) return;
-    var spawns = computeSpawns(n);
+    var margin = 75;
+    var sMinX = config.minX + margin, sMaxX = config.maxX - margin;
+    var sMinY = config.minY + margin, sMaxY = config.maxY - margin;
+    var cols = Math.ceil(Math.sqrt(n));
+    var rows = Math.ceil(n / cols);
+    var cellW = (sMaxX - sMinX) / cols;
+    var cellH = (sMaxY - sMinY) / rows;
     for (var i = 0; i < n; i++) {
-        try { room.setPlayerDiscProperties(active[i].id, { x: spawns[i].x, y: spawns[i].y, xspeed: 0, yspeed: 0 }); } catch(e){}
+        var col = i % cols, row = Math.floor(i / cols);
+        var sx = Math.round(sMinX + cellW * (col + 0.5));
+        var sy = Math.round(sMinY + cellH * (row + 0.5));
+        try { room.setPlayerDiscProperties(active[i].id, { x: sx, y: sy, xspeed: 0, yspeed: 0 }); } catch(e){}
     }
 }
 
