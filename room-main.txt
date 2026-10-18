@@ -237,6 +237,23 @@ function formatText(text) {
     return result;
 }
 
+// Inverso de formatText: pasa versalitas (ꜱᴜᴘᴇʀ) y subindices (₄) a letras y numeros normales.
+// Los jugadores copian los nombres tal como los muestra el bot (en versalitas) y los pegan en un comando.
+var _UNFORMAT_MAP = (function() {
+    var m = {};
+    var small = 'ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ';
+    for (var i = 0; i < small.length; i++) m[small.charAt(i)] = 'abcdefghijklmnopqrstuvwxyz'.charAt(i);
+    var sub = '₀₁₂₃₄₅₆₇₈₉';
+    for (var j = 0; j < sub.length; j++) m[sub.charAt(j)] = String(j);
+    return m;
+})();
+function unformatText(text) {
+    if (!text) return text;
+    var out = '';
+    for (var i = 0; i < text.length; i++) out += _UNFORMAT_MAP[text.charAt(i)] || text.charAt(i);
+    return out;
+}
+
 function sendFormatted(room, msg, target, color, style, duration) {
     room.sendAnnouncement(formatText(msg), target, color, style, duration);
 }
@@ -6446,7 +6463,7 @@ room.onPlayerChat = function(player, message) {
             room.sendAnnouncement('⛔ Solo los CREADORES pueden usar !escoger', player.id, 0xFF0000);
             return false;
         }
-        var escogerArg = message.substring(8).trim();
+        var escogerArg = unformatText(message.substring(8).trim());
         var escogerGames = [];
         minigameModules.forEach(function(g) {
             escogerGames.push({n: g.name, d: g.displayName, s: function() { startMinigame(g); }});
@@ -6477,10 +6494,16 @@ room.onPlayerChat = function(player, message) {
         var escogerSearch = escogerArg.toUpperCase().replace(/\s+/g, '_');
         var escogerDisplay = escogerArg.toLowerCase();
         var escogerFound = null;
+        // Primero el nombre EXACTO, luego el parcial (igual que !elegir)
         for (var eg = 0; eg < escogerGames.length; eg++) {
-            if (escogerGames[eg].n.indexOf(escogerSearch) !== -1 ||
-                escogerGames[eg].d.toLowerCase().indexOf(escogerDisplay) !== -1) {
+            if (escogerGames[eg].n === escogerSearch || escogerGames[eg].d.toLowerCase() === escogerDisplay) {
                 escogerFound = escogerGames[eg]; break;
+            }
+        }
+        for (var eg2 = 0; !escogerFound && eg2 < escogerGames.length; eg2++) {
+            if (escogerGames[eg2].n.indexOf(escogerSearch) !== -1 ||
+                escogerGames[eg2].d.toLowerCase().indexOf(escogerDisplay) !== -1) {
+                escogerFound = escogerGames[eg2];
             }
         }
         if (!escogerFound) {
@@ -6542,7 +6565,7 @@ room.onPlayerChat = function(player, message) {
 
     // !elegir [juego] - $12,000 - Elegir próximo minijuego (cooldown 5min)
     if (message.startsWith('!elegir')) {
-        var elegirArg = message.substring(7).trim();
+        var elegirArg = unformatText(message.substring(7).trim());
         // Lista de juegos con nombre interno y nombre bonito
         var elegirGames = [];
         minigameModules.forEach(function(g) {
@@ -6575,9 +6598,15 @@ room.onPlayerChat = function(player, message) {
         var searchTerm = elegirArg.toUpperCase().replace(/\s+/g, '_');
         var searchDisplay = elegirArg.toLowerCase();
         var foundGame = null;
+        // Primero el nombre EXACTO (si no, "jump" devolvia JUMPING por ser parte de su nombre), luego el parcial
         for (var eg = 0; eg < elegirGames.length; eg++) {
-            if (elegirGames[eg].n.indexOf(searchTerm) !== -1 || elegirGames[eg].d.toLowerCase().indexOf(searchDisplay) !== -1) {
+            if (elegirGames[eg].n === searchTerm || elegirGames[eg].d.toLowerCase() === searchDisplay) {
                 foundGame = elegirGames[eg]; break;
+            }
+        }
+        for (var eg2 = 0; !foundGame && eg2 < elegirGames.length; eg2++) {
+            if (elegirGames[eg2].n.indexOf(searchTerm) !== -1 || elegirGames[eg2].d.toLowerCase().indexOf(searchDisplay) !== -1) {
+                foundGame = elegirGames[eg2];
             }
         }
         if (!foundGame) {
