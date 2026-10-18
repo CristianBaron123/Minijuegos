@@ -2946,7 +2946,29 @@ function checkAndStart() {
     }
     
     var playerCount = room.getPlayerList().filter(p => p.id !== 0 && !isPlayerAfk(p.id)).length;
-    
+
+    // Quien Lucky dejó como espectador del proximo juego (spectatorNext) NO juega: no cuenta como participante.
+    // Si al restarlo no quedan al menos 2, se cancela esa regla (si no, la sala se queda trabada o arranca un
+    // 1v1 con un solo jugador real).
+    if (playerCount >= 2) {
+        var _sitOut = room.getPlayerList().filter(function(p) {
+            var a = botState.authMap[p.id];
+            return p.id !== 0 && !isPlayerAfk(p.id) && a && botState.spectatorNext[a];
+        }).length;
+        if (_sitOut > 0) {
+            if (playerCount - _sitOut < 2) {
+                Object.keys(botState.spectatorNext).forEach(function(a) {
+                    delete botState.spectatorLocked[a];
+                    if (botState.spectatorLockedTimers[a]) { clearTimeout(botState.spectatorLockedTimers[a]); delete botState.spectatorLockedTimers[a]; }
+                });
+                botState.spectatorNext = {};
+                room.sendAnnouncement('👥 Con solo ' + playerCount + ' jugadores no se puede dejar a nadie de espectador: se cancela esa regla.', null, 0xFFFF00, 'bold');
+            } else {
+                playerCount -= _sitOut;
+            }
+        }
+    }
+
     if (playerCount < 2) {
         room.sendAnnouncement(
             "⏳ Esperando más jugadores... (mínimo 2)",
