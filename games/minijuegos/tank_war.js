@@ -285,6 +285,17 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             cleanupAndResolve(scores[1] > scores[2] ? 1 : 2);
         }, timeMs);
 
+        // Si el juego se detiene (stop()), esta ronda se corta YA. Sin esto la ronda seguia "esperando" hasta vencer su
+        // temporizador y el torneo, al despertar, llamaba a stop() -> room.stopGame() sobre el juego SIGUIENTE.
+        gameState.abortMatch = function() {
+            if (stopped) return;
+            stopped = true;
+            clearTimeout(to);
+            clearInterval(oobInterval);
+            try { room.onTeamGoal = prevOnGoal; } catch(e){}
+            resolve(null);
+        };
+
         function cleanupAndResolve(team) {
             clearTimeout(to);
             clearInterval(oobInterval);
@@ -305,6 +316,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
 function stop(room) {
     gameState.active = false;
     gameState.stopRequested = true;
+    if (gameState.abortMatch) { var _am = gameState.abortMatch; gameState.abortMatch = null; try { _am(); } catch(e){} }
     gameState.firstRound = true;
     gameState.players = [];
     gameState.spectatorPool = [];

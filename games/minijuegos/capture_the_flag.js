@@ -323,7 +323,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
 
         var to = gameState.matchTimeout = setTimeout(function() {
             if (stopped) return;
-            if (gameState.stopRequested) { resolve(null); return; }
+            if (gameState.stopRequested) { if (flagCheckInterval) { clearInterval(flagCheckInterval); flagCheckInterval = null; } resolve(null); return; }
             stopped = true;
             if (scores[1] === scores[2]) {
                 room.sendAnnouncement('\n⚡ Empate. Muerte Subita: SIGUIENTE CAPTURA GANA...', null, 0xFFFF00);
@@ -360,6 +360,7 @@ function playMatch(room, playerIds, goalsToWin, timeMs) {
             if (stopped) return;
             stopped = true;
             clearTimeout(to);
+            if (flagCheckInterval) { clearInterval(flagCheckInterval); flagCheckInterval = null; } // antes quedaba vivo para siempre
             try { room.onTeamGoal = prevOnGoal; } catch(e){}
             resolve(null);
         };

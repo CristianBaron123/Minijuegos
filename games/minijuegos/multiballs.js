@@ -252,8 +252,11 @@ function declareWinner(room, winner) {
     setTimeout(() => {
         const winnerObject = { id: winner.id, name: winner.name };
         const callback = gameState.callback;
+        // stop() avisa "sin ganador" (callback(null)) si todavia hay un aviso pendiente: se anula antes, para que la
+        // sala reciba UN solo aviso, el del ganador (antes llegaba primero el null y el ganador se descartaba: sin Lucky ni premio)
+        gameState.callback = null;
         stop(room);
-        
+
         if (callback) {
             callback(winnerObject);
         }

@@ -9,3 +9,4 @@ secrets.json
 backups/
 logs/
 *.bak
+tests/audit_result.json

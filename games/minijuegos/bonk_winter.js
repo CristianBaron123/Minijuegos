@@ -88,7 +88,7 @@ function start(room, onGameEnd) {
             }, config.maxTimeMs);
 
             // Aviso 30s
-            setTimeout(function() {
+            gameState.warnTimer = setTimeout(function() {
                 if (!gameState.active) return;
                 room.sendAnnouncement('⏰ Quedan 30 segundos!', null, 0xFF6600, 'bold');
             }, config.maxTimeMs - 30000);
@@ -158,6 +158,7 @@ function declareWinner(room, winner) {
     gameState.active = false;
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
     if (gameState.timeoutTimer) { clearTimeout(gameState.timeoutTimer); gameState.timeoutTimer = null; }
+    if (gameState.warnTimer) { clearTimeout(gameState.warnTimer); gameState.warnTimer = null; }
 
     room.sendAnnouncement(
         '\n🏆 ' + winner.name.toUpperCase() + ' HA GANADO BONK WINTER! 🏆',
@@ -183,6 +184,7 @@ function stop(room) {
     gameState.active = false;
     if (gameState.checkInterval) { clearInterval(gameState.checkInterval); gameState.checkInterval = null; }
     if (gameState.timeoutTimer) { clearTimeout(gameState.timeoutTimer); gameState.timeoutTimer = null; }
+    if (gameState.warnTimer) { clearTimeout(gameState.warnTimer); gameState.warnTimer = null; }
     gameState.players = [];
     gameState.eliminated = [];
     gameState.chatBlocked = false;
