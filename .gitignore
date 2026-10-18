@@ -7,3 +7,5 @@ debug-script.js
 secrets.json
 
 backups/
+logs/
+*.bak

@@ -596,9 +596,38 @@ async function maintenanceSala(salaId) {
     addLog(s, 'Sala apagada (mantenimiento completo)', true);
 }
 
+// Historial en archivo: logs/<sala>.log (la memoria solo guarda las ultimas MAX_LOGS lineas y se pierde al reiniciar).
+// Rota al llegar a LOG_MAX_BYTES y conserva LOG_KEEP archivos (<sala>.log, .log.1, .log.2).
+const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, 'logs');
+const LOG_MAX_BYTES = 5 * 1024 * 1024;
+const LOG_KEEP = 3;
+const _logWriteCount = {};
+
+function rotateLogIfNeeded(file) {
+    try {
+        if (fs.statSync(file).size < LOG_MAX_BYTES) return;
+        try { fs.unlinkSync(file + '.' + (LOG_KEEP - 1)); } catch (e) {}
+        for (let i = LOG_KEEP - 2; i >= 1; i--) {
+            try { fs.renameSync(file + '.' + i, file + '.' + (i + 1)); } catch (e) {}
+        }
+        fs.renameSync(file, file + '.1');
+    } catch (e) {}
+}
+
+function writeLogFile(salaId, text) {
+    try {
+        fs.mkdirSync(LOG_DIR, { recursive: true });
+        const file = path.join(LOG_DIR, String(salaId).replace(/[^A-Za-z0-9_-]/g, '_') + '.log');
+        _logWriteCount[salaId] = (_logWriteCount[salaId] || 0) + 1;
+        if (_logWriteCount[salaId] % 100 === 1) rotateLogIfNeeded(file);
+        fs.appendFileSync(file, new Date().toISOString() + ' ' + String(text).replace(/\r?\n/g, ' ⏎ ') + '\n', { mode: 0o600 });
+    } catch (e) { /* un fallo de disco no debe tumbar la sala */ }
+}
+
 function addLog(s, text, forceConsole) {
     s.logs.push({ time: Date.now(), text });
     if (s.logs.length > MAX_LOGS) s.logs.shift();
+    writeLogFile(s.config.id, text);
     if (forceConsole) console.log(`[${s.config.id}] ${text}`);
 }
 

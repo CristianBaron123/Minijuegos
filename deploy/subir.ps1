@@ -17,7 +17,7 @@ $tgz = Join-Path $env:TEMP "minijuegos.tgz"
 
 Write-Host "1/4 Empaquetando el proyecto..." -ForegroundColor Cyan
 if (Test-Path $tgz) { Remove-Item $tgz -Force }
-tar --exclude=node_modules --exclude=.git --exclude=backups --exclude=Mapas.rar --exclude=debug-script.js --exclude=.env --exclude=secrets.json --exclude=minijuegos.tgz -czf $tgz .
+tar --exclude=node_modules --exclude=.git --exclude=backups --exclude=logs --exclude=Mapas.rar --exclude=debug-script.js --exclude=.env --exclude=secrets.json --exclude=minijuegos.tgz -czf $tgz .
 if ($LASTEXITCODE -ne 0) { throw "Fallo el empaquetado (tar)." }
 Write-Host ("    {0:N1} MB" -f ((Get-Item $tgz).Length / 1MB))
 
