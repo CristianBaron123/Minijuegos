@@ -96,10 +96,22 @@ salaConfigs.forEach(c => {
 // Funciones del bot (importadas de bot.js)
 // ============================================
 
-const DISCORD_REPLAY_WEBHOOK = 'https://discord.com/api/webhooks/1475321739591549091/OdpkhWdvgD-psJISt5r0YjE51W2wuwV7uAo_ab6RigjmwNAeStN09eii3_fKNat-qdmn';
+// Webhooks de Discord: variable de entorno DISCORD_WEBHOOK_<TIPO> o secrets.json (DISCORD_WEBHOOKS.<tipo>).
+// Se leen AL ENVIAR: un cambio en secrets.json se aplica sin reiniciar el panel. NUNCA hardcodear URLs aqui:
+// antes las repeticiones iban a una URL escrita en el codigo que ya no existia (404 Unknown Webhook) y ignoraba secrets.json.
+function webhookUrl(type) {
+    const fromEnv = process.env['DISCORD_WEBHOOK_' + String(type).toUpperCase()];
+    if (fromEnv) return fromEnv;
+    try {
+        const s = JSON.parse(fs.readFileSync(path.join(__dirname, 'secrets.json'), 'utf8'));
+        return (s.DISCORD_WEBHOOKS && s.DISCORD_WEBHOOKS[type]) || '';
+    } catch (e) { return ''; }
+}
 
 async function sendDiscordReplay(replayArray, gameName) {
     try {
+        const replayUrl = webhookUrl('replays');
+        if (!replayUrl) { console.log('⚠️ Webhook de replays no configurado (secrets.json -> DISCORD_WEBHOOKS.replays)'); return false; }
         // Acepta base64 (actual) o array de bytes (formato viejo)
         const buffer = typeof replayArray === 'string' ? Buffer.from(replayArray, 'base64') : Buffer.from(replayArray);
         const blob = new Blob([buffer], { type: 'application/octet-stream' });
@@ -112,7 +124,7 @@ async function sendDiscordReplay(replayArray, gameName) {
         formData.append('payload_json', JSON.stringify({
             content: '🎮 **' + gameName + '** - ' + now.toLocaleString('es-ES')
         }));
-        const resp = await fetch(DISCORD_REPLAY_WEBHOOK, { method: 'POST', body: formData });
+        const resp = await fetch(replayUrl, { method: 'POST', body: formData });
         if (resp.ok) {
             console.log("✅ Replay '" + gameName + "' enviado a Discord");
             return true;
@@ -306,10 +318,11 @@ async function exposeDbFunctions(page) {
                 if (report) {
                     const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
                     const now = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-                    const webhookUrl = 'https://discord.com/api/webhooks/1477693022148886540/ojM5ATpO2A6F_sny-AknN-KKuJTLaDwmQ1H_e0l-R9ocb48zzuZC38ryiDlDa68FKwR8';
+                    const statsUrl = webhookUrl('stats');
+                    if (!statsUrl) { console.log('⚠️ Webhook de stats no configurado (secrets.json -> DISCORD_WEBHOOKS.stats): no se envia el reporte mensual'); return; }
 
                     const sendMsg = async (content) => {
-                        await fetch(webhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+                        await fetch(statsUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
                     };
 
                     // Mensaje 1: header + ganadores + ricos + racha
@@ -393,16 +406,9 @@ async function exposeDbFunctions(page) {
                 return await dbBuho.loadAllStats();
             });
         }
-        // Discord webhook (desde variables de entorno o secrets.json; nunca hardcodeados)
-        let _secretsFile = {};
-        try { _secretsFile = JSON.parse(fs.readFileSync(path.join(__dirname, 'secrets.json'), 'utf8')); } catch(e) {}
-        const DISCORD_WEBHOOKS = {};
-        ['calladmin', 'reportes', 'tokens', 'chatlog', 'replays', 'stats', 'bugs', 'mods'].forEach(function(k) {
-            DISCORD_WEBHOOKS[k] = process.env['DISCORD_WEBHOOK_' + k.toUpperCase()]
-                || (_secretsFile.DISCORD_WEBHOOKS && _secretsFile.DISCORD_WEBHOOKS[k]) || '';
-        });
+        // Discord webhook (desde variables de entorno o secrets.json; nunca hardcodeados). Se lee al enviar.
         await page.exposeFunction('__discordWebhook', async (type, content) => {
-            const url = DISCORD_WEBHOOKS[type];
+            const url = webhookUrl(type);
             if (!url) return 'OK';
             try {
                 await fetch(url, {
