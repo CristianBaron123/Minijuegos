@@ -33,6 +33,16 @@ Write-Host "4/6 Comprobando que entras con llave SSH (sin contrasena)..." -Foreg
 ssh -o BatchMode=yes "bot@$Servidor" "echo acceso-ok"
 if ($LASTEXITCODE -ne 0) { throw "No se pudo entrar como bot con la llave. No sigas: avisame con el mensaje de error." }
 
+# Comprobar que el servidor YA NO acepta contrasena (si responde "publickey,password", el endurecimiento no quedo aplicado)
+$ErrorActionPreference = "Continue"
+$metodos = (ssh -o BatchMode=yes -o PubkeyAuthentication=no -o PreferredAuthentications=password -o ConnectTimeout=12 "bot@$Servidor" true 2>&1 | Out-String)
+$ErrorActionPreference = "Stop"
+if ($metodos -match "publickey,password") {
+    Write-Host "ATENCION: el servidor SIGUE aceptando contrasena. Revisa que /etc/ssh/sshd_config.d/00-hardening.conf exista y reinicia sshd (ver deploy/LEEME.md)." -ForegroundColor Red
+} else {
+    Write-Host "OK: el servidor solo acepta llave SSH (la contrasena quedo desactivada)." -ForegroundColor Green
+}
+
 Write-Host "5/6 Subiendo el proyecto y los secretos (.env y secrets.json)..." -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot "subir.ps1") -Servidor "bot@$Servidor" -CopiarSecretos -SinReiniciar
 

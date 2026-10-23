@@ -58,13 +58,23 @@ if [ -n "$OTROS" ] && [ "${FORCE:-0}" != "1" ]; then
 fi
 
 echo "== 3/6  Endureciendo SSH (solo llaves, sin root por contraseña) =="
-cat > /etc/ssh/sshd_config.d/99-hardening.conf <<'EOF'
+# OJO con el nombre: SSH usa el PRIMER valor que lee (orden alfabetico de /etc/ssh/sshd_config.d/). Ubuntu en la nube trae
+# 50-cloud-init.conf con "PasswordAuthentication yes"; si este archivo se llamara 99-..., se leeria DESPUES y su
+# "no" se ignoraria (el servidor seguiria aceptando contrasena). Por eso empieza con 00-.
+rm -f /etc/ssh/sshd_config.d/99-hardening.conf
+cat > /etc/ssh/sshd_config.d/00-hardening.conf <<'EOF'
 PasswordAuthentication no
 PermitRootLogin prohibit-password
 KbdInteractiveAuthentication no
 EOF
 sshd -t
 systemctl reload ssh || systemctl reload sshd
+# Verificacion: con la configuracion efectiva, la contrasena debe quedar desactivada
+if sshd -T | grep -qi '^passwordauthentication yes'; then
+    echo "ATENCION: el servidor SIGUE aceptando contrasena (otro archivo de /etc/ssh/sshd_config.d lo anula). Revisa: sshd -T | grep -i passwordauth"
+else
+    echo "OK: el acceso por contrasena quedo desactivado (solo llave SSH)."
+fi
 
 echo "== 4/6  Firewall y fail2ban =="
 ufw default deny incoming
